@@ -97,7 +97,7 @@ Trước khi `git add`, chạy `git status` và chắc chắn **không** thấy 
    ```
 
    Rồi bấm chuột phải biểu tượng Ollama ở khay → **Quit**, và mở lại Ollama từ menu Start. Không có bước này, trình duyệt sẽ chặn trang gọi Ollama.
-4. Mở trang, xuống mục **Trợ lý AI**. Dòng trạng thái báo "Đã kết nối · qwen3:8b" là xong. Chrome có thể hỏi quyền "truy cập thiết bị trong mạng cục bộ": chọn **Cho phép**.
+4. Mở trang, xuống mục **Trợ lý AI**. Dòng trạng thái báo "Đã kết nối · qwen3:8b" là xong. Lần đầu mở trang GitHub Pages, Chrome hỏi quyền "truy cập thiết bị trong mạng cục bộ" (Local network access): chọn **Cho phép**. Lỡ bấm Chặn thì bấm biểu tượng bên trái thanh địa chỉ → **Cài đặt trang web** → **Truy cập mạng cục bộ** → **Cho phép**, rồi tải lại trang.
 
 Từ giờ bạn có thể hỏi bài ngay trên trang, và bấm **Chấm bằng AI trên máy** dưới ô báo cáo ngày. AI chấm 4 tiêu chí, hỏi 3 câu kiểm tra và điền sẵn điểm vào Nhật ký chấm điểm.
 

@@ -544,7 +544,10 @@ async function ollama(messages,{format,onToken,signal}={}){
       const j=JSON.parse(line);if(j.error)throw new Error(j.error);
       if(j.message&&j.message.content){out+=j.message.content;onToken&&onToken(out)}}}
   return out}
-const offline=()=>'Không kết nối được Ollama ở '+aiCfg.url+'. Kiểm tra: ứng dụng Ollama đã mở chưa, và biến OLLAMA_ORIGINS đã cho phép trang này chưa (HUONG-DAN.md, bước 3).';
+/* Chrome mới bắt trang trên Internet xin quyền "truy cập mạng cục bộ" trước khi gọi localhost */
+async function offline(){let p='';try{p=(await navigator.permissions.query({name:'local-network-access'})).state}catch(e){}
+  if(p==='denied')return 'Trình duyệt đang chặn trang này kết nối tới máy tính của bạn. Bấm biểu tượng bên trái thanh địa chỉ, chọn Cài đặt trang web, tìm "Truy cập mạng cục bộ" (Local network access), chọn Cho phép, rồi tải lại trang.';
+  return 'Không kết nối được Ollama ở '+aiCfg.url+'. Kiểm tra: ứng dụng Ollama đã mở chưa, và biến OLLAMA_ORIGINS đã cho phép trang này chưa (HUONG-DAN.md, bước 3). Nếu Chrome hỏi quyền truy cập mạng cục bộ, chọn Cho phép.'}
 async function aiPing(){setAi('busy','Đang kiểm tra Ollama');
   if(location.protocol==='https:'&&/^http:/i.test(aiCfg.url)&&!/^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:|\/|$)/i.test(aiCfg.url)){
     setAi('err','Trang HTTPS không gọi được địa chỉ http ngoài localhost. Trên điện thoại hãy dùng địa chỉ https của Tailscale.');return false}
@@ -553,7 +556,7 @@ async function aiPing(){setAi('busy','Đang kiểm tra Ollama');
     const names=((await r.json()).models||[]).map(m=>m.name);
     if(!names.some(n=>n===aiCfg.model||n===aiCfg.model+':latest')){setAi('err','Ollama đang chạy nhưng chưa có model '+aiCfg.model+'. Mở terminal và gõ: ollama pull '+aiCfg.model);return false}
     setAi('ok','Đã kết nối · '+aiCfg.model);return true}
-  catch(e){setAi('err',offline());return false}}
+  catch(e){setAi('err',await offline());return false}}
 function md(s){return esc(s)
   .replace(/```[\w-]*\n?([\s\S]*?)```/g,(m,c)=>'<code style="display:block;padding:6px 8px;white-space:pre;overflow-x:auto">'+c+'</code>')
   .replace(/`([^`\n]+)`/g,'<code>$1</code>').replace(/\*\*([^*\n]+)\*\*/g,'<b>$1</b>')}
@@ -571,7 +574,7 @@ async function aiRun(userText,job){if(aiAbort)return;
   const st={partial:''};
   try{chat.push({role:'assistant',content:await job(aiAbort.signal,st)||'(không có câu trả lời)'});setAi('ok','Đã kết nối · '+aiCfg.model)}
   catch(e){if(e&&e.name==='AbortError'){if(st.partial)chat.push({role:'assistant',content:st.partial+' …(đã dừng)'})}
-    else{const m=e instanceof TypeError?offline():String(e&&e.message||e);chat.push({role:'error',content:m});setAi('err',m)}}
+    else{const m=e instanceof TypeError?await offline():String(e&&e.message||e);chat.push({role:'error',content:m});setAi('err',m)}}
   finally{aiAbort=null;document.getElementById('askBtn').disabled=false;document.getElementById('stopBtn').hidden=true;saveAi();renderChat()}}
 function sysMsg(extra){return {role:'system',content:AI_RULES+(extra?'\n\n'+extra:'')+'\n\nTÌNH HÌNH HỌC HIỆN TẠI:\n'+aiContext()}}
 function aiAsk(text){text=text.trim();if(!text)return;
