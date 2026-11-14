@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sổ theo dõi học AI Engineering</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600&family=Lexend:wght@500;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+/* Layout idea: a study ledger. Summary strip on top, phase rail on the left, the working column on the right. */
+:root{
+  --bg:#f2f5f3; --surface:#ffffff; --sunk:#e8edea; --ink:#17232a; --muted:#5b6b70; --line:#d3dcd8;
+  --accent:#0f6e66; --accent-soft:#d9efec; --today:#a8650c; --today-soft:#fbefd9;
+  --good:#1f7a3d; --warn:#b45309; --bad:#b3261e;
+  --display:"Lexend","Be Vietnam Pro",system-ui,sans-serif;
+  --body:"Be Vietnam Pro",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#10171a; --surface:#182226; --sunk:#131c20; --ink:#e4ecea; --muted:#93a4a6; --line:#2b3a3f;
+    --accent:#54c3b6; --accent-soft:#17383a; --today:#e9b25c; --today-soft:#3a2d16;
+    --good:#6fcf8d; --warn:#f0a955; --bad:#f28b82; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#10171a; --surface:#182226; --sunk:#131c20; --ink:#e4ecea; --muted:#93a4a6; --line:#2b3a3f;
+  --accent:#54c3b6; --accent-soft:#17383a; --today:#e9b25c; --today-soft:#3a2d16;
+  --good:#6fcf8d; --warn:#f0a955; --bad:#f28b82; color-scheme:dark;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.55}
+.wrap{max-width:1120px;margin:0 auto;padding:24px 20px 64px;display:flex;flex-direction:column;gap:20px}
+h1,h2,h3{font-family:var(--display);font-weight:600;margin:0;text-wrap:balance;line-height:1.25}
+h1{font-size:24px} h2{font-size:18px} h3{font-size:15px}
+a{color:var(--accent);text-underline-offset:2px}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.muted{color:var(--muted)}
+.top{display:flex;flex-wrap:wrap;gap:12px;align-items:baseline;justify-content:space-between}
+.sync{font-size:13px;color:var(--muted);display:inline-flex;align-items:center;gap:6px}
+.sync i{width:8px;height:8px;border-radius:50%;background:var(--muted);display:inline-block}
+.sync.ok i{background:var(--good)} .sync.busy i{background:var(--today)} .sync.err i{background:var(--bad)}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:4px;min-width:0}
+.stat b{font-family:var(--display);font-weight:600;font-size:22px;line-height:1.2}
+.stat span{font-size:13px;color:var(--muted)}
+.stat.good b{color:var(--good)} .stat.warn b{color:var(--warn)}
+.bar{height:6px;background:var(--sunk);border-radius:3px;overflow:hidden}
+.bar>i{display:block;height:100%;background:var(--accent);border-radius:3px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:18px 20px;display:flex;flex-direction:column;gap:12px}
+.today{border-color:var(--today);background:linear-gradient(0deg,var(--surface),var(--surface)) padding-box;border-left-width:4px}
+.eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.04em;color:var(--today);text-transform:uppercase}
+.today .task{font-family:var(--display);font-size:19px;font-weight:500;line-height:1.35}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 14px;cursor:pointer;font-weight:500}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--surface)}
+.btn.danger{color:var(--bad)}
+.btn.small{padding:4px 10px;font-size:13px}
+.links{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:14px}
+textarea{width:100%;min-height:150px;background:var(--sunk);border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-family:var(--mono);font-size:13px;line-height:1.5;resize:vertical}
+.main{display:grid;grid-template-columns:270px minmax(0,1fr);gap:20px;align-items:start}
+.rail{display:flex;flex-direction:column;gap:8px;position:sticky;top:12px}
+.phase{text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px;cursor:pointer;display:flex;flex-direction:column;gap:6px}
+.phase[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft)}
+.phase .t{font-weight:600;font-size:14px}
+.phase .m{font-size:12px;color:var(--muted);display:flex;justify-content:space-between;gap:8px}
+.col{display:flex;flex-direction:column;gap:12px;min-width:0}
+details.week{background:var(--surface);border:1px solid var(--line);border-radius:10px}
+details.week.cur{border-color:var(--today)}
+details.week.full summary .n{color:var(--good)}
+summary{list-style:none;cursor:pointer;padding:12px 16px;display:flex;gap:12px;align-items:center}
+summary::-webkit-details-marker{display:none}
+summary .n{font-family:var(--mono);font-size:13px;color:var(--muted);white-space:nowrap}
+summary .t{font-weight:600;flex:1;min-width:0}
+summary .c{font-family:var(--mono);font-size:13px;color:var(--muted);white-space:nowrap}
+.wbody{padding:0 16px 16px;display:flex;flex-direction:column;gap:10px;border-top:1px solid var(--line);padding-top:12px}
+.out{font-size:14px;background:var(--sunk);border-radius:8px;padding:8px 12px}
+ul.tasks{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}
+ul.tasks label{display:grid;grid-template-columns:22px 52px 1fr;gap:8px;align-items:start;padding:6px 6px;border-radius:6px;cursor:pointer}
+ul.tasks label:hover{background:var(--sunk)}
+ul.tasks input{width:18px;height:18px;margin:2px 0 0;accent-color:var(--accent)}
+ul.tasks .k{font-family:var(--mono);font-size:12px;color:var(--muted);padding-top:3px}
+ul.tasks .done .x{color:var(--muted);text-decoration:line-through}
+ul.tasks .next{background:var(--today-soft)}
+.gate{border-style:dashed}
+.gate label{display:flex;gap:10px;align-items:flex-start;cursor:pointer}
+.gate input{width:18px;height:18px;margin-top:3px;accent-color:var(--accent)}
+form.log{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;align-items:end}
+form.log label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted);min-width:0}
+form.log input,form.log select{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:7px 9px;width:100%;color:var(--ink)}
+form.log .wide{grid-column:1/-2}
+.tablebox{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:12px;color:var(--muted);font-weight:500;white-space:nowrap}
+td.num,th.num{text-align:right}
+.pill{display:inline-block;font-family:var(--mono);font-size:12px;border-radius:999px;padding:1px 8px;background:var(--sunk)}
+.pill.s1,.pill.s2{background:transparent;border:1px solid var(--bad);color:var(--bad)}
+.pill.s3{background:transparent;border:1px solid var(--warn);color:var(--warn)}
+.pill.s4,.pill.s5{background:transparent;border:1px solid var(--good);color:var(--good)}
+.mins{display:flex;align-items:flex-end;gap:4px;height:56px}
+.mins i{flex:1;max-width:22px;background:var(--accent);border-radius:3px 3px 0 0;min-height:2px}
+.branches{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.note{font-size:13px;color:var(--muted)}
+.setrow input{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:6px 9px;color:var(--ink)}
+@media (max-width:860px){
+  .stats{grid-template-columns:repeat(2,1fr)}
+  .main{grid-template-columns:1fr}
+  .rail{position:static;display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+  .branches{grid-template-columns:1fr}
+  form.log{grid-template-columns:repeat(2,minmax(0,1fr))}
+  form.log .wide{grid-column:1/-1}
+}
+@media (prefers-reduced-motion:no-preference){.bar>i{transition:width .3s}}
+/* Trợ lý AI */
+.topr{display:inline-flex;align-items:center;gap:12px;flex-wrap:wrap}
+.ai-head{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:baseline;justify-content:space-between}
+.ai-status{font-size:13px;color:var(--muted)}
+.ai-status.ok{color:var(--good)} .ai-status.err{color:var(--bad)} .ai-status.busy{color:var(--today)}
+.ai-notes{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.ai-notes li{background:var(--sunk);border-radius:8px;padding:8px 12px;font-size:14px;white-space:pre-wrap;overflow-wrap:anywhere}
+.ai-notes .when{display:block;font-family:var(--mono);font-size:12px;color:var(--muted);margin-bottom:2px}
+.chat{display:flex;flex-direction:column;gap:8px;max-height:460px;overflow-y:auto}
+.chat:empty{display:none}
+.msg{border-radius:10px;padding:8px 12px;white-space:pre-wrap;overflow-wrap:anywhere;max-width:92%;font-size:14px;line-height:1.6}
+.msg.user{align-self:flex-end;background:var(--accent-soft)}
+.msg.assistant{align-self:flex-start;background:var(--sunk)}
+.msg.error{align-self:flex-start;border:1px solid var(--bad);color:var(--bad)}
+.msg code{font-family:var(--mono);font-size:13px;background:var(--surface);border-radius:4px;padding:0 4px}
+.ask textarea{min-height:76px;font-family:var(--body);font-size:14px}
+.aiset{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.aiset label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted);min-width:0}
+.aiset input{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:7px 9px;width:100%;color:var(--ink)}
+details.plain summary{padding:0;font-size:14px;color:var(--muted)}
+details.plain[open] summary{margin-bottom:10px}
+@media (max-width:600px){.aiset{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1>Sổ theo dõi học AI Engineering</h1>
+    <span class="topr">
+      <span class="sync" id="sync"><i></i><span id="syncText">Đang kết nối</span></span>
+      <button class="btn small" id="authBtn" type="button" hidden>Đăng nhập Google để đồng bộ</button>
+    </span>
+  </header>
+
+  <section class="stats" id="stats" aria-label="Tổng quan"></section>
+  <section class="card today" id="today" aria-label="Việc hôm nay"></section>
+
+  <section class="card" aria-labelledby="h-ai">
+    <div class="ai-head">
+      <h2 id="h-ai">Trợ lý AI</h2>
+      <span class="ai-status" id="aiStatus">Chưa kiểm tra kết nối</span>
+    </div>
+    <p class="note" style="margin:0">Chạy bằng Ollama trên máy của bạn, không cần Claude hay Internet. Hỏi bất cứ điều gì về buổi học; trợ lý biết bạn đang ở tuần nào và sẽ gợi ý chứ không làm hộ bài.</p>
+    <div id="aiNotesBox" hidden>
+      <h3 style="margin-bottom:8px">Nhận xét tự động gần đây</h3>
+      <ul class="ai-notes" id="aiNotes"></ul>
+    </div>
+    <div class="chat" id="chat" aria-live="polite"></div>
+    <form class="ask col" id="askForm">
+      <textarea id="askText" placeholder="Ví dụ: Biến là gì? Vì sao code C của tôi báo lỗi ở dòng 5? (Enter để gửi, Shift+Enter xuống dòng)" aria-label="Câu hỏi cho trợ lý"></textarea>
+      <div class="row">
+        <button class="btn primary" type="submit" id="askBtn">Gửi</button>
+        <button class="btn" type="button" id="stopBtn" hidden>Dừng</button>
+        <button class="btn" type="button" id="clearChat">Xoá cuộc trò chuyện</button>
+      </div>
+    </form>
+    <details class="plain">
+      <summary>Cài đặt trợ lý trên thiết bị này</summary>
+      <div class="aiset">
+        <label>Địa chỉ Ollama<input type="url" id="ai-url" spellcheck="false"></label>
+        <label>Tên model<input type="text" id="ai-model" spellcheck="false"></label>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <button class="btn" type="button" id="aiTest">Lưu và kiểm tra kết nối</button>
+        <span class="note">Trên máy tính: để mặc định. Trên điện thoại: hỏi AI qua bot Telegram (HUONG-DAN.md, bước 5).</span>
+      </div>
+    </details>
+  </section>
+
+  <div class="main">
+    <nav class="rail" id="rail" aria-label="Các giai đoạn"></nav>
+    <div class="col" id="weeks"></div>
+  </div>
+
+  <section class="card" aria-labelledby="h-log">
+    <h2 id="h-log">Nhật ký chấm điểm</h2>
+    <p class="note" style="margin:0">Sau mỗi buổi, gửi báo cáo cho Claude rồi ghi lại điểm Claude chấm (thang 1 đến 5).</p>
+    <form class="log" id="logForm">
+      <label>Ngày<input type="date" id="f-date" required></label>
+      <label>Số phút<input type="number" id="f-min" min="0" max="600" step="5" value="120" required></label>
+      <label>Khái niệm<select id="f-k"></select></label>
+      <label>Code<select id="f-c"></select></label>
+      <label>Gỡ lỗi<select id="f-g"></select></label>
+      <label>Kỷ luật<select id="f-d"></select></label>
+      <label class="wide">Ghi chú<input type="text" id="f-note" maxlength="300" placeholder="Điều cần ôn lại, nhận xét của Claude"></label>
+      <button class="btn primary" type="submit">Thêm buổi học</button>
+    </form>
+    <div id="logOut"></div>
+  </section>
+
+  <section aria-labelledby="h-br" class="col">
+    <h2 id="h-br">Nhánh mở rộng</h2>
+    <p class="note" style="margin:0">Mở sau Giai đoạn 2. Mỗi lần học một nhánh, xen 2 buổi mỗi tuần với lõi chính.</p>
+    <div class="branches" id="branches"></div>
+  </section>
+
+  <section class="card" aria-labelledby="h-set">
+    <h2 id="h-set">Cài đặt</h2>
+    <div class="row setrow">
+      <label for="s-start">Ngày bắt đầu học</label>
+      <input type="date" id="s-start">
+      <span class="note">Dùng để so tiến độ của bạn với lịch 6 buổi mỗi tuần, Chủ nhật nghỉ.</span>
+    </div>
+    <div class="row">
+      <button class="btn danger" id="reset" type="button">Xoá toàn bộ dữ liệu</button>
+      <span class="note" id="resetNote"></span>
+    </div>
+    <p class="note" style="margin:0">Lộ trình đầy đủ kèm giải thích: <a href="https://claude.ai/artifact/2fNCcPWsHdnHyAq1WpZdqu">Lộ trình AI Engineering từ gốc</a>.</p>
+  </section>
+</div>
+
+<script>
+/* ---------- Curriculum ---------- */
+const L={
+  cs50:['CS50x','https://cs50.harvard.edu/x/'], ms:['MIT Missing Semester','https://missing.csail.mit.edu'],
+  lgb:['Learn Git Branching','https://learngitbranching.js.org'], progit:['Pro Git','https://git-scm.com/book/en/v2'],
+  pytut:['Python Tutorial','https://docs.python.org/3/tutorial/'], pytest:['pytest','https://docs.pytest.org'],
+  mdnhttp:['MDN: HTTP','https://developer.mozilla.org/en-US/docs/Web/HTTP'], fastapi:['FastAPI Tutorial','https://fastapi.tiangolo.com/tutorial/'],
+  docker:['Docker: Get started','https://docs.docker.com/get-started/'],
+  la:['3Blue1Brown: Linear Algebra','https://www.3blue1brown.com/topics/linear-algebra'], numpy:['NumPy quickstart','https://numpy.org/doc/stable/user/quickstart.html'],
+  calc:['3Blue1Brown: Calculus','https://www.3blue1brown.com/topics/calculus'],
+  khan:['Khan Academy: Statistics','https://www.khanacademy.org/math/statistics-probability'], sq:['StatQuest','https://www.youtube.com/@statquest'],
+  kaggle:['Kaggle Learn','https://www.kaggle.com/learn'], mlcc:['Google ML Crash Course','https://developers.google.com/machine-learning/crash-course'],
+  mlz:['ML Zoomcamp','https://github.com/DataTalksClub/machine-learning-zoomcamp'], kcomp:['Kaggle Competitions','https://www.kaggle.com/competitions'],
+  nn:['3Blue1Brown: Neural Networks','https://www.3blue1brown.com/topics/neural-networks'], z2h:['Zero to Hero','https://karpathy.ai/zero-to-hero.html'],
+  torch:['PyTorch: Learn the Basics','https://pytorch.org/tutorials/beginner/basics/intro.html'],
+  hfllm:['Hugging Face LLM Course','https://huggingface.co/learn/llm-course'], colab:['Google Colab','https://colab.research.google.com'],
+  academy:['Claude Academy','https://academy.claude.com'], prompt:['Hướng dẫn prompt engineering','https://docs.claude.com/en/docs/build-with-claude/prompt-engineering/overview'],
+  ollama:['Ollama','https://ollama.com'], llmz:['LLM Zoomcamp','https://github.com/DataTalksClub/llm-zoomcamp'],
+  hfag:['Hugging Face Agents Course','https://huggingface.co/learn/agents-course'], hfmcp:['Hugging Face MCP Course','https://huggingface.co/learn/mcp-course'],
+  gradio:['Gradio','https://www.gradio.app/guides/quickstart'], streamlit:['Streamlit','https://docs.streamlit.io'],
+  spaces:['Hugging Face Spaces','https://huggingface.co/docs/hub/spaces'], gha:['GitHub Actions','https://docs.github.com/en/actions'],
+  mlops:['MLOps Zoomcamp','https://github.com/DataTalksClub/mlops-zoomcamp'], fsdl:['LLM Bootcamp','https://fullstackdeeplearning.com/llm-bootcamp/']
+};
+const P=[
+ {name:'Chuẩn bị',from:1,to:1,gate:'Repo GitHub đã có commit đầu tiên và bạn đã gửi báo cáo ngày đầu cho Claude.'},
+ {name:'Nền tảng lập trình',from:2,to:13,gate:'Không nhìn tài liệu: vẽ và giải thích stack, heap, con trỏ; viết binary search và một thuật toán sắp xếp, nêu độ phức tạp; viết bảng băm bằng Python; viết 3 câu SQL có JOIN và GROUP BY.'},
+ {name:'Công cụ kỹ sư',from:14,to:18,gate:'Một người lạ clone repo Dự án 1, chạy một lệnh là API lên, mọi test đều qua. Bạn giải thích được đường đi của một request HTTP.'},
+ {name:'Toán và machine learning',from:19,to:28,gate:'Tự viết linear regression bằng gradient descent chỉ với NumPy. Giải thích được train, validation, test; overfitting; precision và recall.'},
+ {name:'Deep learning và LLM',from:29,to:36,gate:'Vẽ và giải thích self-attention. Tự viết lại vòng lặp huấn luyện PyTorch. Nói được token, embedding, context window, temperature là gì.'},
+ {name:'AI Engineering',from:37,to:46,gate:'Dự án 4 có bộ eval chạy bằng một lệnh. Bạn chứng minh bằng số liệu một thay đổi làm hệ thống tốt lên. Biết khi nào dùng RAG, fine-tune, hay chỉ sửa prompt.'},
+ {name:'Triển khai và portfolio',from:47,to:52,gate:'Một người lạ mở link Dự án 5 và dùng được ngay; README nói rõ bạn đã quyết định gì, đo gì, đánh đổi gì.'}
+];
+const cs=(n,wk,topic,ps)=>({n,t:'CS50x Week '+wk+': '+topic,r:[['CS50x Week '+wk,'https://cs50.harvard.edu/x/weeks/'+wk+'/']],out:ps+' đã nộp',d:[
+ 'Xem nửa đầu bài giảng Week '+wk+', dừng lại gõ từng ví dụ','Xem nửa sau bài giảng, ghi 5 dòng tóm tắt bằng lời của bạn','Xem các video Shorts và Section của Week '+wk,
+ ps+': đọc đề, làm bài đầu tiên',ps+': làm tiếp các bài còn lại',ps+': sửa lỗi, nộp bài, commit lên GitHub']});
+const W=[
+ {n:1,t:'Dựng môi trường và thói quen',r:[['GitHub','https://github.com'],['VS Code','https://code.visualstudio.com'],['Git','https://git-scm.com/downloads'],['Python','https://www.python.org/downloads/'],L.cs50],out:'Repo GitHub và báo cáo ngày đầu tiên',d:['Tạo tài khoản GitHub và một repo tên ai-engineering-journey','Cài VS Code và Git, commit file README.md đầu tiên','Cài Python, chạy print("hello") trong terminal','Đăng ký CS50x, mở thử môi trường code trên trình duyệt của khoá','Xem bài giảng Week 0 của CS50x','Gửi báo cáo ngày đầu tiên cho Claude theo mẫu']},
+ cs(2,0,'Scratch, tư duy thuật toán','Problem Set 0'),cs(3,1,'C, biến, vòng lặp, hàm','Problem Set 1'),cs(4,2,'Mảng, chuỗi, biên dịch','Problem Set 2'),
+ cs(5,3,'Tìm kiếm, sắp xếp, độ phức tạp','Problem Set 3'),cs(6,4,'Bộ nhớ, con trỏ, file','Problem Set 4'),cs(7,5,'Cấu trúc dữ liệu, bảng băm','Problem Set 5'),
+ {n:8,t:'Tuần đệm: ôn C',r:[L.cs50],out:'Ghi chú 1 trang "C dạy tôi điều gì"',d:['Chọn bài khó nhất trong Problem Set 1 đến 5, làm lại từ file trắng','Vẽ tay sơ đồ stack, heap, con trỏ cho một chương trình C nhỏ','Viết lại binary search và selection sort bằng C, không nhìn tài liệu','Viết lại merge sort, ghi độ phức tạp của từng thuật toán','Tự cài linked list: thêm, xoá, duyệt','Viết ghi chú 1 trang "C dạy tôi điều gì"']},
+ cs(9,6,'Python','Problem Set 6'),cs(10,7,'SQL','Problem Set 7'),cs(11,8,'HTML, CSS, JavaScript','Problem Set 8'),cs(12,9,'Flask, ứng dụng web','Problem Set 9'),
+ {n:13,t:'Dự án cuối khoá CS50x',r:[L.cs50],out:'Dự án cuối khoá trên GitHub',d:['Xem bài giảng cuối khoá','Chọn ý tưởng dự án, viết 5 dòng mô tả','Dựng khung dự án, chạy được trang đầu tiên','Làm tính năng chính','Hoàn thiện, viết README, quay video demo ngắn','Nộp dự án, rồi làm cổng qua giai đoạn với Claude']},
+ {n:14,t:'Terminal và shell',r:[L.ms],out:'5 script shell tự viết',d:['Missing Semester bài 1 (shell): chạy 15 lệnh cơ bản','Bài về shell script: viết script đầu tiên','Bài về trình soạn thảo: học 10 phím tắt bạn sẽ dùng hằng ngày','Bài về xử lý dữ liệu dòng lệnh: grep, sort, uniq trên một file log','Viết 3 script tự động hoá việc của chính bạn','Viết thêm 2 script, commit cả 5 lên GitHub']},
+ {n:15,t:'Git: nhánh, merge, pull request',r:[L.lgb,L.progit],out:'Một pull request tự tạo và tự merge',d:['Learn Git Branching: phần Main, 4 bài đầu','Learn Git Branching: phần Remote','Pro Git chương 1 và 2, thực hành trên repo của bạn','Pro Git chương 3: nhánh và merge','Tạo nhánh, sửa code, mở pull request trên GitHub','Tự tạo một xung đột merge rồi tự gỡ, merge pull request']},
+ {n:16,t:'Python chuyên nghiệp',r:[L.pytut,L.pytest],out:'Thư viện nhỏ có ít nhất 10 test',d:['Python Tutorial mục 3 đến 5, làm lại ví dụ','Tạo môi trường ảo, cài một thư viện, hiểu file requirements','Type hints: thêm kiểu cho 5 hàm cũ của bạn','pytest: viết 3 test đầu tiên','Viết thư viện nhỏ gồm 5 hàm xử lý văn bản','Viết đủ 10 test, tất cả đều qua, commit']},
+ {n:17,t:'HTTP, JSON, REST API',r:[L.mdnhttp,L.fastapi],out:'API có 4 endpoint thêm, đọc, sửa, xoá',d:['Đọc MDN về HTTP, dùng curl gọi một API công khai','FastAPI Tutorial: First Steps, Path Parameters, Query Parameters','FastAPI: Request Body và kiểm tra dữ liệu bằng Pydantic','Viết endpoint thêm và đọc ghi chú','Viết endpoint sửa và xoá, lưu vào SQLite','Viết test cho cả 4 endpoint']},
+ {n:18,t:'Docker và Dự án 1',r:[L.docker],out:'Dự án 1: API ghi chú có test, Dockerfile, README',d:['Docker Get started: chạy container đầu tiên','Viết Dockerfile cho API của tuần 17','Chạy API trong container, sửa lỗi','Viết README: cài đặt, cách chạy, ví dụ gọi API','Thử clone và chạy bằng một lệnh trên thư mục sạch','Làm cổng qua giai đoạn với Claude']},
+ {n:19,t:'Đại số tuyến tính 1',r:[L.la,L.numpy],out:'Phép nhân ma trận tự viết, khớp với NumPy',d:['3Blue1Brown Linear Algebra chương 1 đến 3','Chương 4 đến 6: nhân ma trận, định thức','NumPy quickstart: mảng, shape, phép toán','Tự viết cộng vector và tích vô hướng bằng Python thuần','Tự viết phép nhân ma trận bằng vòng lặp','So kết quả với NumPy trên 5 ví dụ, commit']},
+ {n:20,t:'Đại số tuyến tính 2',r:[L.la,L.numpy],out:'Ghi chú 1 trang: ma trận là một phép biến đổi',d:['Chương 7 đến 9: nghịch đảo, không gian cột, tích vô hướng','Chương về trị riêng và vector riêng, xem để có trực giác','NumPy: broadcasting và indexing','Viết lại 5 hàm tuần trước bằng NumPy, không dùng vòng lặp','Biểu diễn một ảnh xám thành ma trận, xoay và lật ảnh','Viết ghi chú 1 trang: ma trận là một phép biến đổi']},
+ {n:21,t:'Đạo hàm và gradient descent',r:[L.calc],out:'Gradient descent tìm cực tiểu của một hàm',d:['3Blue1Brown Calculus chương 1 đến 3: đạo hàm là gì','Chương 4: chain rule; đọc thêm về đạo hàm riêng','Viết hàm xấp xỉ đạo hàm bằng số','Gradient descent cho hàm một biến','Gradient descent cho hàm hai biến, vẽ đường đi','Thử 3 mức learning rate, ghi lại điều quan sát được']},
+ {n:22,t:'Xác suất và thống kê',r:[L.khan,L.sq],out:'Notebook mô phỏng xác suất',d:['Khan Academy: trung bình, phương sai, độ lệch chuẩn','Xác suất cơ bản và xác suất có điều kiện','StatQuest: phân phối chuẩn, định lý giới hạn trung tâm','Notebook: mô phỏng tung đồng xu 10.000 lần','Notebook: lấy mẫu và vẽ phân phối chuẩn','Giải thích định lý Bayes bằng một ví dụ của riêng bạn']},
+ {n:23,t:'pandas và trực quan hoá',r:[L.kaggle],out:'Phân tích một bộ dữ liệu với 5 biểu đồ',d:['Kaggle Learn Pandas: bài 1 đến 3','Kaggle Learn Pandas: bài 4 đến 6','Kaggle Learn Data Visualization: bài 1 đến 4','Chọn một bộ dữ liệu bạn quan tâm, tải về và làm sạch','Vẽ 5 biểu đồ trả lời 5 câu hỏi','Viết 5 kết luận, commit notebook']},
+ {n:24,t:'Hồi quy và phân loại',r:[L.mlcc],out:'Linear regression viết tay bằng NumPy',d:['ML Crash Course: Linear regression','Tự viết linear regression: hàm dự đoán và hàm loss','Thêm gradient descent, huấn luyện trên dữ liệu thật','ML Crash Course: Logistic regression','ML Crash Course: Classification (ngưỡng, precision, recall)','So mô hình tự viết với scikit-learn']},
+ {n:25,t:'Dữ liệu và overfitting',r:[L.mlcc],out:'Ghi chú 1 trang về overfitting',d:['ML Crash Course: Working with numerical data','ML Crash Course: Working with categorical data','ML Crash Course: Datasets, generalization, overfitting','Chia train, validation, test trên bộ dữ liệu tuần 23','Cố ý làm mô hình overfit, rồi sửa bằng regularization','Viết ghi chú về overfitting bằng ví dụ của bạn']},
+ {n:26,t:'ML Zoomcamp: hồi quy, phân loại, đánh giá',r:[L.mlz],out:'Bài tập module 3 và 4',d:['Module 1: giới thiệu machine learning','Module 2: hồi quy','Module 3: phân loại','Làm bài tập module 3','Module 4: các thước đo đánh giá','Làm bài tập module 4']},
+ {n:27,t:'Cây quyết định và boosting',r:[L.mlz],out:'Mô hình phân loại có báo cáo precision, recall',d:['Module 6: cây quyết định','Random forest và gradient boosting','Tinh chỉnh tham số bằng cross-validation','Huấn luyện 3 mô hình trên cùng một bộ dữ liệu','So sánh bằng precision, recall, AUC','Viết báo cáo so sánh']},
+ {n:28,t:'Dự án 2: bài toán dữ liệu bảng',r:[L.kcomp],out:'Dự án 2 trên GitHub',d:['Chọn một cuộc thi nhập môn trên Kaggle, đọc đề','Khám phá và làm sạch dữ liệu','Mô hình baseline, nộp lần đầu','Feature engineering, cải thiện điểm','Viết README giải thích từng quyết định','Làm cổng qua giai đoạn với Claude']},
+ {n:29,t:'Mạng nơ-ron và backpropagation',r:[L.nn,L.z2h],out:'micrograd tự gõ lại',d:['3Blue1Brown Neural Networks chương 1 và 2','Chương 3 và 4: backpropagation','Zero to Hero bài 1 (micrograd), nửa đầu, gõ theo','micrograd, nửa sau','Tự gõ lại micrograd từ file trắng','Huấn luyện một mạng nhỏ bằng micrograd của bạn']},
+ {n:30,t:'Mô hình ngôn ngữ đầu tiên và PyTorch',r:[L.z2h,L.torch],out:'Mô hình bigram sinh tên tiếng Việt',d:['Zero to Hero bài 2 (makemore: bigram), nửa đầu','Bài 2, nửa sau','PyTorch Learn the Basics: tensor và autograd','Tự gõ lại mô hình bigram','Thu thập một danh sách tên tiếng Việt làm dữ liệu','Huấn luyện bigram trên tên tiếng Việt']},
+ {n:31,t:'MLP và ổn định huấn luyện',r:[L.z2h],out:'Mô hình MLP sinh tên tiếng Việt',d:['Zero to Hero bài 3 (makemore: MLP), nửa đầu','Bài 3, nửa sau','Tự gõ lại MLP','Bài 4 (activation, gradient, BatchNorm), nửa đầu','Bài 4, nửa sau','Sinh tên tiếng Việt bằng MLP, so với bigram']},
+ {n:32,t:'Backprop thủ công, mạng sâu hơn',r:[L.z2h],out:'Bài tập backprop của bài 5',d:['Zero to Hero bài 5 (backprop thủ công), phần 1','Bài 5, phần 2, bắt đầu bài tập','Làm tiếp bài tập backprop','Bài 6 (WaveNet), nửa đầu','Bài 6, nửa sau','Ghi chú: gradient chảy qua mạng thế nào']},
+ {n:33,t:'Transformer và self-attention',r:[L.z2h],out:'GPT nhỏ tự gõ lại, chạy được',d:['Let\'s build GPT: phần dữ liệu và bigram','Let\'s build GPT: phần self-attention','Let\'s build GPT: phần Transformer block','Tự gõ lại GPT từ file trắng, phần 1','Tự gõ lại GPT, phần 2, chạy được','Vẽ tay sơ đồ self-attention và giải thích cho Claude']},
+ {n:34,t:'Tokenizer và embedding',r:[L.z2h,L.hfllm],out:'Tokenizer BPE tự viết',d:['Let\'s build the GPT Tokenizer, nửa đầu','GPT Tokenizer, nửa sau','Tự viết tokenizer BPE','Hugging Face LLM Course chương 1','LLM Course chương 2','LLM Course chương 3']},
+ {n:35,t:'Fine-tuning mô hình có sẵn',r:[L.hfllm,L.colab],out:'Một mô hình phân loại văn bản đã fine-tune',d:['LLM Course: chuẩn bị dữ liệu để fine-tune','Fine-tune một mô hình phân loại văn bản trên Colab','Đánh giá mô hình, xem các ví dụ sai','Đẩy mô hình lên Hugging Face Hub','Thử với một bộ dữ liệu tiếng Việt','Ghi chú: fine-tune khác huấn luyện từ đầu thế nào']},
+ {n:36,t:'Dự án 3: GPT nhỏ tiếng Việt',r:[L.colab,L.z2h],out:'Dự án 3 kèm bài viết giải thích',d:['Thu thập và làm sạch văn bản tiếng Việt thuộc phạm vi công cộng','Huấn luyện tokenizer và GPT nhỏ trên Colab','Thử 3 cấu hình, ghi lại loss','Sinh văn bản, thử các mức temperature','Viết bài giải thích mô hình hoạt động thế nào','Làm cổng qua giai đoạn với Claude']},
+ {n:37,t:'Gọi API của LLM, viết prompt',r:[L.academy,L.prompt,L.ollama],out:'Script tóm tắt văn bản, 3 phiên bản prompt có so sánh',d:['Bắt đầu khoá Building with the Claude API, hoặc cài Ollama để chạy mô hình mở miễn phí','Gọi mô hình lần đầu bằng Python; hiểu message, system prompt, token','Đọc hướng dẫn prompt engineering','Viết script tóm tắt văn bản','Viết 3 phiên bản prompt, chạy trên 10 văn bản','Lập bảng so sánh 3 phiên bản']},
+ {n:38,t:'Đầu ra có cấu trúc và tool use',r:[L.academy],out:'Trợ lý gọi được 2 hàm do bạn viết',d:['Đầu ra có cấu trúc: yêu cầu JSON và kiểm tra bằng Pydantic','Đọc phần tool use của khoá','Viết hàm thứ nhất và nối vào mô hình','Viết hàm thứ hai, để mô hình tự chọn hàm','Xử lý lỗi: hàm lỗi, mô hình gọi sai tham số','Hoàn thiện trợ lý, viết README']},
+ {n:39,t:'Embedding và tìm kiếm vector',r:[L.llmz],out:'Tìm kiếm trên 20 tài liệu của bạn',d:['LLM Zoomcamp module 1: RAG là gì','Embedding: biến câu thành vector, đo độ giống nhau','LLM Zoomcamp: module vector search','Chọn 20 tài liệu của bạn, chia thành đoạn','Tạo embedding và lưu vào một vector store','Truy vấn thử 10 câu hỏi, xem đoạn nào được lấy ra']},
+ {n:40,t:'RAG hoàn chỉnh',r:[L.llmz],out:'Hỏi đáp trên tài liệu của bạn, có trích nguồn',d:['Nối bước tìm kiếm với LLM thành RAG hoàn chỉnh','Thêm trích dẫn nguồn vào câu trả lời','Thử 3 cách chia đoạn khác nhau','Thử tìm kiếm kết hợp từ khoá và vector','Xử lý trường hợp không tìm thấy thông tin','Dọn code, commit']},
+ {n:41,t:'Đánh giá (evals)',r:[L.llmz],out:'Bộ 50 câu hỏi kiểm thử, bảng điểm trước và sau',d:['LLM Zoomcamp: module evaluation','Viết 50 câu hỏi kiểm thử kèm đáp án mong đợi','Đo bước tìm kiếm: tỉ lệ lấy đúng đoạn','Đo câu trả lời: dùng LLM làm giám khảo với tiêu chí rõ ràng','Sửa một điểm yếu, chạy lại eval','Lập bảng điểm trước và sau khi sửa']},
+ {n:42,t:'Agent: vòng lặp và công cụ',r:[L.hfag],out:'Agent tự viết, không dùng framework',d:['Agents Course unit 1: agent là gì','Unit 1 tiếp: vòng lặp suy nghĩ, hành động, quan sát','Unit 2: thử một framework agent','Tự viết vòng lặp agent không dùng framework','Thêm công cụ tìm kiếm và đọc trang web','Chạy agent trên 5 câu hỏi, ghi lại chỗ nó sai']},
+ {n:43,t:'Agent nghiên cứu',r:[L.hfag],out:'Agent tìm kiếm, đọc và viết báo cáo',d:['Agents Course: agentic RAG','Thêm bước lập kế hoạch và viết báo cáo','Giới hạn số bước, xử lý lỗi công cụ','Viết 10 bài kiểm thử cho agent','Sửa 2 lỗi hay gặp nhất','Hoàn thiện agent nghiên cứu, viết README']},
+ {n:44,t:'MCP',r:[L.academy,L.hfmcp],out:'Một MCP server tự viết',d:['Claude Academy: Introduction to MCP','Hugging Face MCP Course unit 1','Viết MCP server đầu tiên với một tool','Thêm tool thứ hai và một resource','Kết nối server với một ứng dụng hỗ trợ MCP, chạy thử','Viết README, commit']},
+ {n:45,t:'Chi phí, độ trễ, giám sát, an toàn',r:[L.llmz],out:'Bảng đo chi phí và độ trễ',d:['LLM Zoomcamp: module monitoring','Ghi log mọi lần gọi: prompt, câu trả lời, token, thời gian','Tính chi phí và độ trễ trung bình','Giảm chi phí: rút prompt, cache, chọn mô hình nhỏ hơn','Đọc về prompt injection, thử tấn công hệ thống của chính bạn','Thêm lớp bảo vệ, lập bảng chi phí và độ trễ']},
+ {n:46,t:'Dự án 4: trợ lý hỏi đáp tài liệu có eval',r:[L.llmz],out:'Dự án 4 trên GitHub',d:['Gộp RAG, eval, log thành một dự án','Một lệnh duy nhất chạy toàn bộ eval','Cải thiện một điểm, chứng minh bằng số','README: kiến trúc, kết quả eval, giới hạn','Quay demo ngắn','Làm cổng qua giai đoạn với Claude']},
+ {n:47,t:'Backend và giao diện',r:[L.fastapi,L.gradio,L.streamlit],out:'Dự án 4 có giao diện web',d:['Bọc Dự án 4 thành API FastAPI','Làm quickstart của Gradio hoặc Streamlit','Giao diện chat nối với API','Hiển thị nguồn trích dẫn','Xử lý trạng thái chờ và lỗi','Cho một người dùng thử, ghi lại 3 góp ý']},
+ {n:48,t:'Đóng gói và deploy',r:[L.spaces,L.docker],out:'Đường link công khai chạy được',d:['Viết Dockerfile cho ứng dụng','Đọc tài liệu Hugging Face Spaces','Deploy lần đầu','Quản lý khoá API bằng secrets, không đưa vào code','Sửa lỗi khi chạy trên môi trường thật','Gửi link cho 3 người dùng thử']},
+ {n:49,t:'CI, log, test tự động',r:[L.gha,L.mlops],out:'Test và eval tự chạy mỗi lần push',d:['GitHub Actions: chạy test tự động khi push','Thêm bước chạy eval','MLOps Zoomcamp: xem phần monitoring','Thêm log có cấu trúc','Thêm cảnh báo đơn giản khi có lỗi','Viết tài liệu vận hành ngắn']},
+ {n:50,t:'Dự án tốt nghiệp, phần 1',r:[L.fsdl],out:'Phiên bản chạy được đầu tiên kèm eval',d:['Chọn một vấn đề thật của bạn, viết 1 trang mô tả','Thiết kế: dữ liệu, mô hình, cách đo','Xem 1 đến 2 bài của LLM Bootcamp về làm sản phẩm','Dựng phiên bản chạy được đầu tiên','Viết bộ eval','Chạy eval lần đầu']},
+ {n:51,t:'Dự án tốt nghiệp, phần 2',r:[L.spaces],out:'Dự án 5 chạy công khai',d:['Cải thiện theo kết quả eval','Làm giao diện','Deploy','Cho 3 người dùng thử','Sửa theo góp ý','Viết README đầy đủ']},
+ {n:52,t:'Portfolio',r:[['GitHub','https://github.com']],out:'README cho 5 dự án, 1 bài viết kỹ thuật, CV',d:['Viết lại README cho Dự án 1 và 2','Viết lại README cho Dự án 3 và 4','Viết một bài kỹ thuật về điều khó nhất bạn đã giải quyết','Dọn trang GitHub cá nhân, ghim 5 dự án','Viết CV','Làm cổng tốt nghiệp với Claude']}
+];
+const B=[
+ {id:'data',name:'Data',time:'khoảng 10 tuần',out:'Pipeline tự động lấy dữ liệu công khai mỗi ngày, làm sạch, nạp vào cơ sở dữ liệu, hiện thành dashboard.',s:[
+  ['SQL cơ bản đến nâng cao',['SQLBolt','https://sqlbolt.com']],['CS50 SQL',['CS50 SQL','https://cs50.harvard.edu/sql/']],['Làm sạch dữ liệu và feature engineering',L.kaggle],
+  ['Data Engineering Zoomcamp: Docker, SQL, orchestration, data warehouse',['Data Engineering Zoomcamp','https://github.com/DataTalksClub/data-engineering-zoomcamp']],['Dự án pipeline và dashboard',null]]},
+ {id:'web',name:'Web',time:'khoảng 12 tuần',out:'Giao diện web thật cho Dự án 4 hoặc 5.',s:[
+  ['HTML, CSS, JavaScript thuần: phần Foundations',['The Odin Project','https://www.theodinproject.com']],['Tra cứu và đọc sâu JavaScript',['javascript.info','https://javascript.info']],
+  ['React, Node.js, cơ sở dữ liệu, test: phần 1 đến 5',['Full Stack Open','https://fullstackopen.com/en/']],['Deploy một ứng dụng hoàn chỉnh',null]]},
+ {id:'swe',name:'Software Engineering',time:'khoảng 12 tuần',out:'60 bài giải thuật có ghi chú và một bản thiết kế hệ thống cho Dự án 5.',s:[
+  ['Cấu trúc dữ liệu và giải thuật, mỗi ngày 1 bài',['NeetCode Roadmap','https://neetcode.io/roadmap']],['Hệ điều hành: process, memory, concurrency',['OSTEP','https://pages.cs.wisc.edu/~remzi/OSTEP/']],
+  ['Mạng máy tính và cơ sở dữ liệu',['Teach Yourself CS','https://teachyourselfcs.com']],['Thiết kế hệ thống',['System Design Primer','https://github.com/donnemartin/system-design-primer']],
+  ['Ngôn ngữ lập trình từ bên trong',['Crafting Interpreters','https://craftinginterpreters.com']]]}
+];
+W.forEach(w=>{w.p=P.findIndex(p=>w.n>=p.from&&w.n<=p.to)});
+const TASKS=W.flatMap(w=>w.d.map((t,i)=>({id:'w'+w.n+'d'+(i+1),w,i,t})));
+
+/* ---------- State ---------- */
+const KEY='ai-eng-tracker-v1';
+const pad=n=>String(n).padStart(2,'0');
+const iso=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+const parse=s=>{const a=String(s).split('-').map(Number);return new Date(a[0],a[1]-1,a[2])};
+const today=()=>iso(new Date());
+const vn=s=>{const d=parse(s);return pad(d.getDate())+'/'+pad(d.getMonth()+1)};
+function nextMonday(){const d=new Date();const add=(8-d.getDay())%7;d.setDate(d.getDate()+add);return iso(d)}
+function fresh(){return {v:1,start:nextMonday(),done:{},log:[],updatedAt:0}}
+function clean(x){const s=fresh();if(!x||typeof x!=='object')return s;
+  if(typeof x.start==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(x.start))s.start=x.start;
+  if(x.done&&typeof x.done==='object')for(const k of Object.keys(x.done))if(typeof x.done[k]==='string')s.done[k]=x.done[k].slice(0,10);
+  if(Array.isArray(x.log))s.log=x.log.filter(e=>e&&typeof e==='object'&&typeof e.date==='string').slice(0,800).map(e=>({id:String(e.id||''),date:e.date.slice(0,10),week:Number(e.week)||0,min:Number(e.min)||0,k:Number(e.k)||0,c:Number(e.c)||0,g:Number(e.g)||0,d:Number(e.d)||0,note:String(e.note||'').slice(0,300)}));
+  s.updatedAt=Number(x.updatedAt)||0;return s}
+let state=fresh(),selPhase=null,openWeeks=new Set(),resetArmed=false;
+try{const raw=localStorage.getItem(KEY);if(raw)state=clean(JSON.parse(raw))}catch(e){}
+function saveLocal(){try{localStorage.setItem(KEY,JSON.stringify(state))}catch(e){}}
+
+/* ---------- Firebase: dán cấu hình web app của bạn vào đây (xem HUONG-DAN.md, bước 2) ----------
+   Ví dụ: const FIREBASE_CONFIG={apiKey:"...",authDomain:"ten-du-an.firebaseapp.com",projectId:"ten-du-an",appId:"..."};
+   Các giá trị này không phải mật khẩu; dữ liệu được bảo vệ bằng đăng nhập Google và Rules của Firestore. */
+const FIREBASE_CONFIG=null;
+const FB_VER='10.14.1';
+
+/* ---------- Sync: claude.ai database hoặc Firebase ---------- */
+let ref=null,writing=false,dirty=false,readOnly=false,timer=null,loadTimer=null,reconciled=false,unsubs=[],fb=null,aiNotes=[];
+function setSync(cls,text){const el=document.getElementById('sync');el.className='sync '+cls;document.getElementById('syncText').textContent=text}
+async function flush(){if(!ref||readOnly)return;if(writing){dirty=true;return}
+  writing=true;setSync('busy','Đang lưu');
+  try{await ref.set(JSON.parse(JSON.stringify(state)));setSync('ok','Đã lưu, đồng bộ mọi thiết bị')}
+  catch(e){const c=e&&e.code;
+    if(c==='invalid_argument'){readOnly=true;setSync('err','Chỉ xem: bạn không có quyền ghi')}
+    else if(c==='permission-denied')setSync('err','Firestore từ chối ghi: kiểm tra Rules (HUONG-DAN.md, bước 2)');
+    else setSync('err','Chưa lưu lên máy chủ được; dữ liệu vẫn nằm trên trình duyệt này')}
+  writing=false;if(dirty){dirty=false;flush()}}
+function commit(){state.updatedAt=Date.now();saveLocal();render();if(ref){clearTimeout(timer);timer=setTimeout(flush,700)}}
+function detach(){unsubs.forEach(u=>{try{typeof u==='function'&&u()}catch(e){}});unsubs=[];ref=null;reconciled=false;clearTimeout(loadTimer)}
+/* Gắn một document chứa state; dùng chung cho cả hai nơi lưu. Bản mới hơn (updatedAt lớn hơn) thắng. */
+function attach(r){ref=r;
+  loadTimer=setTimeout(()=>setSync('err','Chưa kết nối được máy chủ; đang hiện dữ liệu trên trình duyệt này'),10000);
+  unsubs.push(r.onSnapshot(snap=>{
+    if(snap.metadata&&snap.metadata.hasPendingWrites)return;
+    if(!(snap.metadata&&snap.metadata.fromCache)){clearTimeout(loadTimer)}
+    let needPush=false;
+    if(snap.exists){const remote=clean(JSON.parse(JSON.stringify(snap.data())));
+      if(remote.updatedAt>state.updatedAt){state=remote;saveLocal();render()}
+      else if(remote.updatedAt<state.updatedAt)needPush=true}
+    else if(state.updatedAt>0)needPush=true;
+    if(!writing)setSync('ok','Đã lưu, đồng bộ mọi thiết bị');
+    if(needPush&&!reconciled){reconciled=true;clearTimeout(timer);timer=setTimeout(flush,300)}
+  },()=>{clearTimeout(loadTimer);setSync('err','Mất kết nối máy chủ; thay đổi chỉ lưu trên trình duyệt này')}))}
+function connect(){
+  if(window.claude&&typeof window.claude.use==='function'){
+    window.claude.use('db').then(db=>{if(!db){setSync('','Lưu trên trình duyệt này');return}attach(db.doc('tracker/state'))})
+      .catch(()=>setSync('','Lưu trên trình duyệt này'));return}
+  if(FIREBASE_CONFIG){connectFirebase();return}
+  setSync('','Lưu trên trình duyệt này');
+}
+async function connectFirebase(){
+  setSync('busy','Đang tải Firebase');
+  const btn=document.getElementById('authBtn');
+  try{
+    const base='https://www.gstatic.com/firebasejs/'+FB_VER+'/';
+    const [A,U,F]=await Promise.all([import(base+'firebase-app.js'),import(base+'firebase-auth.js'),import(base+'firebase-firestore.js')]);
+    const app=A.initializeApp(FIREBASE_CONFIG),auth=U.getAuth(app);
+    let db;try{db=F.initializeFirestore(app,{localCache:F.persistentLocalCache({tabManager:F.persistentMultipleTabManager()})})}catch(e){db=F.getFirestore(app)}
+    fb={U,F,auth,db,user:null};
+    const docAt=path=>{const r=F.doc(db,path);return{
+      set:d=>F.setDoc(r,d),
+      onSnapshot:(ok,err)=>F.onSnapshot(r,{includeMetadataChanges:true},s=>ok({exists:s.exists(),data:()=>s.data(),metadata:s.metadata}),err)}};
+    btn.hidden=false;
+    U.onAuthStateChanged(auth,user=>{
+      detach();fb.user=user;aiNotes=[];renderAiNotes();
+      if(!user){btn.textContent='Đăng nhập Google để đồng bộ';setSync('','Chưa đăng nhập: chỉ lưu trên trình duyệt này');return}
+      btn.textContent='Đăng xuất';btn.title=user.email||'';
+      attach(docAt('users/'+user.uid+'/tracker/state'));
+      /* Nhận xét do script AI trên máy bạn ghi vào (tro-ly/kiem-tra.js) */
+      unsubs.push(docAt('users/'+user.uid+'/tracker/ai').onSnapshot(s=>{
+        const d=s.exists?s.data():null;aiNotes=d&&Array.isArray(d.items)?d.items:[];renderAiNotes()},()=>{}));
+    });
+  }catch(e){setSync('err','Không tải được Firebase; dữ liệu vẫn nằm trên trình duyệt này')}
+}
+document.getElementById('authBtn').addEventListener('click',async()=>{if(!fb)return;
+  if(fb.user){await fb.U.signOut(fb.auth);return}
+  try{await fb.U.signInWithPopup(fb.auth,new fb.U.GoogleAuthProvider())}
+  catch(e){if(e&&e.code==='auth/popup-blocked')fb.U.signInWithRedirect(fb.auth,new fb.U.GoogleAuthProvider());
+    else if(!(e&&e.code==='auth/popup-closed-by-user'))setSync('err','Đăng nhập lỗi: '+((e&&e.code)||'không rõ'))}});
+
+/* ---------- Derived numbers ---------- */
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const link=l=>'<a href="'+esc(l[1])+'">'+esc(l[0])+'</a>';
+const isDone=id=>!!state.done[id];
+const nextTask=()=>TASKS.find(t=>!isDone(t.id))||null;
+function expectedSessions(){const s=parse(state.start),end=parse(today());let n=0;const d=new Date(s);
+  for(let i=0;i<500&&d<end;i++){if(d.getDay()!==0)n++;d.setDate(d.getDate()+1)}return Math.min(n,TASKS.length)}
+function streak(){const days=new Set(Object.values(state.done));state.log.forEach(e=>days.add(e.date));
+  const d=new Date();if(!days.has(iso(d)))d.setDate(d.getDate()-1);let n=0;
+  for(let i=0;i<800;i++){const k=iso(d);if(days.has(k))n++;else if(d.getDay()!==0)break;d.setDate(d.getDate()-1)}return n}
+
+/* ---------- Render ---------- */
+function renderStats(){const done=TASKS.filter(t=>isDone(t.id)).length,total=TASKS.length,pct=Math.round(done/total*100);
+  const nt=nextTask(),exp=expectedSessions(),diff=done-exp,mins=state.log.reduce((a,e)=>a+e.min,0);
+  let cls='',big,sub;
+  if(parse(today())<parse(state.start)&&done===0){big='Chưa bắt đầu';sub='Lịch bắt đầu ngày '+vn(state.start)}
+  else if(diff>0){cls='good';big='Nhanh '+diff+' buổi';sub='so với lịch 6 buổi mỗi tuần'}
+  else if(diff<0){cls='warn';big='Chậm '+(-diff)+' buổi';sub='học tiếp từ chỗ dừng, không học bù gấp đôi'}
+  else{cls='good';big='Đúng lịch';sub='so với lịch 6 buổi mỗi tuần'}
+  document.getElementById('stats').innerHTML=
+   '<div class="stat"><span>Tiến độ lõi</span><b class="num">'+pct+'%</b><div class="bar"><i style="width:'+pct+'%"></i></div><span class="num">'+done+' / '+total+' buổi</span></div>'+
+   '<div class="stat"><span>Đang học</span><b>'+(nt?'Tuần '+nt.w.n:'Hoàn thành')+'</b><span>'+(nt?'Giai đoạn '+nt.w.p+': '+esc(P[nt.w.p].name):'Đã xong cả 52 tuần')+'</span></div>'+
+   '<div class="stat '+cls+'"><span>So với lịch</span><b>'+big+'</b><span>'+sub+'</span></div>'+
+   '<div class="stat"><span>Chuỗi ngày học</span><b class="num">'+streak()+' ngày</b><span class="num">Tổng '+(mins/60).toFixed(1)+' giờ đã ghi</span></div>'}
+function reportText(nt){return 'BÁO CÁO NGÀY — Tuần '+nt.w.n+' / Buổi '+(nt.i+1)+'\nViệc hôm nay: '+nt.t+'\n1. Hôm nay tôi học: \n2. Tôi đã làm ra: \n3. Giải thích lại bằng lời của tôi: \n4. Chỗ tôi bị kẹt: \n5. Thời gian học thực tế: __ phút'}
+function renderToday(){const el=document.getElementById('today'),nt=nextTask();
+  if(!nt){el.innerHTML='<span class="eyebrow">Hoàn thành</span><div class="task">Bạn đã xong toàn bộ 52 tuần của lõi chính.</div>';return}
+  const keep=document.getElementById('report'),kept=keep&&keep.dataset.id===nt.id?keep.value:null;
+  el.innerHTML='<span class="eyebrow">Buổi học kế tiếp · Tuần '+nt.w.n+' · Buổi '+(nt.i+1)+' / 6</span>'+
+   '<div class="task">'+esc(nt.t)+'</div>'+
+   '<div class="muted">'+esc(nt.w.t)+'. Việc nộp cuối tuần: '+esc(nt.w.out)+'.</div>'+
+   '<div class="links">'+nt.w.r.map(link).join('')+'</div>'+
+   '<div class="row"><button class="btn primary" type="button" data-act="done" data-id="'+nt.id+'">Đánh dấu buổi này đã xong</button></div>'+
+   '<h3>Báo cáo ngày</h3>'+
+   '<textarea id="report" data-id="'+nt.id+'" aria-label="Mẫu báo cáo ngày"></textarea>'+
+   '<div class="row"><button class="btn" type="button" data-act="aigrade">Chấm bằng AI trên máy</button><button class="btn" type="button" data-act="copy">Sao chép báo cáo</button><span class="note" id="copyNote">Điền xong: chấm bằng trợ lý AI trên máy, hoặc sao chép và dán cho Claude chấm.</span></div>';
+  document.getElementById('report').value=kept!==null?kept:reportText(nt)}
+function renderRail(){document.getElementById('rail').innerHTML=P.map((p,i)=>{const ts=TASKS.filter(t=>t.w.p===i),dn=ts.filter(t=>isDone(t.id)).length,pct=Math.round(dn/ts.length*100);
+  return '<button class="phase" type="button" data-phase="'+i+'" aria-pressed="'+(i===selPhase)+'"><span class="t">'+i+'. '+esc(p.name)+'</span><div class="bar"><i style="width:'+pct+'%"></i></div><span class="m"><span>Tuần '+(p.from===p.to?p.from:p.from+' đến '+p.to)+'</span><span class="num">'+pct+'%'+(isDone('g'+i)?' · qua cổng':'')+'</span></span></button>'}).join('')}
+function renderWeeks(){const nt=nextTask(),p=P[selPhase];
+  const html=W.filter(w=>w.p===selPhase).map(w=>{const dn=w.d.filter((_,i)=>isDone('w'+w.n+'d'+(i+1))).length,cur=nt&&nt.w.n===w.n;
+   return '<details class="week'+(cur?' cur':'')+(dn===6?' full':'')+'" data-week="'+w.n+'"'+(openWeeks.has(w.n)?' open':'')+'><summary><span class="n">Tuần '+w.n+'</span><span class="t">'+esc(w.t)+'</span><span class="c">'+dn+' / 6</span></summary>'+
+    '<div class="wbody"><div class="links">'+w.r.map(link).join('')+'</div><div class="out"><b>Việc nộp:</b> '+esc(w.out)+'</div><ul class="tasks">'+
+    w.d.map((t,i)=>{const id='w'+w.n+'d'+(i+1),d=isDone(id);return '<li><label class="'+(d?'done':'')+(nt&&nt.id===id?' next':'')+'"><input type="checkbox" id="c-'+id+'" data-id="'+id+'"'+(d?' checked':'')+'><span class="k">Buổi '+(i+1)+'</span><span class="x">'+esc(t)+(d?' <span class="num muted">'+vn(state.done[id])+'</span>':'')+'</span></label></li>'}).join('')+
+    '</ul></div></details>'}).join('');
+  const gid='g'+selPhase;
+  document.getElementById('weeks').innerHTML='<h2>Giai đoạn '+selPhase+': '+esc(p.name)+'</h2>'+html+
+   '<div class="card gate"><h3>Cổng qua giai đoạn</h3><label><input type="checkbox" id="c-'+gid+'" data-id="'+gid+'"'+(isDone(gid)?' checked':'')+'><span>'+esc(p.gate)+' <span class="muted">Đánh dấu sau khi Claude chấm đạt.</span></span></label></div>'}
+function renderLog(){const el=document.getElementById('logOut'),log=state.log.slice().sort((a,b)=>a.date<b.date?1:a.date>b.date?-1:0);
+  if(!log.length){el.innerHTML='<p class="note" style="margin:0">Chưa có buổi nào. Buổi đầu tiên bạn ghi sẽ hiện ở đây.</p>';return}
+  const last=log.slice(0,7),avg=k=>(last.reduce((a,e)=>a+e[k],0)/last.length).toFixed(1),bars=log.slice(0,14).reverse(),mx=Math.max(120,...bars.map(e=>e.min));
+  const pill=v=>'<span class="pill s'+v+'">'+v+'</span>';
+  el.innerHTML='<div class="row" style="justify-content:space-between;align-items:flex-end"><div class="note">Trung bình '+last.length+' buổi gần nhất: khái niệm <b class="num">'+avg('k')+'</b>, code <b class="num">'+avg('c')+'</b>, gỡ lỗi <b class="num">'+avg('g')+'</b>, kỷ luật <b class="num">'+avg('d')+'</b>, <b class="num">'+Math.round(avg('min'))+'</b> phút mỗi buổi</div>'+
+   '<div class="mins" role="img" aria-label="Số phút học của '+bars.length+' buổi gần nhất" style="width:'+Math.min(bars.length*26,340)+'px">'+bars.map(e=>'<i title="'+vn(e.date)+': '+e.min+' phút" style="height:'+Math.round(e.min/mx*100)+'%"></i>').join('')+'</div></div>'+
+   '<div class="tablebox"><table><thead><tr><th>Ngày</th><th>Tuần</th><th class="num">Phút</th><th>Khái niệm</th><th>Code</th><th>Gỡ lỗi</th><th>Kỷ luật</th><th>Ghi chú</th><th></th></tr></thead><tbody>'+
+   log.map(e=>'<tr><td class="num" style="text-align:left">'+vn(e.date)+'</td><td class="num" style="text-align:left">'+(e.week||'')+'</td><td class="num">'+e.min+'</td><td>'+pill(e.k)+'</td><td>'+pill(e.c)+'</td><td>'+pill(e.g)+'</td><td>'+pill(e.d)+'</td><td>'+esc(e.note)+'</td><td><button class="btn small" type="button" data-act="dellog" data-id="'+esc(e.id)+'" aria-label="Xoá buổi ngày '+vn(e.date)+'">Xoá</button></td></tr>').join('')+'</tbody></table></div>'}
+function renderBranches(){document.getElementById('branches').innerHTML=B.map(b=>{const dn=b.s.filter((_,i)=>isDone('b-'+b.id+'-'+i)).length;
+  return '<div class="card"><div class="row" style="justify-content:space-between"><h3>'+esc(b.name)+'</h3><span class="num muted">'+dn+' / '+b.s.length+'</span></div><span class="note">'+esc(b.time)+'</span><ul class="tasks">'+
+   b.s.map((s,i)=>{const id='b-'+b.id+'-'+i,d=isDone(id);return '<li><label class="'+(d?'done':'')+'" style="grid-template-columns:22px 1fr"><input type="checkbox" id="c-'+id+'" data-id="'+id+'"'+(d?' checked':'')+'><span><span class="x">'+esc(s[0])+'</span>'+(s[1]?' · '+link(s[1]):'')+'</span></label></li>'}).join('')+
+   '</ul><div class="out"><b>Sản phẩm:</b> '+esc(b.out)+'</div></div>'}).join('')}
+function render(){const nt=nextTask();if(selPhase===null){selPhase=nt?nt.w.p:6;if(nt)openWeeks.add(nt.w.n)}
+  renderStats();renderToday();renderRail();renderWeeks();renderLog();renderBranches();
+  const s=document.getElementById('s-start');if(document.activeElement!==s)s.value=state.start}
+
+/* ---------- Events ---------- */
+function toggle(id,on){if(on)state.done[id]=today();else delete state.done[id];
+  const nt=nextTask();if(nt)openWeeks.add(nt.w.n);commit()}
+document.addEventListener('change',e=>{const t=e.target;
+  if(t.matches('input[type=checkbox][data-id]'))toggle(t.dataset.id,t.checked);
+  else if(t.id==='s-start'&&t.value){state.start=t.value;commit()}});
+document.addEventListener('toggle',e=>{const d=e.target;if(d.matches&&d.matches('details.week')){const n=Number(d.dataset.week);if(d.open)openWeeks.add(n);else openWeeks.delete(n)}},true);
+document.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
+  if(b.dataset.phase!==undefined){selPhase=Number(b.dataset.phase);renderRail();renderWeeks();return}
+  const act=b.dataset.act;
+  if(act==='done'){const nt=nextTask();toggle(b.dataset.id,true);const nx=nextTask();if(nx&&nt&&nx.w.p!==nt.w.p)selPhase=nx.w.p;render()}
+  else if(act==='copy'){const ta=document.getElementById('report'),note=document.getElementById('copyNote');
+    const ok=()=>{note.textContent='Đã sao chép. Dán vào Project "Học AI Engineering" để Claude chấm.'},fail=()=>{ta.focus();ta.select();note.textContent='Trình duyệt chặn sao chép tự động. Nội dung đã được bôi đen, hãy nhấn Ctrl+C hoặc Cmd+C.'};
+    try{navigator.clipboard.writeText(ta.value).then(ok,fail)}catch(err){fail()}}
+  else if(act==='aigrade')aiGrade();
+  else if(act==='dellog'){state.log=state.log.filter(x=>x.id!==b.dataset.id);commit()}
+  else if(b.id==='reset'){const note=document.getElementById('resetNote');
+    if(!resetArmed){resetArmed=true;b.textContent='Nhấn lần nữa để xoá hẳn';note.textContent='Mọi ô đã đánh dấu và nhật ký sẽ mất, không khôi phục được.';setTimeout(()=>{resetArmed=false;b.textContent='Xoá toàn bộ dữ liệu';note.textContent=''},6000)}
+    else{resetArmed=false;const start=state.start;state=fresh();state.start=start;selPhase=null;openWeeks=new Set();b.textContent='Xoá toàn bộ dữ liệu';note.textContent='Đã xoá.';commit()}}});
+document.getElementById('logForm').addEventListener('submit',e=>{e.preventDefault();const v=id=>document.getElementById(id).value,nt=nextTask();
+  state.log.push({id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),date:v('f-date')||today(),week:nt?nt.w.n:52,min:Math.max(0,Math.min(600,Number(v('f-min'))||0)),k:Number(v('f-k')),c:Number(v('f-c')),g:Number(v('f-g')),d:Number(v('f-d')),note:v('f-note').trim().slice(0,300)});
+  document.getElementById('f-note').value='';commit()});
+
+/* ---------- Trợ lý AI: gọi Ollama chạy trên máy của bạn ---------- */
+const AI_KEY='ai-eng-assistant-v1',AI_DEFAULT={url:'http://localhost:11434',model:'qwen3:8b'};
+let aiCfg={...AI_DEFAULT},chat=[],aiAbort=null;
+try{const x=JSON.parse(localStorage.getItem(AI_KEY)||'{}');
+  if(typeof x.url==='string'&&x.url)aiCfg.url=x.url;if(typeof x.model==='string'&&x.model)aiCfg.model=x.model;
+  if(Array.isArray(x.chat))chat=x.chat.filter(m=>m&&(m.role==='user'||m.role==='assistant')&&typeof m.content==='string').slice(-30)}catch(e){}
+function saveAi(){try{localStorage.setItem(AI_KEY,JSON.stringify({url:aiCfg.url,model:aiCfg.model,chat:chat.filter(m=>m.role!=='error').slice(-30)}))}catch(e){}}
+const aiBase=()=>aiCfg.url.replace(/\/+$/,'');
+function setAi(cls,text){const el=document.getElementById('aiStatus');el.className='ai-status '+cls;el.textContent=text}
+const AI_RULES=[
+ 'Bạn là trợ lý học tập cho một người Việt mới hoàn toàn về lập trình, đang theo lộ trình AI Engineering 52 tuần (6 buổi mỗi tuần, 2 đến 3 giờ mỗi buổi, Chủ nhật nghỉ).',
+ 'Luôn trả lời bằng tiếng Việt, câu ngắn, giải thích từ gốc, không giả định kiến thức có sẵn. Thuật ngữ tiếng Anh giữ nguyên và giải thích nghĩa.',
+ 'Giai đoạn 1 đến 4: chỉ giải thích, gợi ý từng bước và hỏi ngược để người học tự nghĩ. Không viết hộ bài tập, không đưa code hoàn chỉnh cho bài được giao. Được đưa ví dụ nhỏ minh hoạ khái niệm, khác đề bài.',
+ 'Với khoá CS50x: tôn trọng quy định trung thực học thuật, tuyệt đối không đưa lời giải hay code của problem set.',
+ 'Khi người học dán code: chỉ ra dòng có vấn đề và vì sao, để họ tự sửa.',
+ 'Nếu không chắc, nói thẳng là không chắc và chỉ chỗ tra cứu trong tài liệu của buổi học.',
+ 'Nếu người học nản hoặc bỏ buổi: động viên ngắn, nhắc học tiếp từ chỗ dừng, không học bù gấp đôi.'].join('\n');
+const DOW=['Chủ nhật','Thứ hai','Thứ ba','Thứ tư','Thứ năm','Thứ sáu','Thứ bảy'];
+function aiContext(){const nt=nextTask(),done=TASKS.filter(t=>isDone(t.id)).length,L=[];
+  L.push('Hôm nay: '+today()+' ('+DOW[new Date().getDay()]+'). Ngày bắt đầu học: '+state.start+'.');
+  L.push('Đã xong '+done+'/'+TASKS.length+' buổi; theo lịch lẽ ra '+expectedSessions()+' buổi. Chuỗi ngày học: '+streak()+' ngày.');
+  if(nt){L.push('Buổi kế tiếp chưa xong: Tuần '+nt.w.n+', Buổi '+(nt.i+1)+': '+nt.t+'.');
+    L.push('Giai đoạn '+nt.w.p+': '+P[nt.w.p].name+'. Chủ đề tuần: '+nt.w.t+'. Việc nộp cuối tuần: '+nt.w.out+'.');
+    L.push('Các buổi tuần này: '+nt.w.d.map((t,i)=>(i+1)+'. '+t+(isDone('w'+nt.w.n+'d'+(i+1))?' (xong)':'')).join(' | '));
+    L.push('Tài liệu: '+nt.w.r.map(r=>r[0]+' '+r[1]).join('; '))}
+  else L.push('Đã hoàn thành toàn bộ lộ trình.');
+  const lg=state.log.slice().sort((a,b)=>a.date<b.date?1:-1).slice(0,5);
+  if(lg.length)L.push('Điểm 5 buổi gần nhất (khái niệm/code/gỡ lỗi/kỷ luật, thang 5): '+lg.map(e=>e.date+' tuần '+e.week+': '+e.k+'/'+e.c+'/'+e.g+'/'+e.d+', '+e.min+' phút'+(e.note?' ('+e.note+')':'')).join(' || '));
+  const n=aiNotes.slice().sort((a,b)=>(b.at||0)-(a.at||0))[0];
+  if(n&&n.text)L.push('Nhận xét tự động gần nhất: '+String(n.text).slice(0,600));
+  return L.join('\n')}
+const thinks=m=>/^(qwen3|deepseek-r1|magistral)/i.test(m);
+async function ollama(messages,{format,onToken,signal}={}){
+  const body={model:aiCfg.model,messages,stream:!format,keep_alive:'15m',options:{temperature:format?0.2:0.6,num_ctx:8192}};
+  if(format)body.format=format;if(thinks(aiCfg.model))body.think=false;
+  const res=await fetch(aiBase()+'/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal});
+  if(!res.ok){let t='';try{t=(await res.json()).error||''}catch(e){}throw new Error('Ollama báo lỗi '+res.status+(t?': '+t:''))}
+  if(format){const j=await res.json();return (j.message&&j.message.content)||''}
+  const rd=res.body.getReader(),dec=new TextDecoder();let buf='',out='';
+  for(;;){const {value,done}=await rd.read();if(done)break;buf+=dec.decode(value,{stream:true});let i;
+    while((i=buf.indexOf('\n'))>=0){const line=buf.slice(0,i).trim();buf=buf.slice(i+1);if(!line)continue;
+      const j=JSON.parse(line);if(j.error)throw new Error(j.error);
+      if(j.message&&j.message.content){out+=j.message.content;onToken&&onToken(out)}}}
+  return out}
+const offline=()=>'Không kết nối được Ollama ở '+aiCfg.url+'. Kiểm tra: ứng dụng Ollama đã mở chưa, và biến OLLAMA_ORIGINS đã cho phép trang này chưa (HUONG-DAN.md, bước 3).';
+async function aiPing(){setAi('busy','Đang kiểm tra Ollama');
+  if(location.protocol==='https:'&&/^http:/i.test(aiCfg.url)&&!/^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:|\/|$)/i.test(aiCfg.url)){
+    setAi('err','Trang HTTPS không gọi được địa chỉ http ngoài localhost. Trên điện thoại hãy dùng địa chỉ https của Tailscale.');return false}
+  try{const ctl=new AbortController(),t=setTimeout(()=>ctl.abort(),4000);
+    const r=await fetch(aiBase()+'/api/tags',{signal:ctl.signal});clearTimeout(t);
+    const names=((await r.json()).models||[]).map(m=>m.name);
+    if(!names.some(n=>n===aiCfg.model||n===aiCfg.model+':latest')){setAi('err','Ollama đang chạy nhưng chưa có model '+aiCfg.model+'. Mở terminal và gõ: ollama pull '+aiCfg.model);return false}
+    setAi('ok','Đã kết nối · '+aiCfg.model);return true}
+  catch(e){setAi('err',offline());return false}}
+function md(s){return esc(s)
+  .replace(/```[\w-]*\n?([\s\S]*?)```/g,(m,c)=>'<code style="display:block;padding:6px 8px;white-space:pre;overflow-x:auto">'+c+'</code>')
+  .replace(/`([^`\n]+)`/g,'<code>$1</code>').replace(/\*\*([^*\n]+)\*\*/g,'<b>$1</b>')}
+function renderChat(live){const el=document.getElementById('chat');
+  el.innerHTML=chat.map(m=>'<div class="msg '+m.role+'">'+md(m.content)+'</div>').join('')+
+    (live!==undefined?'<div class="msg assistant"><span class="muted">Đang nghĩ…</span></div>':'');
+  el.scrollTop=el.scrollHeight}
+function renderAiNotes(){const items=aiNotes.slice().sort((a,b)=>(b.at||0)-(a.at||0)).slice(0,3);
+  document.getElementById('aiNotesBox').hidden=!items.length;
+  document.getElementById('aiNotes').innerHTML=items.map(n=>'<li><span class="when">'+esc(new Date(Number(n.at)||0).toLocaleString('vi-VN'))+'</span>'+md(String(n.text||''))+'</li>').join('')}
+/* Chạy một lượt hỏi AI: khoá nút, cho phép dừng, ghi lỗi dễ hiểu vào khung chat */
+async function aiRun(userText,job){if(aiAbort)return;
+  chat.push({role:'user',content:userText});renderChat('');
+  aiAbort=new AbortController();document.getElementById('askBtn').disabled=true;document.getElementById('stopBtn').hidden=false;
+  const st={partial:''};
+  try{chat.push({role:'assistant',content:await job(aiAbort.signal,st)||'(không có câu trả lời)'});setAi('ok','Đã kết nối · '+aiCfg.model)}
+  catch(e){if(e&&e.name==='AbortError'){if(st.partial)chat.push({role:'assistant',content:st.partial+' …(đã dừng)'})}
+    else{const m=e instanceof TypeError?offline():String(e&&e.message||e);chat.push({role:'error',content:m});setAi('err',m)}}
+  finally{aiAbort=null;document.getElementById('askBtn').disabled=false;document.getElementById('stopBtn').hidden=true;saveAi();renderChat()}}
+function sysMsg(extra){return {role:'system',content:AI_RULES+(extra?'\n\n'+extra:'')+'\n\nTÌNH HÌNH HỌC HIỆN TẠI:\n'+aiContext()}}
+function aiAsk(text){text=text.trim();if(!text)return;
+  aiRun(text,(signal,st)=>{const box=document.getElementById('chat');
+    return ollama([sysMsg(),...chat.filter(m=>m.role!=='error').slice(-12)],{signal,onToken:t=>{st.partial=t;box.lastElementChild.innerHTML=md(t);box.scrollTop=box.scrollHeight}})})}
+const SCORE={type:'integer',minimum:1,maximum:5};
+const GRADE_SCHEMA={type:'object',properties:{khai_niem:SCORE,code:SCORE,go_loi:SCORE,ky_luat:SCORE,ly_do:{type:'string'},sua_hieu_sai:{type:'string'},
+  cau_hoi:{type:'array',items:{type:'string'}},viec_ngay_mai:{type:'string'},so_phut:{type:'integer'}},
+  required:['khai_niem','code','go_loi','ky_luat','ly_do','sua_hieu_sai','cau_hoi','viec_ngay_mai','so_phut']};
+const GRADE_RULES=['NHIỆM VỤ: chấm báo cáo ngày, trả về JSON. Bốn tiêu chí, thang 1 đến 5 (1 gần như chưa có, 3 đạt tối thiểu, 5 rất tốt):',
+ '- khai_niem: phần tự giải thích có đúng và bằng lời của chính người học không.',
+ '- code: đã làm ra sản phẩm hay code cụ thể chưa, chất lượng ra sao.',
+ '- go_loi: có nêu chỗ kẹt và đã tự thử cách gỡ nào chưa.',
+ '- ky_luat: số phút thực tế so với 120 phút, điền đủ 5 mục. Luật cứng: dưới 90 phút hoặc không ghi số phút thì tối đa 3; từ 90 đến 119 phút tối đa 4; chỉ từ 120 phút mới được 5.',
+ 'Báo cáo sơ sài hoặc còn để trống thì không cho điểm cao.',
+ 'ly_do: 2 đến 4 câu giải thích vì sao cho từng điểm. sua_hieu_sai: sửa chỗ hiểu sai nếu có, không có thì ghi "Không thấy chỗ hiểu sai".',
+ 'cau_hoi: đúng 3 câu hỏi kiểm tra nhanh về nội dung hôm nay. viec_ngay_mai: buổi kế tiếp sau buổi trong báo cáo, theo lộ trình, vừa sức 2 giờ.',
+ 'so_phut: số phút người học ghi; không ghi thì 0.'].join('\n');
+/* Tìm số phút ở mục 5 của báo cáo ("5. Thời gian học thực tế: 95 phút"); không thấy thì 0 */
+function phutTuBaoCao(t){const m=String(t).match(/^\s*5\.[^\n]*?(\d{1,3})\s*(phút|ph\b|p\b|min)/im);const n=m?Number(m[1]):0;return n>0&&n<=600?n:0}
+const capKyLuat=m=>m>=120?5:m>=90?4:3;
+function aiGrade(){const ta=document.getElementById('report'),nt=nextTask(),note=document.getElementById('copyNote');if(!ta||!nt)return;
+  const rep=ta.value.trim();
+  if(!rep||rep===reportText(nt).trim()){note.textContent='Điền 5 mục của báo cáo trước, rồi mới chấm.';ta.focus();return}
+  document.getElementById('h-ai').scrollIntoView({behavior:'smooth',block:'start'});
+  aiRun('Chấm giúp tôi báo cáo này:\n\n'+rep,async signal=>{
+    const raw=await ollama([sysMsg(GRADE_RULES),{role:'user',content:rep}],{format:GRADE_SCHEMA,signal});
+    let g;try{g=JSON.parse(raw)}catch(e){throw new Error('Model trả về không đúng định dạng. Thử chấm lại.')}
+    const cl=n=>Math.max(1,Math.min(5,Math.round(Number(n)||3))),s={k:cl(g.khai_niem),c:cl(g.code),g:cl(g.go_loi),d:cl(g.ky_luat)};
+    /* Số phút lấy thẳng từ báo cáo, không tin con số model đọc; rồi áp luật cứng cho điểm kỷ luật */
+    const mins=phutTuBaoCao(rep)||Math.max(0,Math.min(600,Math.round(Number(g.so_phut)||0))),cap=capKyLuat(mins);
+    let why=String(g.ly_do||'');
+    if(s.d>cap){s.d=cap;why+=' (Kỷ luật tối đa '+cap+' vì '+(mins?'học '+mins+' phút, dưới 120 phút':'chưa ghi số phút')+'.)'}
+    const set=(id,v)=>{document.getElementById(id).value=String(v)};
+    set('f-date',today());set('f-k',s.k);set('f-c',s.c);set('f-g',s.g);set('f-d',s.d);
+    if(mins>0)set('f-min',mins);
+    set('f-note',('AI trên máy: '+why).slice(0,300));
+    return 'Điểm: khái niệm '+s.k+', code '+s.c+', gỡ lỗi '+s.g+', kỷ luật '+s.d+'.\n\n'+why+
+      '\n\n**Sửa chỗ hiểu sai:** '+String(g.sua_hieu_sai||'')+
+      '\n\n**3 câu kiểm tra nhanh** (trả lời ngay trong ô chat):\n'+(Array.isArray(g.cau_hoi)?g.cau_hoi:[]).slice(0,3).map((q,i)=>(i+1)+'. '+q).join('\n')+
+      '\n\n**Việc ngày mai:** '+String(g.viec_ngay_mai||'')+
+      '\n\nĐã điền sẵn điểm vào mục "Nhật ký chấm điểm". Xem lại rồi nhấn "Thêm buổi học".'})}
+document.getElementById('askForm').addEventListener('submit',e=>{e.preventDefault();const t=document.getElementById('askText');if(aiAbort||!t.value.trim())return;aiAsk(t.value);t.value=''});
+document.getElementById('askText').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();document.getElementById('askForm').requestSubmit()}});
+document.getElementById('stopBtn').addEventListener('click',()=>{if(aiAbort)aiAbort.abort()});
+document.getElementById('clearChat').addEventListener('click',()=>{if(aiAbort)return;chat=[];saveAi();renderChat()});
+document.getElementById('aiTest').addEventListener('click',()=>{
+  aiCfg.url=document.getElementById('ai-url').value.trim()||AI_DEFAULT.url;aiCfg.model=document.getElementById('ai-model').value.trim()||AI_DEFAULT.model;
+  document.getElementById('ai-url').value=aiCfg.url;document.getElementById('ai-model').value=aiCfg.model;saveAi();aiPing()});
+
+/* ---------- Start ---------- */
+document.getElementById('ai-url').value=aiCfg.url;document.getElementById('ai-model').value=aiCfg.model;
+renderChat();aiPing();
+['f-k','f-c','f-g','f-d'].forEach(id=>{document.getElementById(id).innerHTML=[1,2,3,4,5].map(n=>'<option value="'+n+'"'+(n===3?' selected':'')+'>'+n+'</option>').join('')});
+document.getElementById('f-date').value=today();
+render();connect();
+</script>
+</body>
+</html>

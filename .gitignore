@@ -1,0 +1,9 @@
+# Bí mật: không bao giờ đưa lên GitHub
+tro-ly/cau-hinh.json
+tro-ly/service-account.json
+*service-account*.json
+.env
+
+node_modules/
+__pycache__/
+.venv/

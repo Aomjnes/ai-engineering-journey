@@ -1,0 +1,9 @@
+{
+  "uid": "DÁN-UID-FIREBASE-CỦA-BẠN",
+  "serviceAccountFile": "tro-ly/service-account.json",
+  "telegramToken": "DÁN-TOKEN-BOT-TỪ-BOTFATHER",
+  "telegramChatId": "",
+  "ollamaUrl": "http://localhost:11434",
+  "ollamaModel": "qwen3:8b",
+  "thuMucBaiTap": "."
+}

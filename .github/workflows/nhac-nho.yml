@@ -1,0 +1,31 @@
+# Gửi lời nhắc học qua Telegram, chạy trên máy chủ của GitHub (máy tính bạn tắt vẫn nhắc).
+# Giờ trong "cron" là giờ UTC; giờ Việt Nam = UTC + 7. GitHub có thể trễ vài phút đến một tiếng.
+name: Nhắc học
+
+on:
+  schedule:
+    - cron: '30 0 * * 1-6'   # 07:30 sáng thứ hai đến thứ bảy: việc hôm nay
+    - cron: '30 13 * * 1-6'  # 20:30 tối thứ hai đến thứ bảy: đã học chưa
+    - cron: '0 13 * * 0'     # 20:00 tối Chủ nhật: tổng kết tuần
+  workflow_dispatch:          # nút "Run workflow" để chạy thử
+    inputs:
+      mode:
+        description: 'sang, toi, tuan hoặc tu-dong'
+        default: 'tu-dong'
+
+jobs:
+  nhac:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      TZ: Asia/Ho_Chi_Minh
+      FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+      FIREBASE_UID: ${{ secrets.FIREBASE_UID }}
+      TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node tro-ly/nhac-nho.js "${{ github.event.inputs.mode || 'tu-dong' }}"
