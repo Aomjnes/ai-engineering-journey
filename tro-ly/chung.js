@@ -15,7 +15,10 @@ function docCauHinh() {
   let f = {};
   const p = path.join(__dirname, 'cau-hinh.json');
   if (fs.existsSync(p)) f = JSON.parse(fs.readFileSync(p, 'utf8'));
-  const env = process.env;
+  // Bỏ ký tự ẩn BOM và khoảng trắng thừa mà Windows hay chèn khi dán bí mật vào Secrets.
+  const env = {};
+  for (const k of ['FIREBASE_SERVICE_ACCOUNT', 'FIREBASE_UID', 'TELEGRAM_TOKEN', 'TELEGRAM_CHAT_ID', 'OLLAMA_URL', 'OLLAMA_MODEL'])
+    if (process.env[k]) env[k] = process.env[k].replace(/^﻿/, '').trim();
   let sa = null;
   if (env.FIREBASE_SERVICE_ACCOUNT) sa = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT);
   else if (f.serviceAccountFile) {

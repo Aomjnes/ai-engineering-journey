@@ -148,7 +148,7 @@ Lệnh của bot: `/homnay`, `/tiendo`, `/xong` (đánh dấu buổi kế tiếp
 Đưa bí mật lên GitHub dưới dạng **Secrets** (GitHub mã hoá, không ai xem được, kể cả trong log):
 
 ```bash
-Get-Content tro-ly\service-account.json -Raw | gh secret set FIREBASE_SERVICE_ACCOUNT
+gh secret set FIREBASE_SERVICE_ACCOUNT --body-file tro-ly/service-account.json
 ```
 ```bash
 gh secret set FIREBASE_UID
