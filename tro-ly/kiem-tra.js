@@ -10,7 +10,8 @@ const C = require('./chung');
 const THU = process.argv.includes('--thu');
 const DUOI = new Set(['.c', '.h', '.py', '.js', '.ts', '.html', '.css', '.sql', '.md', '.ipynb', '.txt', '.json', '.sh', '.yml', '.yaml', '.toml', '.java', '.go', '.rs']);
 const BO_QUA_THU_MUC = new Set(['.git', 'node_modules', 'tro-ly', '.github', '.venv', 'venv', '__pycache__', '.claude']);
-const BO_QUA_FILE = new Set(['index.html', 'README.md', 'CLAUDE.md', 'HUONG-DAN.md', 'nhat-ky.md', 'package-lock.json']);
+// File của trang theo dõi và cấu hình, không phải bài tập: không đưa cho AI chấm.
+const BO_QUA_FILE = new Set(['index.html', 'README.md', 'CLAUDE.md', 'HUONG-DAN.md', 'nhat-ky.md', 'package-lock.json', 'firebase.json', 'firestore.rules', '.firebaserc', '.gitignore', 'cham-diem.jsonl']);
 
 // Tìm file bài tập được sửa trong khoảng `gio` giờ qua.
 function fileMoiSua(goc, gio) {
@@ -53,13 +54,20 @@ function cuoiNhatKy() {
   }
 
   const coHoc = td.xongHomNay.length || td.logHomNay.length || files.length;
+  // Tóm tắt rõ ràng, có kiểm chứng, để model nhỏ không tự suy ra những việc chưa làm.
+  const duLieuHomNay = [
+    '- Buổi đánh dấu xong hôm nay: ' + (td.xongHomNay.length ? td.xongHomNay.map(t => 'Tuần ' + t.w.n + ' Buổi ' + (t.i + 1) + ' (' + t.t + ')').join('; ') : 'không có'),
+    '- Điểm đã ghi hôm nay: ' + (td.logHomNay.length ? td.logHomNay.map(e => e.k + '/' + e.c + '/' + e.g + '/' + e.d + ', ' + e.min + ' phút' + (e.note ? ', ' + e.note : '')).join('; ') : 'không có'),
+    '- File bài tập đã sửa: ' + (files.length ? files.slice(0, 6).map(f => f.rel).join(', ') : 'không có'),
+    '- Tổng số buổi đã xong từ đầu: ' + td.soXong + '/' + td.tong,
+  ].join('\n');
   const yeuCau = coHoc
-    ? 'Viết nhận xét cuối ngày, tối đa 180 từ, gồm 4 phần ngắn có đánh số:\n1. Hôm nay đã làm được gì (dựa trên dữ liệu, không bịa).\n2. Một lỗi hoặc một điểm nên viết tốt hơn trong code bên dưới: chỉ rõ file và số dòng, giải thích vì sao, KHÔNG viết lời giải. Không có code thì nhận xét phần báo cáo.\n3. Một câu hỏi kiểm tra nhanh để tự ôn.\n4. Nhắc buổi kế tiếp và một việc nhỏ đầu tiên nên làm.'
+    ? 'Viết nhận xét cuối ngày, tối đa 180 từ, gồm 4 phần ngắn có đánh số.\nQUAN TRỌNG: chỉ dựa vào DỮ LIỆU HÔM NAY bên dưới. Không suy đoán, không bịa việc người học đã làm, không bịa lỗi. Chỉ nêu lỗi khi chỉ ra được đúng dòng code có thật bên dưới.\n1. Hôm nay đã làm được gì: chỉ nhắc lại đúng các mục trong DỮ LIỆU HÔM NAY.\n2. Một lỗi hoặc một điểm nên viết tốt hơn trong code bên dưới: trích nguyên văn dòng đó, ghi file và số dòng, giải thích vì sao, KHÔNG viết lời giải. Nếu không thấy lỗi rõ ràng, ghi "Không thấy lỗi rõ ràng" và khen một điểm cụ thể. Không có code thì bỏ qua phần này.\n3. Một câu hỏi kiểm tra nhanh để tự ôn.\n4. Nhắc buổi kế tiếp và một việc nhỏ đầu tiên nên làm.'
     : 'Hôm nay người học chưa học (chưa đánh dấu buổi nào, chưa sửa file nào). Viết lời nhắc tối đa 80 từ: thân thiện, không trách móc, gợi ý bắt đầu buổi kế tiếp chỉ với 25 phút đầu tiên và nói cụ thể việc nhỏ đầu tiên. Nếu hôm nay là Chủ nhật thì chỉ chúc nghỉ ngơi và nhắc buổi đầu tuần.';
 
   const msgs = [
     { role: 'system', content: C.AI_RULES + '\n\nTÌNH HÌNH HỌC HIỆN TẠI:\n' + C.moTaTienDo(state, lt) + '\n\nNHẬT KÝ CHẤM ĐIỂM (nhat-ky.md):\n' + cuoiNhatKy() },
-    { role: 'user', content: yeuCau + (ma ? '\n\nCODE ĐÃ SỬA TRONG 24 GIỜ QUA:' + ma : '') },
+    { role: 'user', content: yeuCau + '\n\nDỮ LIỆU HÔM NAY:\n' + duLieuHomNay + (ma ? '\n\nCODE ĐÃ SỬA TRONG 24 GIỜ QUA (số ở đầu mỗi dòng là số dòng):' + ma : '\n\nKhông có file code nào được sửa.') },
   ];
   console.log('Đang hỏi ' + cfg.ollamaModel + ' (' + files.length + ' file mới sửa)...');
   const text = await C.ollama(cfg, msgs);
