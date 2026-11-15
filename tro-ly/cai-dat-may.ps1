@@ -4,7 +4,7 @@
 # Chạy:  powershell -ExecutionPolicy Bypass -File tro-ly\cai-dat-may.ps1
 # Gỡ:    powershell -ExecutionPolicy Bypass -File tro-ly\cai-dat-may.ps1 -Go
 
-param([switch]$Go)
+param([switch]$Go, [switch]$KhongMoBot)
 
 $troLy = $PSScriptRoot
 $node = (Get-Command node -ErrorAction Stop).Source
@@ -36,5 +36,6 @@ $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -ExecutionTimeLimit
 Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Force | Out-Null
 Write-Host "Da tao lich '$taskName' luc 21:45 moi ngay."
 
+if ($KhongMoBot) { Write-Host 'Bot se tu chay tu lan dang nhap Windows sau.'; return }
 Start-Process -FilePath $botCmd -WindowStyle Minimized
 Write-Host 'Da mo bot. Nhan /start cho bot tren Telegram de thu.'
