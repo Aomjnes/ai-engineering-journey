@@ -7,3 +7,7 @@ tro-ly/service-account.json
 node_modules/
 __pycache__/
 .venv/
+
+# Log cua Firebase CLI
+firebase-debug.log
+.firebase/
