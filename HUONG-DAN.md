@@ -148,8 +148,10 @@ Lệnh của bot: `/homnay`, `/tiendo`, `/xong` (đánh dấu buổi kế tiếp
 Đưa bí mật lên GitHub dưới dạng **Secrets** (GitHub mã hoá, không ai xem được, kể cả trong log):
 
 ```bash
-gh secret set FIREBASE_SERVICE_ACCOUNT --body-file tro-ly/service-account.json
+gh secret set FIREBASE_SERVICE_ACCOUNT < tro-ly/service-account.json
 ```
+
+Lệnh trên chạy trong **Git Bash**, không chạy trong PowerShell: PowerShell không hiểu dấu `<`, và khi dùng `|` nó chèn ký tự ẩn làm hỏng nội dung.
 ```bash
 gh secret set FIREBASE_UID
 ```
