@@ -11,3 +11,6 @@ __pycache__/
 # Log cua Firebase CLI
 firebase-debug.log
 .firebase/
+
+# Thư mục làm việc của TasteCode, không thuộc trang
+.taste/

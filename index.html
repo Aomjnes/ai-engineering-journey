@@ -3,231 +3,1282 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Sổ theo dõi học AI Engineering</title>
+<title>Hôm nay · Sổ học AI Engineering</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600&family=Lexend:wght@500;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600&family=JetBrains+Mono:wght@400&display=swap&subset=vietnamese" rel="stylesheet">
 <style>
-/* Layout idea: a study ledger. Summary strip on top, phase rail on the left, the working column on the right. */
-:root{
-  --bg:#f2f5f3; --surface:#ffffff; --sunk:#e8edea; --ink:#17232a; --muted:#5b6b70; --line:#d3dcd8;
-  --accent:#0f6e66; --accent-soft:#d9efec; --today:#a8650c; --today-soft:#fbefd9;
-  --good:#1f7a3d; --warn:#b45309; --bad:#b3261e;
-  --display:"Lexend","Be Vietnam Pro",system-ui,sans-serif;
-  --body:"Be Vietnam Pro",system-ui,-apple-system,"Segoe UI",sans-serif;
-  --mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
-  color-scheme:light;
+/* tasteskill v2.5 app.css (MIT License, Copyright (c) 2026 Leonxlnx): https://github.com/Leonxlnx/taste-skill. Keep this line in every copy. */
+/* tasteskill / app.css
+   A neutral foundation for app screens (dashboards, admin, settings, inboxes), set to the defaults
+   measured in the study of real product screens (references/app-screens.md). Copy it into the project,
+   replace the token values with the ones on the app sheet (draw.mjs --app), and build on top.
+   Delete what you do not use. It has no brand of its own: neutral grounds, one quiet line, one accent. */
+
+/* ---------- tokens: framed sheet, mapped to the Sổ học brand (brand.json) ---------- */
+:root {
+  --ground: #f3f6f4;          /* khung chữ L: xanh-xám nhuộm từ teal của sổ học */
+  --surface: #ffffff;         /* sheet và thẻ */
+  --raised: #f4f7f5;          /* hàng hover, khối báo cáo, tin của trợ lý */
+  --active: #e9eeeb;          /* viên mục đang chọn */
+  --border: #e6eae8;          /* mép sheet và thẻ */
+  --rule: #eff2f0;            /* đường kẻ giữa hàng */
+  --control: #cdd2cf;         /* viền ô nhập, nút phụ, ô đánh dấu */
+  --text: #131715;
+  --muted: #5a625e;           /* 6,3:1 trên trắng */
+  --faint: #6b716e;           /* placeholder, 4,9:1 trên trắng */
+  --accent: #0f6e66;          /* teal có sẵn: dữ liệu, gạch chân tab, link, focus */
+  --primary: #131715;         /* nút chính duy nhất */
+  --primary-ink: #ffffff;
+  --positive: #1e7b4f; --negative: #c4242a; --warning: #92400e;
+  --pill-positive-bg: #dcfae5; --pill-positive-ink: #04250e;
+  --pill-negative-bg: #ffedea; --pill-negative-ink: #831c1e;
+  --pill-warning-bg: #fffbeb; --pill-warning-ink: #92400e; --notice-border: #fde68a;
+  --pill-neutral-bg: #e9eeeb; --pill-neutral-ink: #353a37;
+  --next-bg: #fdf7ec;         /* hàng buổi kế tiếp: hổ phách rất nhạt */
+  --chart-1: #0f6e66; --chart-2: #2f70bb; --chart-3: #a8650c; --chart-muted: #cdd2cf;
+  --chart-mark: var(--text);
+  --chart-span: 0.06;
+  --grid: var(--rule);
+  --axis-ink: var(--muted);
+  --ink: var(--text);
+  --backdrop: rgba(19, 23, 21, 0.32);
+  --shadow-float: 0 8px 24px rgba(0, 0, 0, 0.08);
+
+  --font: "Be Vietnam Pro", system-ui, sans-serif;
+  --mono: "JetBrains Mono", monospace;
+  --fs-title: 22px; --fs-section: 16px; --fs-kpi: 28px; --fs-body: 14px; --fs-sub: 13px; --fs-small: 12px;
+
+  --sidebar-width: 228px;
+  --topbar: 48px;
+  --sheet-inset: 8px;
+  --rail: 384px;
+  --pad: 24px;                /* padding trong sheet */
+  --gap: 24px;                /* một gutter, ngang và dọc */
+  --stack: 16px;              /* khoảng cách giữa thẻ chồng trong một cột */
+  --card-pad: 20px;
+  --radius-sheet: 16px;
+  --radius-card: 8px;
+  --radius-control: 6px;
+  --radius-check: 4px;
+  --radius-cell: 2px;
+  --radius-pill: 999px;
+  --control-height: 32px;
+  --row-height: 48px;
+  --nav-row: 34px;
+  --hit: 44px;                /* vùng chạm tối thiểu của mọi phần tử bấm được */
+
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --t-press: 120ms; --t-hover: 150ms; --t-ui: 180ms;
+  color-scheme: light;
 }
-@media (prefers-color-scheme:dark){
-  :root:not([data-theme="light"]){
-    --bg:#10171a; --surface:#182226; --sunk:#131c20; --ink:#e4ecea; --muted:#93a4a6; --line:#2b3a3f;
-    --accent:#54c3b6; --accent-soft:#17383a; --today:#e9b25c; --today-soft:#3a2d16;
-    --good:#6fcf8d; --warn:#f0a955; --bad:#f28b82; color-scheme:dark;
+:root[data-theme="dark"] {
+  --ground: #0f1211; --surface: #161a19; --raised: #1f2523; --active: #262d2b;
+  --border: #2a3230; --rule: #212826; --control: #46504d;
+  --text: #eef2f0; --muted: #b2bab7; --faint: #949c99;
+  --accent: #54c3b6; --primary: #eef2f0; --primary-ink: #131715;
+  --positive: #6fcf8d; --negative: #f28b82; --warning: #f0a955;
+  --pill-positive-bg: #172a1d; --pill-positive-ink: #6fcf8d;
+  --pill-negative-bg: #2c1a1c; --pill-negative-ink: #f28b82;
+  --pill-warning-bg: #2e2414; --pill-warning-ink: #f0a955; --notice-border: #5a4520;
+  --pill-neutral-bg: #262d2b; --pill-neutral-ink: #eef2f0;
+  --next-bg: #2a2317;
+  --chart-1: #54c3b6; --chart-2: #6fa3e0; --chart-3: #e9b25c; --chart-muted: #46504d;
+  --chart-span: 0.12;
+  --backdrop: rgba(0, 0, 0, 0.5);
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground: #0f1211; --surface: #161a19; --raised: #1f2523; --active: #262d2b;
+    --border: #2a3230; --rule: #212826; --control: #46504d;
+    --text: #eef2f0; --muted: #b2bab7; --faint: #949c99;
+    --accent: #54c3b6; --primary: #eef2f0; --primary-ink: #131715;
+    --positive: #6fcf8d; --negative: #f28b82; --warning: #f0a955;
+    --pill-positive-bg: #172a1d; --pill-positive-ink: #6fcf8d;
+    --pill-negative-bg: #2c1a1c; --pill-negative-ink: #f28b82;
+    --pill-warning-bg: #2e2414; --pill-warning-ink: #f0a955; --notice-border: #5a4520;
+    --pill-neutral-bg: #262d2b; --pill-neutral-ink: #eef2f0;
+    --next-bg: #2a2317;
+    --chart-1: #54c3b6; --chart-2: #6fa3e0; --chart-3: #e9b25c; --chart-muted: #46504d;
+    --chart-span: 0.12;
+    --backdrop: rgba(0, 0, 0, 0.5);
+    color-scheme: dark;
   }
 }
-:root[data-theme="dark"]{
-  --bg:#10171a; --surface:#182226; --sunk:#131c20; --ink:#e4ecea; --muted:#93a4a6; --line:#2b3a3f;
-  --accent:#54c3b6; --accent-soft:#17383a; --today:#e9b25c; --today-soft:#3a2d16;
-  --good:#6fcf8d; --warn:#f0a955; --bad:#f28b82; color-scheme:dark;
+
+/* ---------- reset ---------- */
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+body { margin: 0; background: var(--ground); color: var(--text); font: var(--fs-body)/20px var(--font); -webkit-font-smoothing: antialiased; }
+h1, h2, h3, h4, p, figure, ul, ol, dl, dd { margin: 0; }
+ul[class], ol[class] { padding: 0; list-style: none; }
+img, svg, video, canvas { display: block; max-width: 100%; }
+button, input, select, textarea { font: inherit; color: inherit; }
+a { color: inherit; text-decoration: none; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+.num, table, .kpi-value { font-variant-numeric: tabular-nums; }
+
+/* ---------- shell: sidebar + canvas ---------- */
+.app { display: grid; grid-template-columns: var(--sidebar-width) minmax(0, 1fr); min-height: 100svh; }
+.sidebar { position: sticky; top: 0; height: 100svh; display: flex; flex-direction: column; gap: 2px; padding: 16px 12px; overflow: auto; }
+.sidebar .group-label { margin: 20px 8px 6px; font-size: var(--fs-small); color: var(--faint); }
+.nav-item { display: flex; align-items: center; gap: 10px; height: var(--nav-row); padding: 0 8px; border-radius: 8px; color: var(--muted); transition: background-color var(--t-hover) ease, color var(--t-hover) ease; }
+.nav-item svg { width: 16px; height: 16px; flex: none; stroke-width: 1.5; }
+.nav-item:hover { background: var(--raised); color: var(--text); }
+.nav-item[aria-current="page"] { background: var(--active); color: var(--text); }
+.sidebar .bottom { margin-top: auto; }
+.canvas { min-width: 0; padding: var(--pad); }
+
+/* ---------- title block and filters ---------- */
+.title-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+.title-row h1 { font-size: var(--fs-title); line-height: 1.2; font-weight: 600; letter-spacing: -0.01em; }
+.title-row .sub { margin-top: 4px; color: var(--muted); }
+.filters { display: flex; align-items: center; gap: 8px; margin-bottom: var(--gap); flex-wrap: wrap; }
+.filters .spacer { flex: 1; }
+.stamp { color: var(--faint); font-size: var(--fs-small); }
+
+/* ---------- panels and grid ---------- */
+.grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: var(--gap); }
+.panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); padding: var(--card-pad); min-width: 0; }
+.panel > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.panel h2 { font-size: var(--fs-section); line-height: 1.3; font-weight: 600; }
+.panel .meta { color: var(--faint); font-size: var(--fs-small); }
+/* paired cards in one row: a card stretches to its neighbour only when it has content to fill. Otherwise it keeps
+   its own height (add .top to the row), and only an action or a total may be pinned to a stretched card's bottom */
+.grid.top { align-items: start; }
+
+/* a chart's heading row: its title (and legend or period) with a fixed 8px to the svg */
+.chart-head { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 4px 12px; margin-bottom: 8px; }
+.chart-head h3 { font-size: var(--fs-body); line-height: 20px; font-weight: 500; }
+.chart { position: relative; min-width: 0; }
+
+/* a link at a card's foot or header ("Show all 7", "Sell-out history"): ink, a 12px chevron, an underline on hover,
+   and no inline padding, so its text sits on the card's content edge */
+.card-link { display: inline-flex; align-items: center; gap: 2px; padding: 0; border: 0; background: none; color: var(--text); font-weight: 500; cursor: pointer; text-underline-offset: 3px; }
+.card-link::after { content: ""; width: 12px; height: 12px; flex: none; background: currentColor; -webkit-mask: var(--chevron) center / 12px no-repeat; mask: var(--chevron) center / 12px no-repeat; }
+.card-link:hover { text-decoration: underline; }
+:root { --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M4.5 2.5 8 6l-3.5 3.5' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); }
+
+/* list rows: a rule between rows and none above the first. A rule on a rounded box curls up at both ends, so a row
+   that carries a rule has square corners */
+.rows { display: grid; }
+.row { display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 10px 0; }
+.row + .row { border-top: 1px solid var(--rule); border-radius: 0; }
+
+/* KPIs as one divided strip: a label above a number, no icons, no tiles */
+.kpis { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); }
+.kpi { padding: 16px var(--card-pad); }
+.kpi + .kpi { border-left: 1px solid var(--border); }
+.kpi-label { color: var(--muted); }
+.kpi-value { margin-top: 6px; font-size: var(--fs-kpi); line-height: 1.15; font-weight: 500; letter-spacing: -0.01em; }
+.kpi-value small { font-size: 0.55em; color: var(--muted); font-weight: 400; margin-left: 2px; }
+.delta { margin-top: 4px; font-size: var(--fs-small); color: var(--muted); }
+.delta .up { color: var(--positive); } .delta .down { color: var(--negative); }
+/* KPIs as the chart's tabs: the selected one carries a 2px rule and an ink label; the others keep a grey label and
+   their value in ink at a lighter weight (a grey value reads as disabled). When the tabs are the per-entity
+   breakdown the brief asks for (takings by shop), add .entities: nothing changes but the rule */
+.kpis[role="tablist"] .kpi { position: relative; cursor: pointer; }
+.kpis[role="tablist"] .kpi[aria-selected="true"]::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--text); }
+.kpis[role="tablist"]:not(.entities) .kpi[aria-selected="true"] .kpi-label { color: var(--text); }
+.kpis[role="tablist"]:not(.entities) .kpi[aria-selected="false"] .kpi-value { color: var(--text); font-weight: 400; }
+
+/* ---------- tables ---------- */
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; }
+th { height: 36px; padding: 0 12px; text-align: left; font-weight: 400; font-size: var(--fs-small); color: var(--muted); border-bottom: 1px solid var(--border); white-space: nowrap; }
+/* cells share one baseline, so a figure never sits 2px below the name beside it; the row height comes from padding */
+td { padding: calc((var(--row-height) - 20px) / 2) 12px; border-bottom: 1px solid var(--rule); vertical-align: baseline; }
+tbody tr:last-child td { border-bottom: 0; }
+/* no hover that changes the fill; a row that drives a detail pane takes the nav pill's fill when selected */
+tbody tr[aria-selected="true"] td { background: var(--active); }
+th.n, td.n { text-align: right; }
+td .sub { display: block; font-size: var(--fs-small); color: var(--muted); }
+.truncate { max-width: 28ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* status pill: a pale tint with dark ink of the same hue, one per row */
+.pill { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 8px; border-radius: 999px; font-size: var(--fs-small); font-weight: 500; background: var(--pill-neutral-bg); color: var(--pill-neutral-ink); white-space: nowrap; }
+.pill.pos { background: var(--pill-positive-bg); color: var(--pill-positive-ink); }
+.pill.neg { background: var(--pill-negative-bg); color: var(--pill-negative-ink); }
+.pill.warn { background: var(--pill-warning-bg); color: var(--pill-warning-ink); }
+
+/* ---------- controls ---------- */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: var(--control-height); padding: 0 12px; border-radius: var(--radius-control); border: 1px solid var(--control); background: var(--surface); font-weight: 500; cursor: pointer; transition: background-color var(--t-hover) ease, transform var(--t-press) var(--ease-out); }
+.btn:hover { background: var(--raised); }
+.btn:active { transform: translateY(1px); }
+.btn.primary { background: var(--primary); color: var(--primary-ink); border-color: transparent; }
+.btn.ghost { border-color: transparent; background: transparent; }
+.field { display: grid; gap: 8px; }
+.field label { font-weight: 500; }
+.field .hint { color: var(--muted); font-size: var(--fs-small); }
+.input, select.input { height: 38px; padding: 0 12px; border: 1px solid var(--control); border-radius: var(--radius-control); background: var(--surface); }
+.input::placeholder { color: var(--faint); }
+.tabs { display: flex; gap: 24px; border-bottom: 1px solid var(--border); margin-bottom: var(--gap); }
+.tabs a { position: relative; padding: 10px 0; color: var(--muted); transition: color var(--t-hover) ease; }
+.tabs a[aria-selected="true"] { color: var(--text); }
+.tabs a[aria-selected="true"]::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--text); }
+/* as wide as its options; full width only on a narrow phone */
+.segmented { display: inline-flex; width: max-content; max-width: 100%; padding: 2px; border-radius: 8px; background: var(--raised); }
+.segmented button { height: 28px; padding: 0 10px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer; }
+.segmented button[aria-pressed="true"] { background: var(--surface); color: var(--text); }
+.switch { appearance: none; width: 32px; height: 20px; border-radius: 999px; background: var(--control); position: relative; cursor: pointer; transition: background-color var(--t-ui) ease; }
+.switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform var(--t-ui) var(--ease-out); }
+.switch:checked { background: var(--text); } .switch:checked::after { transform: translateX(12px); }
+
+/* empty and loading states keep the frame; a loading value is a flat grey bar at its real size, with no shimmer */
+.empty { display: grid; place-items: center; min-height: 96px; padding: 16px; border: 1px dashed var(--control); border-radius: var(--radius-control); color: var(--muted); text-align: center; }
+.skeleton { background: var(--raised); border-radius: 4px; }
+
+/* ---------- phone: the navigation folds away and the canvas takes the width ---------- */
+.menu-toggle { display: none; }
+@media (max-width: 860px) {
+  .app { grid-template-columns: minmax(0, 1fr); }
+  /* the menu opens as a full-screen sheet */
+  .sidebar { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 20; background: var(--surface); transform: translateX(-100%); transition: transform var(--t-ui) var(--ease-out); }
+  .sidebar.open { transform: none; }
+  .menu-toggle { display: inline-flex; }
+  .canvas { padding: 16px; }
+  .grid > * { grid-column: 1 / -1 !important; }
+  .kpis { grid-auto-flow: row; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .kpi + .kpi { border-left: 0; }
+  .kpi:nth-child(n + 3) { border-top: 1px solid var(--border); }
+  .kpi:nth-child(2n) { border-left: 1px solid var(--border); }
+  /* an odd count leaves no half-empty row: the last cell takes the full width */
+  .kpi:last-child:nth-child(odd) { grid-column: 1 / -1; }
+  /* KPI tabs in a 2-up grid: the selected cell takes a fill, never an underline floating mid-grid */
+  .kpis[role="tablist"] .kpi[aria-selected="true"] { background: var(--active); }
+  .kpis[role="tablist"] .kpi[aria-selected="true"]::after { content: none; }
+  .title-row { flex-wrap: wrap; align-items: flex-start; }
 }
-*{box-sizing:border-box}
-html{-webkit-text-size-adjust:100%}
-body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.55}
-.wrap{max-width:1120px;margin:0 auto;padding:24px 20px 64px;display:flex;flex-direction:column;gap:20px}
-h1,h2,h3{font-family:var(--display);font-weight:600;margin:0;text-wrap:balance;line-height:1.25}
-h1{font-size:24px} h2{font-size:18px} h3{font-size:15px}
-a{color:var(--accent);text-underline-offset:2px}
-button,input,select,textarea{font:inherit;color:inherit}
-:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
-.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
-.muted{color:var(--muted)}
-.top{display:flex;flex-wrap:wrap;gap:12px;align-items:baseline;justify-content:space-between}
-.sync{font-size:13px;color:var(--muted);display:inline-flex;align-items:center;gap:6px}
-.sync i{width:8px;height:8px;border-radius:50%;background:var(--muted);display:inline-block}
-.sync.ok i{background:var(--good)} .sync.busy i{background:var(--today)} .sync.err i{background:var(--bad)}
-.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
-.stat{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:4px;min-width:0}
-.stat b{font-family:var(--display);font-weight:600;font-size:22px;line-height:1.2}
-.stat span{font-size:13px;color:var(--muted)}
-.stat.good b{color:var(--good)} .stat.warn b{color:var(--warn)}
-.bar{height:6px;background:var(--sunk);border-radius:3px;overflow:hidden}
-.bar>i{display:block;height:100%;background:var(--accent);border-radius:3px}
-.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:18px 20px;display:flex;flex-direction:column;gap:12px}
-.today{border-color:var(--today);background:linear-gradient(0deg,var(--surface),var(--surface)) padding-box;border-left-width:4px}
-.eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.04em;color:var(--today);text-transform:uppercase}
-.today .task{font-family:var(--display);font-size:19px;font-weight:500;line-height:1.35}
-.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
-.btn{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 14px;cursor:pointer;font-weight:500}
-.btn:hover{border-color:var(--accent)}
-.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--surface)}
-.btn.danger{color:var(--bad)}
-.btn.small{padding:4px 10px;font-size:13px}
-.links{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:14px}
-textarea{width:100%;min-height:150px;background:var(--sunk);border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-family:var(--mono);font-size:13px;line-height:1.5;resize:vertical}
-.main{display:grid;grid-template-columns:270px minmax(0,1fr);gap:20px;align-items:start}
-.rail{display:flex;flex-direction:column;gap:8px;position:sticky;top:12px}
-.phase{text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px;cursor:pointer;display:flex;flex-direction:column;gap:6px}
-.phase[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft)}
-.phase .t{font-weight:600;font-size:14px}
-.phase .m{font-size:12px;color:var(--muted);display:flex;justify-content:space-between;gap:8px}
-.col{display:flex;flex-direction:column;gap:12px;min-width:0}
-details.week{background:var(--surface);border:1px solid var(--line);border-radius:10px}
-details.week.cur{border-color:var(--today)}
-details.week.full summary .n{color:var(--good)}
-summary{list-style:none;cursor:pointer;padding:12px 16px;display:flex;gap:12px;align-items:center}
-summary::-webkit-details-marker{display:none}
-summary .n{font-family:var(--mono);font-size:13px;color:var(--muted);white-space:nowrap}
-summary .t{font-weight:600;flex:1;min-width:0}
-summary .c{font-family:var(--mono);font-size:13px;color:var(--muted);white-space:nowrap}
-.wbody{padding:0 16px 16px;display:flex;flex-direction:column;gap:10px;border-top:1px solid var(--line);padding-top:12px}
-.out{font-size:14px;background:var(--sunk);border-radius:8px;padding:8px 12px}
-ul.tasks{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}
-ul.tasks label{display:grid;grid-template-columns:22px 52px 1fr;gap:8px;align-items:start;padding:6px 6px;border-radius:6px;cursor:pointer}
-ul.tasks label:hover{background:var(--sunk)}
-ul.tasks input{width:18px;height:18px;margin:2px 0 0;accent-color:var(--accent)}
-ul.tasks .k{font-family:var(--mono);font-size:12px;color:var(--muted);padding-top:3px}
-ul.tasks .done .x{color:var(--muted);text-decoration:line-through}
-ul.tasks .next{background:var(--today-soft)}
-.gate{border-style:dashed}
-.gate label{display:flex;gap:10px;align-items:flex-start;cursor:pointer}
-.gate input{width:18px;height:18px;margin-top:3px;accent-color:var(--accent)}
-form.log{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;align-items:end}
-form.log label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted);min-width:0}
-form.log input,form.log select{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:7px 9px;width:100%;color:var(--ink)}
-form.log .wide{grid-column:1/-2}
-.tablebox{overflow-x:auto}
-table{border-collapse:collapse;width:100%;font-size:14px}
-th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top}
-th{font-size:12px;color:var(--muted);font-weight:500;white-space:nowrap}
-td.num,th.num{text-align:right}
-.pill{display:inline-block;font-family:var(--mono);font-size:12px;border-radius:999px;padding:1px 8px;background:var(--sunk)}
-.pill.s1,.pill.s2{background:transparent;border:1px solid var(--bad);color:var(--bad)}
-.pill.s3{background:transparent;border:1px solid var(--warn);color:var(--warn)}
-.pill.s4,.pill.s5{background:transparent;border:1px solid var(--good);color:var(--good)}
-.mins{display:flex;align-items:flex-end;gap:4px;height:56px}
-.mins i{flex:1;max-width:22px;background:var(--accent);border-radius:3px 3px 0 0;min-height:2px}
-.branches{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
-.note{font-size:13px;color:var(--muted)}
-.setrow input{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:6px 9px;color:var(--ink)}
-@media (max-width:860px){
-  .stats{grid-template-columns:repeat(2,1fr)}
-  .main{grid-template-columns:1fr}
-  .rail{position:static;display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
-  .branches{grid-template-columns:1fr}
-  form.log{grid-template-columns:repeat(2,minmax(0,1fr))}
-  form.log .wide{grid-column:1/-1}
+@media (max-width: 480px) {
+  .segmented { display: flex; width: 100%; }
+  .segmented button { flex: 1; }
 }
-@media (prefers-reduced-motion:no-preference){.bar>i{transition:width .3s}}
-/* Trợ lý AI */
-.topr{display:inline-flex;align-items:center;gap:12px;flex-wrap:wrap}
-.ai-head{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:baseline;justify-content:space-between}
-.ai-status{font-size:13px;color:var(--muted)}
-.ai-status.ok{color:var(--good)} .ai-status.err{color:var(--bad)} .ai-status.busy{color:var(--today)}
-.ai-notes{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
-.ai-notes li{background:var(--sunk);border-radius:8px;padding:8px 12px;font-size:14px;white-space:pre-wrap;overflow-wrap:anywhere}
-.ai-notes .when{display:block;font-family:var(--mono);font-size:12px;color:var(--muted);margin-bottom:2px}
-.chat{display:flex;flex-direction:column;gap:8px;max-height:460px;overflow-y:auto}
-.chat:empty{display:none}
-.msg{border-radius:10px;padding:8px 12px;white-space:pre-wrap;overflow-wrap:anywhere;max-width:92%;font-size:14px;line-height:1.6}
-.msg.user{align-self:flex-end;background:var(--accent-soft)}
-.msg.assistant{align-self:flex-start;background:var(--sunk)}
-.msg.error{align-self:flex-start;border:1px solid var(--bad);color:var(--bad)}
-.msg code{font-family:var(--mono);font-size:13px;background:var(--surface);border-radius:4px;padding:0 4px}
-.ask textarea{min-height:76px;font-family:var(--body);font-size:14px}
-.aiset{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
-.aiset label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted);min-width:0}
-.aiset input{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:7px 9px;width:100%;color:var(--ink)}
-details.plain summary{padding:0;font-size:14px;color:var(--muted)}
-details.plain[open] summary{margin-bottom:10px}
-@media (max-width:600px){.aiset{grid-template-columns:1fr}}
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration: 0.01ms !important; animation: none !important; } }
+
+/* an empty message spans the block it stands in, never one squeezed column */
+.rows .empty, .grid > .empty, li > .empty { grid-column: 1 / -1; width: 100%; }
+
+/* ---------- Sổ học AI Engineering: lớp riêng của sản phẩm (chỉ đọc token) ----------
+   Lưới ở 1440px: thanh bên 228 + sheet 1204 (1440 − 228 − 8 inset phải). Sheet trừ padding 24 × 2 → canvas 1156.
+   View có rail: 1fr + 384 với gap 24 → 748 + 24 + 384 = 1156. Dải 312 ô: 52 tuần × (11 ô + 2 khe) = 676,
+   cộng 6 khe giai đoạn × 8 = 48 → 724 = 748 − 2 × 12 padding của thẻ. Nhánh: 3 × 369,33 + 2 × 24 = 1156.
+   Cài đặt: 360 + 24 + 772 = 1156. Một gap 24 cho mọi view; thẻ chồng trong một cột cách nhau 16. */
+:root {
+  --tick: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6.2 5 8.6l4.5-5' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+body { font-family: var(--font); }
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+[hidden] { display: none !important; }
+
+/* ---------- shell: khung chữ L và sheet trắng ---------- */
+.app { grid-template-columns: var(--sidebar-width) minmax(0, 1fr); }
+.sidebar { background: var(--ground); padding: 8px 12px 12px; gap: 0; }
+.brand { display: flex; align-items: center; gap: 10px; min-height: var(--hit); padding: 0 8px; font-weight: 600; }
+.brand svg { flex: none; }
+.brand .mk-on { fill: var(--accent); } .brand .mk-today { fill: var(--chart-3); } .brand .mk-off { fill: none; stroke: var(--accent); }
+.scope { padding: 0 8px 12px; color: var(--muted); font-size: var(--fs-small); line-height: 16px; }
+.nav { display: grid; }
+.nav-item { position: relative; isolation: isolate; height: var(--hit); padding: 0 10px; border-radius: 0; background: transparent; }
+.nav-item::before { content: ""; position: absolute; inset: 5px 0; z-index: -1; border-radius: var(--radius-card); transition: background-color var(--t-hover) ease; }
+.nav-item:hover { background: transparent; }
+.nav-item:hover::before { background: var(--raised); }
+.nav-item[aria-current="page"] { background: transparent; color: var(--text); }
+.nav-item[aria-current="page"]::before { background: var(--active); }
+.nav-item:focus-visible { outline: none; }
+.nav-item:focus-visible::before { outline: 2px solid var(--accent); outline-offset: -2px; }
+.nav .last { margin-top: 12px; }
+.side-foot { margin-top: auto; display: grid; gap: 4px; padding: 12px 8px 0; }
+.sync { display: inline-flex; align-items: center; gap: 8px; min-height: 24px; color: var(--muted); font-size: var(--fs-small); line-height: 16px; }
+.sync i, .dot { width: 8px; height: 8px; flex: none; border-radius: 50%; background: var(--faint); }
+.sync.ok i, .dot.ok { background: var(--positive); }
+.sync.busy i, .dot.busy { background: var(--chart-3); }
+.sync.err i, .dot.err { background: var(--negative); }
+.side-foot .btn { justify-self: stretch; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+
+.main { display: grid; grid-template-rows: var(--topbar) 1fr; min-width: 0; }
+.topbar { display: flex; align-items: center; gap: 12px; padding: 0 var(--pad); background: var(--ground); }
+.topbar .view-name { font-weight: 500; }
+.topbar .spacer { flex: 1; }
+.ai-chip { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-width: var(--hit); min-height: var(--hit); padding: 0 4px; color: var(--muted); font-size: var(--fs-small); }
+.ai-chip:hover { color: var(--text); }
+.menu-toggle { display: none; }
+.sheet { margin: 0 var(--sheet-inset) var(--sheet-inset) 0; min-width: 0; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sheet); }
+.backdrop { position: fixed; inset: 0; z-index: 29; background: var(--backdrop); opacity: 0; pointer-events: none; transition: opacity var(--t-ui) var(--ease-out); }
+.backdrop.show { opacity: 1; pointer-events: auto; }
+
+/* ---------- title row, notice ---------- */
+.title-row { margin-bottom: var(--gap); }
+.title-row .sub { font-size: var(--fs-body); }
+.sub .warn, .warn-ink { color: var(--warning); }
+.sub .good, .good-ink { color: var(--positive); }
+.sub .bad, .bad-ink { color: var(--negative); }
+.notice { margin-bottom: var(--stack); padding: 6px 10px; border: 1px solid var(--notice-border); border-radius: var(--radius-control); background: var(--pill-warning-bg); color: var(--pill-warning-ink); font-size: var(--fs-small); line-height: 16px; }
+
+/* ---------- controls: vùng chạm 44px, nét vẽ 32px theo sheet ---------- */
+.btn { position: relative; isolation: isolate; height: var(--hit); min-width: var(--hit); padding: 0 14px; border: 0; background: transparent; color: var(--text); white-space: nowrap; }
+.btn::before { content: ""; position: absolute; inset: 6px 0; z-index: -1; border: 1px solid var(--control); border-radius: var(--radius-control); background: var(--surface); transition: background-color var(--t-hover) ease, opacity var(--t-hover) ease; }
+.btn:hover { background: transparent; }
+.btn:hover::before { background: var(--raised); }
+/* nút chính: nền thật trên chính nút (vẽ 32px giữa viền trong suốt 6px), vùng chạm vẫn 44px */
+.btn.primary { color: var(--primary-ink); background: var(--primary) padding-box; border: solid transparent; border-width: 6px 0; border-radius: var(--radius-control) / calc(var(--radius-control) + 6px); }
+.btn.primary::before { content: none; }
+.btn.primary:hover { background: var(--primary) padding-box; opacity: 0.88; }
+.btn.primary:focus-visible { outline: 2px solid var(--accent); outline-offset: -4px; }
+.btn.ghost::before { border-color: transparent; background: transparent; }
+.btn.ghost:hover::before { background: var(--raised); }
+.btn.danger { color: var(--negative); }
+.btn.danger.armed::before { border-color: var(--negative); }
+.btn[disabled], .btn[aria-disabled="true"] { opacity: 0.5; cursor: not-allowed; }
+.btn:focus-visible { outline: none; }
+.btn:focus-visible::before { outline: 2px solid var(--accent); outline-offset: 2px; }
+.actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0 8px; }
+.textarea + .actions { margin-top: 12px; }
+.note { color: var(--muted); font-size: var(--fs-small); line-height: 16px; }
+
+.field { gap: 6px; min-width: 0; }
+.field > label, .field > .lab { font-size: var(--fs-small); font-weight: 400; color: var(--muted); line-height: 16px; }
+.input { box-sizing: border-box; width: 100%; min-width: 0; height: var(--hit); padding: 0 12px; border: 1px solid var(--control); border-radius: var(--radius-control); background: var(--surface); color: var(--text); }
+.input:focus-visible, .textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 0; border-radius: var(--radius-control); }
+input[type="date"].input::-webkit-calendar-picker-indicator { opacity: 0.6; cursor: pointer; }
+.select { position: relative; }
+.select select.input { height: var(--hit); appearance: none; -webkit-appearance: none; padding-right: 32px; cursor: pointer; }
+.select::after { content: ""; position: absolute; right: 12px; top: 50%; width: 12px; height: 12px; margin-top: -6px; pointer-events: none; background: var(--muted); -webkit-mask: var(--chevron) center / 12px no-repeat; mask: var(--chevron) center / 12px no-repeat; transform: rotate(90deg); }
+.textarea { display: block; width: 100%; min-height: 168px; padding: 10px 12px; border: 1px solid var(--control); border-radius: var(--radius-control); background: var(--raised); color: var(--text); font-family: var(--font); font-size: var(--fs-body); line-height: 20px; resize: vertical; }
+.textarea::placeholder, .input::placeholder { color: var(--faint); }
+
+.check { position: relative; appearance: none; -webkit-appearance: none; flex: none; display: grid; place-items: center; width: var(--hit); height: var(--hit); margin: 0; border: 0; background: transparent; cursor: pointer; }
+.check::before { content: ""; width: 18px; height: 18px; border: 1px solid var(--control); border-radius: var(--radius-check); background: var(--surface); transition: background-color var(--t-ui) var(--ease-out), border-color var(--t-ui) var(--ease-out); }
+.check::after { content: ""; position: absolute; inset: 0; margin: auto; width: 12px; height: 12px; background: var(--surface); -webkit-mask: var(--tick) center / 12px no-repeat; mask: var(--tick) center / 12px no-repeat; opacity: 0; transform: scale(0.6); transition: opacity var(--t-ui) var(--ease-out), transform var(--t-ui) var(--ease-out); }
+.check:hover::before { border-color: var(--accent); }
+.check:checked::before { background: var(--accent); border-color: var(--accent); }
+.check:checked::after { opacity: 1; transform: none; }
+.check:focus-visible { outline: none; }
+.check:focus-visible::before { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.segmented { padding: 0; background: transparent; gap: 0; }
+.segmented button { position: relative; isolation: isolate; height: var(--hit); min-width: var(--hit); padding: 0 14px; border-radius: 0; background: transparent; color: var(--muted); }
+.segmented button::before { content: ""; position: absolute; inset: 6px 0; z-index: -1; background: var(--raised); }
+.segmented button:first-child::before { border-radius: var(--radius-control) 0 0 var(--radius-control); }
+.segmented button:last-child::before { border-radius: 0 var(--radius-control) var(--radius-control) 0; }
+.segmented button[aria-pressed="true"] { color: var(--text); background: transparent; font-weight: 500; }
+.segmented button[aria-pressed="true"]::after { content: ""; position: absolute; inset: 8px 2px; z-index: -1; border-radius: var(--radius-check); background: var(--surface); }
+.segmented button:focus-visible { outline: none; }
+.segmented button:focus-visible::before { outline: 2px solid var(--accent); }
+
+.link-chip { display: inline-flex; align-items: center; justify-content: center; min-height: var(--hit); min-width: var(--hit); color: var(--accent); font-weight: 500; text-underline-offset: 3px; }
+.link-chip:hover { text-decoration: underline; }
+.res { display: flex; flex-wrap: wrap; gap: 0; margin-left: -8px; }
+.res .link-chip { padding: 0 8px; }
+
+.pill { height: 22px; }
+.pill.next { background: var(--pill-warning-bg); color: var(--pill-warning-ink); }
+.score { min-width: 22px; justify-content: center; padding: 0 6px; font-family: var(--mono); }
+
+/* ---------- layout ---------- */
+.with-rail { display: grid; grid-template-columns: minmax(0, 1fr) var(--rail); gap: var(--gap); align-items: stretch; }
+.stack { display: flex; flex-direction: column; gap: var(--stack); min-width: 0; }
+.rail-sec { display: flex; flex-direction: column; }
+.rail-sec.fill { flex: 1; }
+.rail-sec.fill > .panel { flex: 1; display: flex; flex-direction: column; }
+.rail-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 24px; margin-bottom: 8px; }
+.rail-head h2, .h2 { font-size: var(--fs-section); line-height: 24px; font-weight: 600; }
+.h3 { font-size: var(--fs-body); line-height: 20px; font-weight: 600; }
+.panel.flush { padding: 0; }
+.foot { margin-top: auto; padding: 4px 12px 4px 12px; border-top: 1px solid var(--rule); }
+.sep { height: 1px; margin: 20px 0; border: 0; background: var(--rule); }
+
+/* ---------- Tổng quan: KPI chia vạch + dải 312 ô ---------- */
+.overview { padding: 0; }
+.kpis.bare { border: 0; border-radius: 0; border-bottom: 1px solid var(--rule); background: transparent; }
+.kpi { min-width: 0; padding: 16px var(--card-pad); }
+.kpi-label { font-size: var(--fs-body); }
+.kpi-value { min-width: 0; font-weight: 400; font-size: var(--fs-kpi); line-height: 34px; overflow-wrap: anywhere; }
+.kpi-value .dash { color: var(--faint); }
+.kpi-value small { font-family: var(--font); }
+.kpi-cap { margin-top: 4px; color: var(--muted); font-size: var(--fs-small); line-height: 16px; }
+.bar { height: 6px; margin-top: 10px; overflow: hidden; border-radius: var(--radius-pill); background: var(--rule); }
+.bar > i { display: block; height: 100%; border-radius: var(--radius-pill); background: var(--chart-1); }
+.bar-ends { display: flex; justify-content: space-between; margin-top: 4px; color: var(--muted); font-size: var(--fs-small); line-height: 16px; }
+.strip-wrap { position: relative; padding: 14px 12px 12px; }
+.strip-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 16px; margin-bottom: 8px; padding: 0 0 0 0; }
+.strip-head .h3 { font-weight: 500; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; color: var(--muted); font-size: var(--fs-small); line-height: 16px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sw { width: 10px; height: 10px; border-radius: var(--radius-cell); }
+.sw.done { background: var(--chart-1); }
+.sw.todo { border: 1px solid var(--control); }
+.sw.next { border: 2px solid var(--chart-3); }
+.strip { display: block; overflow-x: auto; border-radius: var(--radius-control); }
+.strip svg { width: 100%; min-width: 600px; height: auto; overflow: visible; }
+.strip:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+.c-done { fill: var(--chart-1); }
+.c-todo { fill: none; stroke: var(--control); stroke-width: 1; }
+.c-next { fill: none; stroke: var(--chart-3); stroke-width: 2; }
+.g-done { stroke: var(--chart-1); stroke-width: 2; }
+.g-todo { stroke: var(--control); stroke-width: 2; }
+.s-lab { fill: var(--muted); font-size: var(--fs-small); font-family: var(--font); }
+.col-hover { fill: var(--active); }
+.strip-tip { position: absolute; z-index: 5; padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--surface); color: var(--text); font-size: var(--fs-small); line-height: 16px; white-space: nowrap; pointer-events: none; box-shadow: var(--shadow-float); }
+
+/* ---------- Buổi kế tiếp ---------- */
+.today-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; color: var(--muted); }
+.today .task { margin-top: 8px; font-size: var(--fs-section); line-height: 24px; font-weight: 600; }
+.today p { margin-top: 4px; color: var(--muted); }
+.row-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.report-label { margin-bottom: 8px; }
+.grade { margin-top: 12px; padding: 16px; border-radius: var(--radius-card); background: var(--raised); }
+.grade .scores { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-bottom: 10px; }
+.grade .scores span { display: inline-flex; align-items: center; gap: 6px; }
+.grade p, .grade ol { margin-top: 8px; color: var(--text); }
+.grade ol { padding-left: 20px; }
+.grade b { font-weight: 600; }
+.grade.err { color: var(--negative); }
+.skel { display: block; height: 14px; margin-top: 8px; border-radius: var(--radius-check); background: var(--rule); }
+.logform { display: grid; grid-template-columns: minmax(0, 1.5fr) repeat(5, minmax(0, 1fr)); gap: 12px; align-items: end; }
+.logform .field { min-width: 0; }
+.logform .wide { grid-column: 1 / 5; }
+.logform .submit { grid-column: 5 / 7; justify-self: end; align-self: end; }
+.flash { animation: flash 220ms var(--ease-out); }
+@keyframes flash { from { background: var(--active); } to { background: var(--surface); } }
+
+/* ---------- rail lists ---------- */
+.trows { display: grid; }
+.trow { display: grid; grid-template-columns: var(--hit) 26px minmax(0, 1fr) auto; align-items: center; min-height: 45px; padding-right: 12px; transition: background-color var(--t-hover) ease; }
+.trow + .trow { border-top: 1px solid var(--rule); }
+.trow:hover { background: var(--raised); }
+.trow.next { background: var(--next-bg); }
+.trow .code { color: var(--muted); font-size: var(--fs-small); }
+.trow .tname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.trow.is-done .tname { color: var(--muted); }
+.trow .meta { padding-left: 8px; color: var(--muted); font-size: var(--fs-small); }
+.srow { display: grid; grid-template-columns: 52px 34px minmax(0, 1fr) auto; align-items: center; min-height: 45px; padding: 0 12px; }
+.srow + .srow { border-top: 1px solid var(--rule); }
+.srow .pills { display: flex; gap: 4px; }
+.srow .min { text-align: right; }
+.unit { color: var(--muted); font-family: var(--font); font-size: var(--fs-small); }
+.note-card { padding: 14px 16px 6px; }
+.note-card .when { color: var(--muted); font-size: var(--fs-small); }
+.note-text { margin-top: 4px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.note-text.clamp { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.empty-line { padding: 14px 16px; color: var(--muted); }
+.crow { display: flex; align-items: center; justify-content: space-between; min-height: 45px; padding: 0 16px; border-top: 1px solid var(--rule); }
+.crow .dash { color: var(--faint); font-family: var(--mono); }
+.rule-note { padding: 10px 16px 14px; border-top: 1px solid var(--rule); color: var(--muted); font-size: var(--fs-small); line-height: 16px; }
+.ai-line { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: var(--fs-small); }
+
+/* ---------- Trợ lý AI ---------- */
+.ai-sub { margin-top: 4px; }
+.ai-sub.ok { color: var(--positive); } .ai-sub.err { color: var(--negative); } .ai-sub.busy { color: var(--muted); }
+.chatpanel { display: flex; flex-direction: column; gap: 12px; }
+/* khung tin giãn lấp chiều cao thẻ (thẻ cao bằng rail), ô nhập nằm sát đáy; cuộn bên trong khi dài */
+.chat { flex: 1 1 0; display: flex; flex-direction: column; gap: 8px; min-height: 320px; overflow-y: auto; }
+.msg { max-width: 88%; padding: 8px 12px; border-radius: var(--radius-card); white-space: pre-wrap; overflow-wrap: anywhere; line-height: 20px; }
+.msg.user { align-self: flex-end; background: var(--active); }
+.msg.assistant { align-self: flex-start; background: var(--raised); }
+.msg.error { align-self: flex-start; border: 1px solid var(--negative); color: var(--negative); }
+.msg code { font-family: var(--mono); font-size: var(--fs-sub); }
+.msg.new { animation: rise 160ms var(--ease-out); }
+@keyframes rise { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.ask-text { min-height: 76px; background: var(--surface); }
+.notes { display: grid; }
+.notes li { padding: 12px 16px; }
+.notes li + li { border-top: 1px solid var(--rule); }
+.form-grid { display: grid; gap: 12px; }
+
+/* ---------- Lộ trình ---------- */
+.ptabs { position: relative; display: flex; gap: 4px; overflow-x: auto; margin-bottom: var(--gap); border-bottom: 1px solid var(--border); scrollbar-width: thin; }
+.ptab { display: grid; flex: none; align-content: center; gap: 2px; min-height: 56px; padding: 6px 12px; border: 0; background: transparent; color: var(--muted); text-align: left; white-space: nowrap; cursor: pointer; transition: color var(--t-hover) ease; }
+.ptab:hover { color: var(--text); }
+.ptab[aria-pressed="true"] { color: var(--text); font-weight: 600; }
+.ptab .pct { font-size: var(--fs-small); font-weight: 400; color: var(--muted); }
+.ptab:focus-visible { outline-offset: -2px; }
+.tab-ind { position: absolute; bottom: 0; left: 0; height: 2px; width: 0; background: var(--accent); pointer-events: none; }
+.phase-sum { display: grid; grid-template-columns: minmax(0, 1fr) 240px; gap: 8px var(--gap); align-items: center; margin-bottom: var(--stack); color: var(--muted); }
+.weeks { display: grid; border-top: 1px solid var(--rule); }
+.week { border-bottom: 1px solid var(--rule); }
+.week.cur { margin: -1px 0 0; border: 1px solid var(--chart-3); border-radius: var(--radius-card); }
+.week summary { display: grid; grid-template-columns: 76px minmax(0, 1fr) auto 20px; align-items: center; gap: 12px; min-height: var(--row-height); padding: 0 12px; list-style: none; cursor: pointer; }
+.week summary::-webkit-details-marker { display: none; }
+.week summary:hover { background: var(--raised); }
+.week summary .wn { color: var(--muted); }
+.week summary .wt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.week.full summary .wc { color: var(--positive); }
+.chev { width: 12px; height: 12px; background: var(--muted); -webkit-mask: var(--chevron) center / 12px no-repeat; mask: var(--chevron) center / 12px no-repeat; transition: transform var(--t-ui) var(--ease-out); }
+.week[open] .chev { transform: rotate(90deg); }
+.wbody { padding: 0 12px 12px; overflow: hidden; }
+.wbody .out { margin: 4px 0 8px; color: var(--muted); }
+.gate { display: grid; grid-template-columns: var(--hit) minmax(0, 1fr); align-items: start; gap: 4px 8px; margin-top: var(--gap); padding: 12px 16px 12px 4px; border: 1px dashed var(--control); border-radius: var(--radius-card); }
+.gate .h3 { margin-top: 12px; }
+.gate p { margin-top: 2px; color: var(--muted); }
+
+/* ---------- Nhật ký điểm ---------- */
+.filters { margin-bottom: var(--stack); }
+.count { color: var(--muted); }
+.avg-row { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; padding: 10px 0; }
+.avg-row + .avg-row { border-top: 1px solid var(--rule); }
+.avg-row .bar { grid-column: 1 / -1; margin-top: 0; }
+.avg-row .bar-ends { grid-column: 1 / -1; margin-top: 0; }
+.avg-row.weak .bar > i { background: var(--chart-3); }
+.logtable { margin-top: var(--gap); }
+.logtable th, .logtable td { padding-left: 8px; padding-right: 8px; }
+.logtable td.note-cell { width: 40%; color: var(--muted); }
+.logtable td.date, .logtable td.n { font-family: var(--mono); }
+.logtable td.act { width: 1%; padding: 0; text-align: right; vertical-align: middle; }
+.logtable tr.fresh td { animation: flash 220ms var(--ease-out); }
+.logtable td.scores-cell { display: none; }
+.empty-cell { padding: 16px 0; color: var(--muted); }
+.toast { position: fixed; left: 50%; bottom: 24px; z-index: 40; display: flex; align-items: center; gap: 4px; padding: 0 4px 0 16px; border-radius: var(--radius-card); background: var(--primary); color: var(--primary-ink); transform: translateX(-50%); box-shadow: var(--shadow-float); }
+.toast .btn { color: var(--primary-ink); }
+.toast .btn::before { border-color: transparent; background: transparent; }
+.toast .btn:hover::before { background: transparent; opacity: 1; }
+.toast .btn { text-decoration: underline; text-underline-offset: 3px; }
+
+/* ---------- Nhánh mở rộng ---------- */
+.branches { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--gap); align-items: stretch; }
+.branch { display: flex; flex-direction: column; gap: 10px; }
+.branch .out { padding: 10px 12px; border-radius: var(--radius-control); background: var(--raised); }
+/* thẻ có ít bước hơn giãn đều hàng, nên ba thẻ cùng đáy mà không có khoảng trống ở chân */
+.branch .trows { flex: 1; display: flex; flex-direction: column; margin: 0 -20px -20px; }
+.branch .trows .trow { flex: 1 0 auto; }
+.branch .trow { grid-template-columns: var(--hit) minmax(0, 1fr); padding-right: 16px; }
+.branch .trow .tname { white-space: normal; padding: 6px 0; }
+.branch .trow .link-chip { min-height: var(--hit); }
+
+/* ---------- Cài đặt ---------- */
+.set-row { display: grid; grid-template-columns: 360px minmax(0, 1fr); gap: var(--gap); padding: 32px 0; border-top: 1px solid var(--rule); }
+.set-row:first-of-type { border-top: 0; padding-top: 8px; }
+.set-row h2 { font-size: var(--fs-section); line-height: 24px; font-weight: 500; }
+.set-row .desc { margin-top: 4px; color: var(--muted); }
+.set-panel { display: grid; gap: 12px; padding: 16px; border-radius: var(--radius-sheet); background: var(--raised); }
+.set-panel .input { max-width: 240px; }
+.stamp-ok { color: var(--positive); font-size: var(--fs-small); }
+
+/* ---------- tablet 641–1100: thanh bên gập vào thanh trên ---------- */
+@media (max-width: 1100px) {
+  .app { grid-template-columns: minmax(0, 1fr); }
+  .sidebar { position: fixed; inset: 0 auto 0 0; z-index: 30; width: min(320px, 100%); height: 100%; background: var(--surface); transform: translateX(-100%); transition: transform var(--t-ui) var(--ease-out); }
+  .sidebar.open { transform: none; box-shadow: var(--shadow-float); }
+  .menu-toggle { display: inline-flex; margin-left: -14px; }
+  .topbar { padding: 0 16px; }
+  .sheet { margin: 0 var(--sheet-inset) var(--sheet-inset); }
+  .canvas { padding: 20px; }
+  .with-rail { grid-template-columns: minmax(0, 1fr); }
+  .with-rail > .rail { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: var(--stack); align-items: start; }
+  .rail-sec.fill > .panel { flex: none; }
+  .branches { grid-template-columns: minmax(0, 1fr); }
+  .set-row { grid-template-columns: 240px minmax(0, 1fr); }
+  .kpis { grid-auto-flow: column; grid-template-columns: none; }
+  .kpi + .kpi { border-left: 1px solid var(--border); }
+  .kpi:nth-child(n + 3) { border-top: 0; }
+  .logform { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .logform .wide { grid-column: 1 / 3; }
+  .logform .submit { grid-column: 3 / 4; }
+}
+/* ---------- điện thoại: sheet thành màn hình ---------- */
+@media (max-width: 640px) {
+  .topbar { padding: 0 12px; }
+  .ai-chip .ai-text { display: none; }
+  .sheet { margin: 0; border: 0; border-radius: 0; }
+  .canvas { padding: 16px; }
+  .title-row { flex-direction: column; align-items: stretch; }
+  .title-row h1 { font-size: var(--fs-title); }
+  .title-row .btn.primary { width: 100%; }
+  .btn::before { inset: 0; }
+  .btn.primary { border-width: 0; border-radius: var(--radius-control); }
+  .segmented button::before { inset: 0; }
+  .segmented button[aria-pressed="true"]::after { inset: 3px; }
+  .kpis.bare { grid-auto-flow: row; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .kpi { padding: 14px 16px; }
+  .kpi + .kpi { border-left: 0; }
+  .kpi:nth-child(2n) { border-left: 1px solid var(--border); }
+  .kpi:nth-child(n + 3) { border-top: 1px solid var(--border); }
+  .with-rail > .rail { grid-template-columns: minmax(0, 1fr); }
+  .actions .btn { flex: 1 1 100%; }
+  .logform { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .logform .wide, .logform .submit { grid-column: 1 / -1; justify-self: stretch; }
+  .logform .submit .btn { width: 100%; }
+  .phase-sum { grid-template-columns: minmax(0, 1fr); }
+  .week summary { grid-template-columns: minmax(0, 1fr) auto 20px; grid-template-areas: "wn wc chev" "wt wt wt"; row-gap: 0; padding: 6px 12px; }
+  .week summary .wn { grid-area: wn; } .week summary .wc { grid-area: wc; } .week summary .chev { grid-area: chev; }
+  .week summary .wt { grid-area: wt; white-space: normal; font-size: var(--fs-sub); color: var(--muted); font-weight: 400; }
+  .set-row { grid-template-columns: minmax(0, 1fr); gap: 10px; padding: 24px 0; }
+  .set-panel .input { max-width: none; }
+  .logtable thead { display: none; }
+  .logtable tr { display: grid; grid-template-columns: auto auto 1fr auto; align-items: center; gap: 2px 10px; padding: 8px 0; border-bottom: 1px solid var(--rule); }
+  .logtable td { padding: 0; border: 0; }
+  .logtable td.scores-cell { grid-column: 1 / 4; display: flex; gap: 4px; }
+  .logtable td.note-cell { grid-column: 1 / -1; width: auto; font-size: var(--fs-sub); }
+  .logtable td.act { grid-row: 1; grid-column: 4; }
+  .logtable td.k, .logtable td.c, .logtable td.g, .logtable td.d { display: none; }
+  .chat { max-height: none; min-height: 200px; }
+}
+
 </style>
 </head>
 <body>
-<div class="wrap">
-  <header class="top">
-    <h1>Sổ theo dõi học AI Engineering</h1>
-    <span class="topr">
+<div class="app">
+  <aside class="sidebar" id="sidebar" aria-label="Điều hướng">
+    <div class="brand">
+      <svg width="18" height="26" viewBox="0 0 18 26" aria-hidden="true" focusable="false">
+        <rect class="mk-on" x="0" y="0" width="8" height="8" rx="2"/><rect class="mk-on" x="10" y="0" width="8" height="8" rx="2"/>
+        <rect class="mk-on" x="0" y="9" width="8" height="8" rx="2"/><rect class="mk-today" x="10" y="9" width="8" height="8" rx="2"/>
+        <rect class="mk-off" x="0.5" y="18.5" width="7" height="7" rx="1.5"/><rect class="mk-off" x="10.5" y="18.5" width="7" height="7" rx="1.5"/>
+      </svg>
+      <span>Sổ học AI Engineering</span>
+    </div>
+    <div class="scope" id="scope"></div>
+    <nav class="nav" aria-label="Các màn hình">
+      <a class="nav-item" href="#/hom-nay" data-route="hom-nay">Hôm nay</a>
+      <a class="nav-item" href="#/tro-ly" data-route="tro-ly">Trợ lý AI</a>
+      <a class="nav-item" href="#/lo-trinh" data-route="lo-trinh">Lộ trình</a>
+      <a class="nav-item" href="#/nhat-ky" data-route="nhat-ky">Nhật ký điểm</a>
+      <a class="nav-item" href="#/nhanh" data-route="nhanh">Nhánh mở rộng</a>
+      <a class="nav-item last" href="#/cai-dat" data-route="cai-dat">Cài đặt</a>
+    </nav>
+    <div class="side-foot">
       <span class="sync" id="sync"><i></i><span id="syncText">Đang kết nối</span></span>
-      <button class="btn small" id="authBtn" type="button" hidden>Đăng nhập Google để đồng bộ</button>
-    </span>
-  </header>
-
-  <section class="stats" id="stats" aria-label="Tổng quan"></section>
-  <section class="card today" id="today" aria-label="Việc hôm nay"></section>
-
-  <section class="card" aria-labelledby="h-ai">
-    <div class="ai-head">
-      <h2 id="h-ai">Trợ lý AI</h2>
-      <span class="ai-status" id="aiStatus">Chưa kiểm tra kết nối</span>
+      <button class="btn" id="authBtn" type="button" hidden>Đăng nhập để đồng bộ</button>
     </div>
-    <p class="note" style="margin:0">Chạy bằng Ollama trên máy của bạn, không cần Claude hay Internet. Hỏi bất cứ điều gì về buổi học; trợ lý biết bạn đang ở tuần nào và sẽ gợi ý chứ không làm hộ bài.</p>
-    <div id="aiNotesBox" hidden>
-      <h3 style="margin-bottom:8px">Nhận xét tự động gần đây</h3>
-      <ul class="ai-notes" id="aiNotes"></ul>
-    </div>
-    <div class="chat" id="chat" aria-live="polite"></div>
-    <form class="ask col" id="askForm">
-      <textarea id="askText" placeholder="Ví dụ: Biến là gì? Vì sao code C của tôi báo lỗi ở dòng 5? (Enter để gửi, Shift+Enter xuống dòng)" aria-label="Câu hỏi cho trợ lý"></textarea>
-      <div class="row">
-        <button class="btn primary" type="submit" id="askBtn">Gửi</button>
-        <button class="btn" type="button" id="stopBtn" hidden>Dừng</button>
-        <button class="btn" type="button" id="clearChat">Xoá cuộc trò chuyện</button>
-      </div>
-    </form>
-    <details class="plain">
-      <summary>Cài đặt trợ lý trên thiết bị này</summary>
-      <div class="aiset">
-        <label>Địa chỉ Ollama<input type="url" id="ai-url" spellcheck="false"></label>
-        <label>Tên model<input type="text" id="ai-model" spellcheck="false"></label>
-      </div>
-      <div class="row" style="margin-top:10px">
-        <button class="btn" type="button" id="aiTest">Lưu và kiểm tra kết nối</button>
-        <span class="note">Trên máy tính: để mặc định. Trên điện thoại: hỏi AI qua bot Telegram (HUONG-DAN.md, bước 5).</span>
-      </div>
-    </details>
-  </section>
-
+  </aside>
+  <div class="backdrop" id="backdrop"></div>
   <div class="main">
-    <nav class="rail" id="rail" aria-label="Các giai đoạn"></nav>
-    <div class="col" id="weeks"></div>
+    <header class="topbar">
+      <button class="btn ghost menu-toggle" id="menuBtn" type="button" aria-controls="sidebar" aria-expanded="false">Menu</button>
+      <span class="view-name" id="viewName">Hôm nay</span>
+      <span class="spacer"></span>
+      <a class="ai-chip" id="aiTop" href="#/tro-ly"><i class="dot" id="aiTopDot"></i><span class="ai-text" id="aiTopText">Trợ lý chưa kiểm tra</span></a>
+    </header>
+    <main class="sheet"><div class="canvas" id="view"></div></main>
   </div>
-
-  <section class="card" aria-labelledby="h-log">
-    <h2 id="h-log">Nhật ký chấm điểm</h2>
-    <p class="note" style="margin:0">Sau mỗi buổi, gửi báo cáo cho Claude rồi ghi lại điểm Claude chấm (thang 1 đến 5).</p>
-    <form class="log" id="logForm">
-      <label>Ngày<input type="date" id="f-date" required></label>
-      <label>Số phút<input type="number" id="f-min" min="0" max="600" step="5" value="120" required></label>
-      <label>Khái niệm<select id="f-k"></select></label>
-      <label>Code<select id="f-c"></select></label>
-      <label>Gỡ lỗi<select id="f-g"></select></label>
-      <label>Kỷ luật<select id="f-d"></select></label>
-      <label class="wide">Ghi chú<input type="text" id="f-note" maxlength="300" placeholder="Điều cần ôn lại, nhận xét của Claude"></label>
-      <button class="btn primary" type="submit">Thêm buổi học</button>
-    </form>
-    <div id="logOut"></div>
-  </section>
-
-  <section aria-labelledby="h-br" class="col">
-    <h2 id="h-br">Nhánh mở rộng</h2>
-    <p class="note" style="margin:0">Mở sau Giai đoạn 2. Mỗi lần học một nhánh, xen 2 buổi mỗi tuần với lõi chính.</p>
-    <div class="branches" id="branches"></div>
-  </section>
-
-  <section class="card" aria-labelledby="h-set">
-    <h2 id="h-set">Cài đặt</h2>
-    <div class="row setrow">
-      <label for="s-start">Ngày bắt đầu học</label>
-      <input type="date" id="s-start">
-      <span class="note">Dùng để so tiến độ của bạn với lịch 6 buổi mỗi tuần, Chủ nhật nghỉ.</span>
-    </div>
-    <div class="row">
-      <button class="btn danger" id="reset" type="button">Xoá toàn bộ dữ liệu</button>
-      <span class="note" id="resetNote"></span>
-    </div>
-    <p class="note" style="margin:0">Lộ trình đầy đủ kèm giải thích: <a href="https://claude.ai/artifact/2fNCcPWsHdnHyAq1WpZdqu">Lộ trình AI Engineering từ gốc</a>.</p>
-  </section>
 </div>
+<div class="toast" id="toast" role="status" hidden></div>
 
+<script>
+/* tasteskill v2.5 charts.js (MIT License, Copyright (c) 2026 Leonxlnx): https://github.com/Leonxlnx/taste-skill. Keep this line in every copy. */
+// tasteskill / charts.js — small, dependency-free charts for app screens, drawn in SVG from your data.
+// They follow references/app-screens.md: one question per chart, one series that matters, 3–5 quiet
+// horizontal gridlines, round ticks that top out above the largest value, 2px straight lines with no
+// markers, square bars, no gradients, a bare tooltip, tabular figures. Colours come from CSS variables:
+//   --chart-1 … --chart-4 (series), --chart-muted (other series), --chart-mark (a marked period; ink by default),
+//   --chart-span (the opacity of a shaded span: about .06 on light, .12 on dark), --chart-track (a time strip's track),
+//   --grid, --axis-ink, --ink, --surface, --raised, --rule, --negative
+// Usage (after this file loads):
+//   Charts.line(el, { labels: ['1 Oct', …], series: [{ name: 'Requests', values: [...] }], format: Charts.fmt.compact })
+//   Charts.bars(el, { labels, values, highlight: 6, format })        one bar (or [indices]) may carry the accent; dim: [indices]
+//   Charts.diverging(el, { labels, up, down, above: 'Sold', below: 'Bought', mark: [3, 9], markLabel: 'Car charged' })
+//   Charts.ring(el, { value: 0.72, label: '72%', sub: 'of capacity' }) a progress ring with its total inside
+//   Charts.barList(el, [{ label: 'Berlin', value: 412 }, …], { format, thin })  a ranked list where the row is the bar
+//   Charts.plan(el, [{ label: 'Groceries', planned: 600, spent: 412, committed: 60 }, …], { scale: 'row' | 'plan' })  planned against spent
+//   Charts.bullet(el, [{ label: 'Bonds', value: 0.31, target: 0.25 }, …])   share against a target
+//   Charts.timeline(el, rows, kinds, { days, today, weekends })      who is away when, each kind of booking its own mark
+//   Charts.matrix(el, rows, { cols, comfort: 2, today })             slack against a minimum, team by day
+//   Charts.timeStrip(el, rows, { open: '08:00', close: '15:00', compareLabel: 'Last Sunday' })  when, within the day
+// line, bars and diverging take annotations: [{ at: index, label: 'Deploy a3f09c1', short: 'a3f09c1' }] or spans
+// [{ from, to, label: 'Cloud' }]. Their labels sit in rows above the plot, measured once the fonts have loaded, and no
+// leader line crosses another label; the rows are reserved only when a label exists. reference: { value, label }, its
+// label set where no series passes.
+// line takes step: true for a balance that only changes on given days; today: index (the forecast after it is dashed)
+// with todayLabel: 'Now 20:34' (set clear of the line); endLabel: true (the last value at the line's end); max: caps a
+// flat series with one spike (the peak is labelled); yTicks: fixed ticks for a bounded quantity (0–100%); tickFormat:
+// axis labels apart from the tooltip format; xAt: the indices to label. Without xAt the x labels keep one step.
+// diverging, timeline, matrix and timeStrip return { svg, legend }, and line returns { legend } for two series or more:
+// the legend is drawn from the same style objects as the marks, so a swatch is always the mark scaled down. Put it in
+// the card's header, or pass legend: element (or a selector) to have it filled.
+// Numbers follow the page's language (<html lang>). Every chart gets role="img" and an aria-label that states what it shows.
+(() => {
+  const NS = 'http://www.w3.org/2000/svg', MINUS = '\u2212', ROW = 14, LANE = (rows) => 8 + rows * ROW + (rows ? 4 : 0);
+  const css = (el, name, fb) => getComputedStyle(el).getPropertyValue(name).trim() || fb;
+  const cssNum = (el, name, fb) => { const v = parseFloat(css(el, name, '')); return Number.isFinite(v) ? v : fb; };
+  const svg = (tag, attrs = {}, parent) => { const n = document.createElementNS(NS, tag); for (const [k, v] of Object.entries(attrs)) if (v != null) n.setAttribute(k, v); if (parent) parent.appendChild(n); return n; };
+  const text = (parent, str, attrs) => { const t = svg('text', attrs, parent); t.textContent = str; return t; };
+  const titled = (parent, str) => { svg('title', {}, parent).textContent = str; return parent; };
+  // numbers follow the page's language (<html lang>), so separators match the rest of the screen
+  const nf = (o) => new Intl.NumberFormat(document.documentElement.lang || 'en', o);
+  // every text value that reaches innerHTML goes through esc: a label from a database is text, never markup
+  const esc = (v) => String(v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+  const fmt = {
+    int: (v) => nf({ maximumFractionDigits: 0 }).format(v),
+    dec: (d) => (v) => nf({ minimumFractionDigits: d, maximumFractionDigits: d }).format(v),
+    pct: (d = 1) => (v) => nf({ style: 'percent', minimumFractionDigits: d, maximumFractionDigits: d }).format(v),
+    money: (cur = 'EUR', d = 0) => (v) => nf({ style: 'currency', currency: cur, minimumFractionDigits: d, maximumFractionDigits: d }).format(v),
+    compact: (v) => nf({ notation: 'compact', maximumFractionDigits: 1 }).format(v),
+    ms: (v) => `${nf({ maximumFractionDigits: 0 }).format(v)} ms`,
+    // a sign on every change, with a true minus: fmt.signed() → '+2', '0', '−1'; fmt.signed(fmt.dec(1)) → '+0.4'
+    signed: (f = (v) => nf({ maximumFractionDigits: 0 }).format(v)) => (v) => (v > 0 ? '+' : v < 0 ? MINUS : '') + f(Math.abs(v)),
+    // minutes since midnight as a 24-hour time: 680 → '11:20'
+    clock: (m) => `${String(Math.floor(m / 60) % 24).padStart(2, '0')}:${String(Math.round(m % 60)).padStart(2, '0')}`, // taste-skill-ignore: a clock, not a counter
+  };
+  const minutes = (t) => (t == null || t === '' ? null : typeof t === 'number' ? t : (([hh, mm]) => hh * 60 + (mm || 0))(String(t).split(':').map(Number)));
+  // Round ticks (steps of 1, 2, 2.5 or 5 × 10^n) whose top sits above the largest value.
+  function ticks(min, max, count = 4) {
+    if (max === min) max = min + 1;
+    const raw = (max - min) / count, mag = 10 ** Math.floor(Math.log10(raw));
+    const step = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((s) => s >= raw) || 10 * mag;
+    const lo = Math.floor(min / step) * step; let hi = Math.ceil(max / step) * step; if (hi <= max) hi += step;
+    const out = []; for (let v = lo; v <= hi + step / 2; v += step) out.push(+v.toFixed(10));
+    return out;
+  }
+  // x labels keep one step all the way: every k-th label, with k chosen so the labels fit the width, and a step that
+  // lands on the last label when one gives enough labels. Never a forced end label that breaks the step. Clock labels
+  // ('08:30') step in whole hours (or halves and quarters) from a round time, so a half-hourly axis reads 06:00, 09:00.
+  function xPicks(labels, span, at) {
+    const n = labels.length;
+    if (at) return at.filter((i) => i >= 0 && i < n);
+    if (n <= 1) return n ? [0] : [];
+    const longest = Math.max(...labels.map((l) => String(l).length));
+    const cap = Math.max(2, Math.min(8, Math.floor(span / (longest * 7 + 18))));
+    if (n <= cap) return [...Array(n).keys()];
+    const mins = labels.every((l) => /^\d{1,2}:\d{2}$/.test(String(l))) ? labels.map(minutes) : null;
+    const d = mins ? mins[1] - mins[0] : 0;
+    let first = null, land = null;
+    for (let k = 1; k < n; k++) {
+      const stepM = k * d, clock = mins && d > 0;
+      if (clock && (stepM >= 60 ? ![1, 2, 3, 4, 6, 12].includes(stepM / 60) : 60 % stepM !== 0)) continue;
+      // start on a round time: a multiple of the step (09:00 for three hours), or a whole hour for shorter steps
+      let s = clock ? mins.findIndex((m) => m % Math.max(60, stepM) === 0) : 0;
+      if (s < 0) s = Math.max(0, mins.findIndex((m) => m % 60 === 0));
+      const count = Math.floor((n - 1 - s) / k) + 1;
+      if (count > cap) continue;
+      if (first == null) first = { k, s };
+      if ((n - 1 - s) % k === 0) { land = { k, s, count }; break; }
+    }
+    const pick = land && land.count >= Math.max(3, Math.ceil(cap * 0.6)) ? land : first || { k: n - 1, s: 0 };
+    const out = []; for (let i = pick.s; i < n; i += pick.k) out.push(i);
+    return out;
+  }
+  // colours: tokens resolved to rgb, so a mark can be mixed with the surface (a pale fill, a darker step)
+  const swatchProbe = document.createElement('span'); swatchProbe.style.display = 'none';
+  const rgb = (el, value) => {
+    el.appendChild(swatchProbe); swatchProbe.style.color = ''; swatchProbe.style.color = value;
+    const c = getComputedStyle(swatchProbe).color; swatchProbe.remove();
+    const m = c.match(/-?[\d.]+/g); if (!m || m.length < 3) return null;
+    return c.startsWith('color(') ? m.slice(0, 3).map((v) => Math.round(+v * 255)) : m.slice(0, 3).map(Number);
+  };
+  const mix = (el, a, b, t) => { const p = rgb(el, a), q = rgb(el, b); return p && q ? `rgb(${p.map((v, i) => Math.round(v * t + q[i] * (1 - t))).join(',')})` : a; };
+  // text width, measured in the chart's own face (falls back to an estimate when the chart is hidden)
+  const measure = (s, str, size = 11, weight = 400) => { const t = text(s, str, { x: -999, y: -999, 'font-size': size, 'font-weight': weight, visibility: 'hidden' }); let wd = 0; try { wd = t.getComputedTextLength(); } catch {} t.remove(); return wd > 0 ? wd : String(str).length * size * 0.56; };
+  const fit = (s, str, max, size, weight) => { str = String(str); if (measure(s, str, size, weight) <= max) return str; while (str.length > 1 && measure(s, str + '\u2026', size, weight) > max) str = str.slice(0, -1); return str.trimEnd() + '\u2026'; };
+  function frame(el, h) {
+    el.innerHTML = '';
+    const w = Math.max(240, el.clientWidth || 600);
+    const s = svg('svg', { viewBox: `0 0 ${w} ${h}`, width: '100%', height: h, role: 'img', style: 'display:block;overflow:visible;font-variant-numeric:tabular-nums' }, el);
+    return { s, w, h };
+  }
+  function tooltip(el) {
+    let t = el.querySelector('.chart-tip');
+    if (!t) { t = document.createElement('div'); t.className = 'chart-tip'; t.style.cssText = 'position:absolute;pointer-events:none;padding:6px 8px;font:inherit;font-size:12px;line-height:1.35;border-radius:6px;white-space:nowrap;opacity:0;transition:opacity 120ms ease;background:var(--surface,#fff);color:var(--ink,#111);border:1px solid var(--grid,#e5e7eb)'; if (getComputedStyle(el).position === 'static') el.style.position = 'relative'; el.appendChild(t); }
+    return t;
+  }
+  function axes(g, el, { w, h, padL, padB, yt, y, labels, x, band = false, at = null, tick, avoid = null }) {
+    const grid = css(el, '--grid', '#e8e8e8'), ink = css(el, '--axis-ink', '#6b6b6b'), s = g.ownerSVGElement;
+    for (const v of yt) {
+      const yy = y(v);
+      svg('line', { x1: padL, x2: w, y1: yy, y2: yy, stroke: grid, 'stroke-width': 1, 'shape-rendering': 'crispEdges' }, g);
+      text(g, tick(v), { x: padL - 8, y: yy + 4, 'text-anchor': 'end', 'font-size': 12, fill: ink });
+    }
+    const n = labels.length;
+    for (const i of xPicks(labels, w - padL, at)) {
+      const lab = String(labels[i]), tw = measure(s, lab, 12), xx = x(i);
+      // the first and last labels are pulled inside the plot; none runs past either edge
+      let left = band ? xx - tw / 2 : i === 0 ? xx : i === n - 1 ? xx - tw : xx - tw / 2;
+      left = Math.max(band ? 0 : padL, Math.min(w - tw, left));
+      if (avoid && left < avoid[1] + 8 && left + tw > avoid[0] - 8) continue;
+      text(g, lab, { x: left, y: h - padB + 18, 'font-size': 12, fill: ink });
+    }
+  }
+  // Annotation labels sit in rows above the plot, never on the data. A label sits beside the top of its own leader
+  // line, right of it or left of it, in one of three rows. A place is free when no other label in that row overlaps
+  // it, no leader line passes through it, and its own leader passes through no label below it. The layout is searched
+  // (close markers often need the first label on the left so the next leader runs clear): full labels first, then
+  // short forms (`short`), and only then is a label dropped to its marker's tooltip, with a note in the console.
+  function lane(s, items, w, maxRows = 3) {
+    const gap = 6, rank = (it) => (it.fixed != null ? 0 : it.span ? 1 : 2);
+    // fixed captions first, then spans, then markers from left to right
+    const order = [...items].sort((a, b) => rank(a) - rank(b) || (a.x ?? a.x0) - (b.x ?? b.x0));
+    const opts = order.map((it) => {
+      const out = [];
+      for (const str of [it.label, it.short].filter(Boolean)) {
+        const tw = measure(s, str, 11) + (it.glyph ? 9 : 0), mid = it.span ? (it.x0 + it.x1) / 2 : 0;
+        const cands = it.fixed != null ? [[it.fixed, it.fixed + tw]] : it.span ? [[mid - tw / 2, mid + tw / 2], [it.x0, it.x0 + tw], [it.x1 - tw, it.x1]] : [[it.x + 4, it.x + 4 + tw], [it.x - 4 - tw, it.x - 4]];
+        for (let row = 0; row < maxRows; row++) for (const [x0, x1] of cands) if (x0 >= 0 && x1 <= w) out.push({ ...it, text: str, isShort: str !== it.label, row, x0, x1 });
+      }
+      return out;
+    });
+    const free = (c, placed) => placed.every((p) => p.dropped || (!(p.row === c.row && c.x0 < p.x1 + gap && c.x1 > p.x0 - gap)
+      && !(p.leader != null && p.row >= c.row && p.leader > c.x0 - 3 && p.leader < c.x1 + 3)
+      && !(c.leader != null && p.row <= c.row && c.leader > p.x0 - 3 && c.leader < p.x1 + 3)));
+    let best = null, steps = 0;
+    const solve = (i, placed, allowShort, allowDrop) => {
+      if (++steps > 20000) return false;
+      if (i === order.length) { best = placed.slice(); return true; }
+      for (const c of opts[i]) { if ((c.isShort && !allowShort) || !free(c, placed)) continue; placed.push(c); if (solve(i + 1, placed, allowShort, allowDrop)) return true; placed.pop(); }
+      if (allowDrop) { placed.push({ ...order[i], dropped: true }); if (solve(i + 1, placed, allowShort, allowDrop)) return true; placed.pop(); }
+      return false;
+    };
+    for (const [sh, dr] of [[false, false], [true, false], [true, true]]) { steps = 0; if (solve(0, [], sh, dr)) break; }
+    const placed = (best || []).filter((p) => !p.dropped), dropped = (best || order.map((it) => ({ ...it, dropped: true }))).filter((p) => p.dropped);
+    return { placed, dropped, rows: placed.length ? Math.max(...placed.map((p) => p.row)) + 1 : 0 };
+  }
+  function prepNotes(s, annotations = [], x, w, extra = []) {
+    const items = [];
+    for (const a of annotations || []) {
+      if (a.from != null) items.push({ span: true, x0: Math.min(x(a.from), x(a.to)), x1: Math.max(x(a.from), x(a.to)), label: a.label, short: a.short, colour: a.colour });
+      else if (a.at != null) items.push({ x: x(a.at), at: a.at, leader: x(a.at), label: a.label, short: a.short, colour: a.colour });
+    }
+    items.push(...extra);
+    return { items, ...lane(s, items.filter((it) => it.label), w) };
+  }
+  // shaded spans go under the data; marker lines and the label rows over it
+  function notesUnder(g, el, N, { padT, h, padB }) {
+    const ink = css(el, '--axis-ink', '#6b6b6b'), op = cssNum(el, '--chart-span', 0.07);
+    for (const it of N.items) if (it.span) svg('rect', { x: it.x0, y: padT, width: it.x1 - it.x0, height: h - padT - padB, fill: ink, opacity: op }, g);
+  }
+  function notesOver(g, el, N, { padT, h, padB }) {
+    const ink = css(el, '--axis-ink', '#6b6b6b');
+    // a marker line runs to the plot's foot, or stops above the bar it points at (it.end)
+    for (const it of N.items) if (it.leader != null && !it.drawn) svg('line', { x1: it.leader, x2: it.leader, y1: padT, y2: Math.max(padT, it.end ?? h - padB), stroke: ink, 'stroke-width': 1, opacity: 0.45, 'shape-rendering': 'crispEdges' }, g);
+    for (const p of N.placed) {
+      const base = padT - 9 - p.row * ROW;
+      if (p.leader != null) svg('line', { x1: p.leader, x2: p.leader, y1: base - 8, y2: padT, stroke: ink, 'stroke-width': 1, opacity: 0.45, 'shape-rendering': 'crispEdges' }, g);
+      if (p.glyph) svg('path', { d: p.glyph === 'up' ? `M${p.x0} ${base - 1}l3 -6l3 6z` : `M${p.x0} ${base - 7}l3 6l3 -6z`, fill: ink }, g);
+      text(g, p.text, { x: p.x0 + (p.glyph ? 9 : 0), y: base, 'font-size': 11, fill: p.colour || ink });
+    }
+    const el2 = g.ownerSVGElement.parentNode; el2._warned = el2._warned || new Set();
+    for (const d of N.dropped) {
+      if (d.leader != null) { const hit = svg('line', { x1: d.leader, x2: d.leader, y1: padT, y2: h - padB, stroke: 'transparent', 'stroke-width': 8 }, g); titled(hit, d.label, {}); }
+      if (!el2._warned.has(d.label)) { el2._warned.add(d.label); console.warn(`Charts: no room above the plot for "${d.label}". Give it a short form (short) or label fewer markers.`); }
+    }
+  }
+  // does a label box touch a drawn line? polylines are [[x, y], …]; a box is { x0, x1, y0, y1 }
+  function hits(b, lines) {
+    for (const pts of lines) for (let k = 1; k < pts.length; k++) {
+      const a = pts[k - 1], c = pts[k]; if (!a || !c) continue;
+      if (a[0] === c[0]) { if (a[0] >= b.x0 - 3 && a[0] <= b.x1 + 3 && Math.max(a[1], c[1]) >= b.y0 - 3 && Math.min(a[1], c[1]) <= b.y1 + 3) return true; continue; }
+      const lo = Math.max(b.x0 - 3, Math.min(a[0], c[0])), hi = Math.min(b.x1 + 3, Math.max(a[0], c[0]));
+      for (let xx = lo; xx <= hi; xx += 2) { const yy = a[1] + ((xx - a[0]) / (c[0] - a[0])) * (c[1] - a[1]); if (yy >= b.y0 - 3 && yy <= b.y1 + 3) return true; }
+    }
+    return false;
+  }
+  const boxHits = (b, boxes) => boxes.some((r) => b.x0 < r.x1 + 3 && b.x1 > r.x0 - 3 && b.y0 < r.y1 + 3 && b.y1 > r.y0 - 3);
+  // a reference line (a budget, an SLO) with its label at an end where no series passes
+  function references(g, el, refs, { y, padL, w, lines = [], boxes = [] }) {
+    const ink = css(el, '--axis-ink', '#6b6b6b'), s = g.ownerSVGElement;
+    for (const r of [].concat(refs || [])) {
+      const yy = y(r.value);
+      svg('line', { x1: padL, x2: w, y1: yy, y2: yy, stroke: ink, 'stroke-width': 1, 'stroke-dasharray': '4 4', opacity: 0.7 }, g);
+      if (!r.label) continue;
+      const tw = measure(s, r.label, 11), right = r.at !== 'left';
+      const cand = [[right, -5], [right, 13], [!right, -5], [!right, 13]].map(([rt, dy]) => ({ x0: rt ? w - tw : padL + 4, x1: rt ? w : padL + 4 + tw, y0: yy + dy - 9, y1: yy + dy + 2, base: yy + dy }));
+      const b = cand.find((c) => !hits(c, lines) && !boxHits(c, boxes)) || cand[0];
+      text(g, r.label, { x: b.x0, y: b.base, 'font-size': 11, fill: ink });
+    }
+  }
+  // One style object per kind of mark draws both the mark and its legend swatch, so the two cannot drift apart.
+  function paintRect(parent, st, x, y, w, h, r = 0) {
+    let fill = st.fill || 'none';
+    if (st.hatch) {
+      const s = parent.ownerSVGElement || parent, id = 'h' + Math.random().toString(36).slice(2, 8);
+      const p = svg('pattern', { id, width: 5, height: 5, patternUnits: 'userSpaceOnUse', patternTransform: 'rotate(45)' }, svg('defs', {}, s));
+      svg('rect', { width: 5, height: 5, fill: st.fill }, p); svg('line', { x1: 0, y1: 0, x2: 0, y2: 5, stroke: st.hatch, 'stroke-width': 1.2 }, p);
+      fill = `url(#${id})`;
+    }
+    const inset = st.stroke ? (st.width || 1) / 2 : 0;
+    const n = svg('rect', { x: x + inset, y: y + inset, width: Math.max(0, w - inset * 2), height: Math.max(0, h - inset * 2), rx: r, fill, stroke: st.stroke, 'stroke-width': st.stroke ? st.width || 1 : null, 'stroke-dasharray': st.dash, opacity: st.opacity, 'shape-rendering': r ? null : 'crispEdges' }, parent);
+    if (st.edge) svg('rect', { x, y, width: 3, height: h, rx: Math.min(r, 1.5), fill: st.edge }, parent);
+    return n;
+  }
+  const legendCss = ':where(.chart-legend){list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;line-height:16px;color:var(--muted,#5f6368)}:where(.chart-legend li){display:inline-flex;align-items:center;gap:6px;white-space:nowrap}:where(.chart-legend svg){flex:none;overflow:visible}@media (max-width:480px){:where(.chart-legend){display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}}';
+  function legendEl(items, target) {
+    if (!document.getElementById('charts-legend-css')) { const st = document.createElement('style'); st.id = 'charts-legend-css'; st.textContent = legendCss; document.head.appendChild(st); }
+    const ul = document.createElement('ul'); ul.className = 'chart-legend';
+    for (const it of items) {
+      const li = document.createElement('li'), sw = svg('svg', { width: it.w || 14, height: 12, 'aria-hidden': 'true' });
+      it.draw(sw); li.append(sw, document.createTextNode(it.label)); ul.appendChild(li);
+    }
+    const t = typeof target === 'string' ? document.querySelector(target) : target;
+    if (t) t.replaceChildren(ul);
+    return ul;
+  }
+  const rectSwatch = (st, w = 14, h = 10, r = 2) => (sw) => paintRect(sw, st, 0, (12 - h) / 2, w, h, r);
+  // charts are laid out with measured text: draw again once the page's fonts have arrived
+  function settle(draw) { if (document.fonts) { document.fonts.ready.then(draw); document.fonts.addEventListener?.('loadingdone', draw, { once: true }); } }
+  const heightOf = (h) => (typeof h === 'function' ? h() : h);
+
+  function line(el, { labels, series, format = fmt.int, tickFormat = null, height = 220, fill = false, min, max, step = false, annotations, reference, today = null, todayLabel = 'Today', endLabel = false, yTicks = null, xAt = null, legend = null }) {
+    el._fmt = format;
+    const colourOf = (sr, k) => sr.colour || (k === 0 ? css(el, '--chart-1', '#2f6fdf') : css(el, `--chart-${k + 1}`, css(el, '--chart-muted', '#a3a3a3')));
+    const draw = () => {
+      const { s, w, h } = frame(el, heightOf(height));
+      const all = series.flatMap((x) => x.values.filter((v) => v != null)).concat([].concat(reference || []).map((r) => r.value));
+      // max caps the range (a flat series with one spike): values above it are clipped and their peak labelled
+      const top = max ?? Math.max(...all);
+      const yt = yTicks || ticks(min ?? Math.min(0, ...all), top, 4);
+      const tick = tickFormat || format;
+      const lastVal = series[0].values.filter((v) => v != null).at(-1);
+      const padL = 12 + Math.max(...yt.map((v) => measure(s, tick(v), 12))), padB = 26, padR = endLabel ? 10 + measure(s, format(lastVal), 12, 600) : 0;
+      const x = (i) => padL + (i * (w - padL - padR)) / Math.max(1, labels.length - 1);
+      // the peaks clipped by max are labelled in the rows above the plot, where the line leaves it
+      const peaks = [];
+      series.forEach((sr, k) => sr.values.forEach((v, i) => { if (v != null && v > yt.at(-1) && (i === 0 || sr.values[i - 1] == null || sr.values[i - 1] <= yt.at(-1))) { let j = i, peak = v; while (j < sr.values.length && sr.values[j] != null && sr.values[j] > yt.at(-1)) { peak = Math.max(peak, sr.values[j]); j++; } peaks.push({ x: x(i), label: format(peak) + ' at ' + labels[i], colour: colourOf(sr, k) }); } }));
+      const scale = (N) => { const padT = LANE(N.rows); return { padT, y: (v) => padT + (h - padT - padB) * (1 - (v - yt[0]) / (yt.at(-1) - yt[0])) }; };
+      const linesAt = (y) => series.map((sr) => { const out = []; sr.values.forEach((v, i) => { if (v == null) { out.push(null); return; } const p = [x(i), y(Math.min(v, yt.at(-1)))]; const prev = out.at(-1); if (step && prev) out.push([p[0], prev[1]]); out.push(p); }); return out; }).concat([].concat(reference || []).map((r) => [[padL, y(r.value)], [w, y(r.value)]]));
+      let N = prepNotes(s, annotations, x, w, peaks), { padT, y } = scale(N), todayBox = null;
+      // the today label goes inside the plot on whichever side of its line no series crosses; failing that, above
+      if (today != null && todayLabel) {
+        const cut = x(today), tw = measure(s, todayLabel, 11), lines = linesAt(y);
+        const cand = [[cut + 4, h - padB - 6], [cut - 4 - tw, h - padB - 6], [cut + 4, padT + 11], [cut - 4 - tw, padT + 11]].map(([x0, b]) => ({ x0, x1: x0 + tw, y0: b - 9, y1: b + 2, base: b }));
+        todayBox = cand.find((b) => b.x0 >= padL && b.x1 <= w && !hits(b, lines)) || null;
+        if (!todayBox) { N = prepNotes(s, annotations, x, w, [...peaks, { x: cut, leader: cut, drawn: true, label: todayLabel }]); ({ padT, y } = scale(N)); }
+      }
+      const g = svg('g', {}, s);
+      axes(g, el, { w, h, padL, padB, yt, y, labels, x, at: xAt, tick });
+      notesUnder(g, el, N, { padT, h, padB });
+      series.forEach((sr, k) => {
+        const col = colourOf(sr, k);
+        const pts = sr.values.map((v, i) => (v == null ? null : [x(i), y(Math.min(v, yt.at(-1)))]));
+        // step: a balance that only changes on given days holds its value until the next one
+        const d = pts.reduce((acc, p, i) => (p ? acc + (acc && pts[i - 1] ? (step ? `L${p[0].toFixed(1)} ${pts[i - 1][1].toFixed(1)}L` : 'L') : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1) : acc), '');
+        if (fill && k === 0) { const first = pts.find(Boolean), last = [...pts].reverse().find(Boolean); svg('path', { d: `${d}L${last[0]} ${y(yt[0])}L${first[0]} ${y(yt[0])}Z`, fill: col, opacity: 0.12 }, g); }
+        if (today == null) svg('path', { d, fill: 'none', stroke: col, 'stroke-width': 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }, g);
+        else {
+          // a forecast: the line after today is dashed, so a projection never reads as a fact
+          const cut = x(today), id = 'c' + k + Math.random().toString(36).slice(2, 8);
+          const defs = svg('defs', {}, g);
+          const a = svg('clipPath', { id: id + 'a' }, defs); svg('rect', { x: 0, y: 0, width: cut, height: h }, a);
+          const b = svg('clipPath', { id: id + 'b' }, defs); svg('rect', { x: cut, y: 0, width: w, height: h }, b);
+          svg('path', { d, fill: 'none', stroke: col, 'stroke-width': 2, 'stroke-linejoin': 'round', 'clip-path': 'url(#' + id + 'a)' }, g);
+          svg('path', { d, fill: 'none', stroke: col, 'stroke-width': 2, 'stroke-dasharray': '5 4', opacity: 0.8, 'clip-path': 'url(#' + id + 'b)' }, g);
+          if (k === 0) { svg('line', { x1: cut, x2: cut, y1: padT, y2: h - padB, stroke: css(el, '--axis-ink', '#6b6b6b'), 'stroke-width': 1, opacity: 0.4 }, g); if (todayBox) text(g, todayLabel, { x: todayBox.x0, y: todayBox.base, 'font-size': 11, fill: css(el, '--axis-ink', '#6b6b6b') }); }
+        }
+        if (endLabel && k === 0) { const li = sr.values.map((v, i) => (v == null ? -1 : i)).filter((i) => i >= 0).at(-1); text(g, format(sr.values[li]), { x: x(li) + 6, y: y(Math.min(sr.values[li], yt.at(-1))) + 4, 'font-size': 12, 'font-weight': 600, fill: css(el, '--ink', '#111') }); }
+      });
+      references(g, el, reference, { y, padL, w, lines: linesAt(y).slice(0, series.length) });
+      notesOver(g, el, N, { padT, h, padB });
+      // hover: a rule, a dot per series and a bare tooltip
+      const tip = tooltip(el), rule = svg('line', { y1: padT, y2: h - padB, stroke: css(el, '--axis-ink', '#6b6b6b'), 'stroke-width': 1, opacity: 0 }, g);
+      const dots = series.map((sr, k) => svg('circle', { r: 3.5, fill: css(el, '--surface', '#fff'), stroke: colourOf(sr, k), 'stroke-width': 2, opacity: 0 }, g));
+      const hit = svg('rect', { x: padL, y: padT, width: w - padL, height: h - padT - padB, fill: 'transparent' }, s);
+      const move = (ev) => { const r = s.getBoundingClientRect(); const px = ((ev.clientX - r.left) / r.width) * w; const i = Math.max(0, Math.min(labels.length - 1, Math.round(((px - padL) / (w - padL - padR)) * (labels.length - 1)))); rule.setAttribute('x1', x(i)); rule.setAttribute('x2', x(i)); rule.setAttribute('opacity', 0.35); series.forEach((sr, k) => { const v = sr.values[i]; dots[k].setAttribute('cx', x(i)); dots[k].setAttribute('cy', v == null ? -99 : y(Math.min(v, yt.at(-1)))); dots[k].setAttribute('opacity', v == null ? 0 : 1); }); tip.innerHTML = `<div style="opacity:.7">${esc(labels[i])}</div>` + series.map((sr) => `<div><b style="font-weight:600">${sr.values[i] == null ? '–' : esc(format(sr.values[i]))}</b> ${series.length > 1 ? esc(sr.name) : ''}</div>`).join(''); const left = Math.min((x(i) / w) * r.width + 12, r.width - tip.offsetWidth - 4); tip.style.left = `${Math.max(0, left)}px`; tip.style.top = '0px'; tip.style.opacity = 1; };
+      hit.addEventListener('pointermove', move); hit.addEventListener('pointerleave', () => { tip.style.opacity = 0; rule.setAttribute('opacity', 0); dots.forEach((d) => d.setAttribute('opacity', 0)); });
+      const last = series[0].values.filter((v) => v != null).at(-1);
+      s.setAttribute('aria-label', `${series.map((x) => x.name).join(', ')}, ${labels[0]} to ${labels.at(-1)}; latest ${last == null ? 'no data' : format(last)}`);
+    };
+    draw(); watch(el, draw); settle(draw);
+    const lg = series.length > 1 ? legendEl(series.map((sr, k) => ({ label: sr.name, w: 16, draw: (sw) => svg('line', { x1: 0, x2: 16, y1: 6, y2: 6, stroke: colourOf(sr, k), 'stroke-width': 2, 'stroke-dasharray': sr.dash ? '4 3' : null }, sw) })), legend) : null;
+    return { legend: lg };
+  }
+  function bars(el, { labels, values, format = fmt.int, tickFormat = null, height = 200, highlight = null, dim = [], colour, mutedColour, annotations, reference, xAt = null }) {
+    el._fmt = format;
+    const lit = (i) => highlight == null || (Array.isArray(highlight) ? highlight.includes(i) : highlight === i);
+    const draw = () => {
+      const { s, w, h } = frame(el, heightOf(height));
+      const yt = ticks(0, Math.max(...values, ...[].concat(reference || []).map((r) => r.value)), 4), tick = tickFormat || format;
+      const padL = 12 + Math.max(...yt.map((v) => measure(s, tick(v), 12))), padB = 26;
+      const band = (w - padL) / values.length, bw = Math.max(2, band * 0.62);
+      const x = (i) => padL + band * i + band / 2;
+      const N = prepNotes(s, annotations, x, w), padT = LANE(N.rows);
+      const y = (v) => padT + (h - padT - padB) * (1 - v / yt.at(-1));
+      const g = svg('g', {}, s);
+      axes(g, el, { w, h, padL, padB, yt, y, labels, x, band: true, at: xAt, tick });
+      notesUnder(g, el, N, { padT, h, padB });
+      for (const it of N.items) if (it.at != null && values[it.at] != null) it.end = y(values[it.at]) - 4;
+      const main = colour || css(el, '--chart-1', '#2f6fdf'), muted = mutedColour || css(el, '--chart-muted', '#c9c9c9');
+      values.forEach((v, i) => { const r = svg('rect', { x: x(i) - bw / 2, y: y(v), width: bw, height: Math.max(0, y(0) - y(v)), fill: lit(i) ? main : muted, opacity: dim.includes(i) ? 0.45 : null, 'shape-rendering': 'crispEdges' }, g); titled(r, `${labels[i]}: ${format(v)}`, {}); });
+      references(g, el, reference, { y, padL, w, boxes: values.map((v, i) => ({ x0: x(i) - bw / 2, x1: x(i) + bw / 2, y0: y(v), y1: y(0) })) });
+      notesOver(g, el, N, { padT, h, padB });
+      s.setAttribute('aria-label', `${labels.length} bars from ${labels[0]} to ${labels.at(-1)}; highest ${format(Math.max(...values))}`);
+    };
+    draw(); watch(el, draw); settle(draw);
+  }
+  // Two directions on one scale: what went out above the zero line and what came in below it (sold and bought,
+  // income and spend). The axis says which is which, with signed ticks and a caption on each side of zero.
+  // mark: [indices] draws those periods in a second tone with their own legend entry (the nights the car charged).
+  function diverging(el, { labels, up, down, values, above = 'Above', below = 'Below', mark = [], markLabel = null, markSide = 'below', partial = null, format = fmt.int, tickFormat = null, height = 200, annotations, reference, xAt = null, legend = null }) {
+    if (values) { up = values.map((v) => Math.max(0, v || 0)); down = values.map((v) => Math.max(0, -(v || 0))); }
+    up = up || labels.map(() => 0); down = down || labels.map(() => 0);
+    const st = { above: { fill: css(el, '--chart-1', '#2f6fdf') }, below: { fill: css(el, '--chart-muted', '#c9c9c9') }, mark: { fill: css(el, '--chart-mark', css(el, '--ink', '#111')) } };
+    const marked = (i, side) => mark.includes(i) && (markSide === 'both' || markSide === side);
+    const tick = (v) => (v > 0 ? '+' : v < 0 ? MINUS : '') + (tickFormat || format)(Math.abs(v));
+    const draw = () => {
+      const { s, w, h } = frame(el, heightOf(height));
+      const hiUp = Math.max(0, ...up), hiDown = Math.max(0, ...down);
+      const yt = ticks(-hiDown, hiUp || 1, 4); const stp = yt[1] - yt[0]; if (hiDown > 0 && yt[0] >= -hiDown) yt.unshift(+(yt[0] - stp).toFixed(10));
+      const padL = 12 + Math.max(...yt.map((v) => measure(s, tick(v), 12))), padB = 26;
+      const band = (w - padL) / labels.length, bw = Math.max(2, band * 0.62);
+      const x = (i) => padL + band * i + band / 2;
+      // the caption for the upper side opens the label rows above the plot; the lower one sits under the plot, at left
+      const N = prepNotes(s, annotations, x, w, [{ fixed: padL, glyph: 'up', label: above }]), padT = LANE(N.rows);
+      const y = (v) => padT + (h - padT - padB) * (1 - (v - yt[0]) / (yt.at(-1) - yt[0]));
+      const g = svg('g', {}, s), ink = css(el, '--axis-ink', '#6b6b6b');
+      const bwid = measure(s, below, 11) + 9;
+      axes(g, el, { w, h, padL, padB, yt, y, labels, x, band: true, at: xAt, tick, avoid: [padL, padL + bwid] });
+      svg('path', { d: `M${padL} ${h - padB + 11}l3 6l3 -6z`, fill: ink }, g); text(g, below, { x: padL + 9, y: h - padB + 18, 'font-size': 11, fill: ink });
+      notesUnder(g, el, N, { padT, h, padB });
+      for (const it of N.items) if (it.at != null) it.end = y(up[it.at] || 0) - 4;
+      labels.forEach((lab, i) => {
+        const o = partial === i ? 0.5 : null;
+        if (up[i] > 0) { const r = paintRect(g, { ...(marked(i, 'above') ? st.mark : st.above), opacity: o }, x(i) - bw / 2, y(up[i]), bw, Math.max(0, y(0) - y(up[i]) - 1)); titled(r, `${lab}: ${above} ${format(up[i])}`, {}); }
+        if (down[i] > 0) { const r = paintRect(g, { ...(marked(i, 'below') ? st.mark : st.below), opacity: o }, x(i) - bw / 2, y(0) + 1, bw, Math.max(0, y(-down[i]) - y(0) - 1)); titled(r, `${lab}: ${below} ${format(down[i])}`, {}); }
+      });
+      svg('line', { x1: padL, x2: w, y1: y(0), y2: y(0), stroke: ink, 'stroke-width': 1, opacity: 0.8, 'shape-rendering': 'crispEdges' }, g);
+      references(g, el, reference, { y, padL, w, boxes: labels.map((_, i) => ({ x0: x(i) - bw / 2, x1: x(i) + bw / 2, y0: y(up[i]), y1: y(-down[i]) })) });
+      notesOver(g, el, N, { padT, h, padB });
+      s.setAttribute('aria-label', `${above} above the line and ${below} below it, ${labels[0]} to ${labels.at(-1)}`);
+    };
+    draw(); watch(el, draw); settle(draw);
+    const items = [];
+    if (up.some((v) => v > 0)) items.push({ label: above, draw: rectSwatch(st.above) });
+    if (down.some((v) => v > 0)) items.push({ label: below, draw: rectSwatch(st.below) });
+    if (mark.length && markLabel) items.push({ label: markLabel, draw: rectSwatch(st.mark) });
+    return { get svg() { return el.querySelector(':scope > svg'); }, legend: legendEl(items, legend) };
+  }
+  function ring(el, { value, label, sub, size = 132, stroke = 8, colour }) {
+    el.innerHTML = '';
+    const r = (size - stroke) / 2, c = 2 * Math.PI * r, v = Math.max(0, Math.min(1, value));
+    const wrap = document.createElement('div'); wrap.style.cssText = `position:relative;width:${size}px;height:${size}px`;
+    const s = svg('svg', { viewBox: `0 0 ${size} ${size}`, width: size, height: size, role: 'img', 'aria-label': `${label}${sub ? ' ' + sub : ''}` }, wrap);
+    svg('circle', { cx: size / 2, cy: size / 2, r, fill: 'none', stroke: css(el, '--grid', '#e8e8e8'), 'stroke-width': stroke }, s);
+    svg('circle', { cx: size / 2, cy: size / 2, r, fill: 'none', stroke: colour || css(el, '--chart-1', '#2f6fdf'), 'stroke-width': stroke, 'stroke-dasharray': `${c * v} ${c}`, transform: `rotate(-90 ${size / 2} ${size / 2})` }, s);
+    const t = document.createElement('div'); t.style.cssText = 'position:absolute;inset:0;display:grid;place-content:center;text-align:center;font-variant-numeric:tabular-nums';
+    t.innerHTML = `<div style="font-size:${Math.round(size / 5.5)}px;font-weight:600;line-height:1">${esc(label)}</div>${sub ? `<div style="font-size:12px;opacity:.7;margin-top:4px">${esc(sub)}</div>` : ''}`;
+    wrap.appendChild(t); el.appendChild(wrap);
+  }
+  // A ranked list. By default the row's fill is the bar (a one-figure list); thin: true puts a 2px grey bar under each
+  // label instead, ink for the top item, for a ranked list of money in a narrow card.
+  function barList(el, rows, { format = fmt.int, colour, thin = false } = {}) {
+    el.innerHTML = '';
+    const max = Math.max(...rows.map((r) => r.value)) || 1;
+    const list = document.createElement('ol'); list.style.cssText = `list-style:none;margin:0;padding:0;display:grid;gap:${thin ? 10 : 2}px;font-variant-numeric:tabular-nums`;
+    const valueCol = Math.max(...rows.map((r) => String(format(r.value)).length)) + 1;
+    rows.forEach((r, k) => {
+      const li = document.createElement('li'); li.style.cssText = 'display:grid;grid-template-columns:minmax(0,1fr) ' + valueCol + 'ch;align-items:center;column-gap:12px';
+      const a = document.createElement('span'); a.textContent = r.label; a.style.cssText = 'position:relative;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
+      const b = document.createElement('span'); b.textContent = format(r.value); b.style.cssText = 'font-weight:500;text-align:right';
+      if (thin) {
+        const bar = document.createElement('span'); bar.style.cssText = `grid-column:1 / -1;height:2px;margin-top:4px;width:${(r.value / max) * 100}%;background:${k === 0 ? colour || 'var(--ink,#111)' : 'var(--chart-muted,#c9c9c9)'}`;
+        li.append(a, b, bar);
+      } else {
+        const track = document.createElement('span'); track.style.cssText = 'position:relative;padding:10px 12px;border-radius:6px;isolation:isolate;min-width:0';
+        const bar = document.createElement('span'); bar.style.cssText = `position:absolute;inset:0 auto 0 0;width:${(r.value / max) * 100}%;background:${colour || 'var(--bar-fill, color-mix(in srgb, var(--chart-1, #2f6fdf) 12%, transparent))'};border-radius:inherit;z-index:-1`;
+        track.append(bar, a); li.append(track, b);
+      }
+      list.appendChild(li);
+    });
+    el.appendChild(list);
+  }
+  // Planned against spent: the track is the plan, the fill what is spent, a lighter segment what is
+  // already committed (bills to come), and an overrun past the track's end in the negative colour.
+  // One row per category: label and figures on one line, the 8px track under them.
+  function plan(el, rows, { format = fmt.money('EUR', 0), scale = 'row', note = (r) => r.spent > r.planned ? `${format(r.spent - r.planned)} over` : `${format(r.planned - r.spent - (r.committed || 0))} left` } = {}) {
+    el.innerHTML = '';
+    const list = document.createElement('ul'); list.style.cssText = 'list-style:none;margin:0;padding:0;display:grid;gap:14px;font-variant-numeric:tabular-nums';
+    const max = Math.max(...rows.map((r) => Math.max(r.planned, r.spent + (r.committed || 0))));
+    for (const r of rows) {
+      const over = r.spent > r.planned;
+      const li = document.createElement('li');
+      const top = document.createElement('div'); top.style.cssText = 'display:flex;justify-content:space-between;gap:12px;margin-bottom:6px';
+      top.innerHTML = `<span>${esc(r.label)}</span><span><b style="font-weight:500">${esc(format(r.spent))}</b> <span style="color:var(--muted,#5f6368)">of ${esc(format(r.planned))} · </span><span style="color:${over ? 'var(--negative,#c4242a)' : 'var(--muted,#5f6368)'}">${esc(note(r))}</span></span>`;
+      // scale 'row': each track is full width and shows the share used (rows in a grid compare); 'plan': as long as its plan
+      const room = over ? 100 / (1 + Math.max(0.06, (r.spent - r.planned) / r.planned)) : 100;
+      const track = document.createElement('div'); track.style.cssText = 'position:relative;height:8px;border-radius:999px;background:var(--rule,#eceeef);overflow:visible;width:' + (scale === 'plan' ? (r.planned / max) * room : room) + '%';
+      const pct = (v) => (v / r.planned) * 100;
+      const spent = Math.min(r.spent, r.planned);
+      track.innerHTML = `<span style="position:absolute;inset:0 auto 0 0;width:${pct(spent)}%;border-radius:999px;background:var(--chart-1,#2f6fdf)"></span>`
+        + (r.committed ? `<span style="position:absolute;top:0;bottom:0;left:${pct(spent)}%;width:${Math.min(pct(r.committed), 100 - pct(spent))}%;background:var(--chart-1,#2f6fdf);opacity:.35"></span>` : '')
+        + (over ? `<span style="position:absolute;top:-3px;bottom:-3px;left:100%;width:1px;background:var(--text,#111)"></span><span style="position:absolute;top:0;bottom:0;left:calc(100% + 2px);width:max(12px, ${pct(r.spent - r.planned)}%);border-radius:0 999px 999px 0;background:var(--negative,#c4242a)"></span>` : '');
+      track.setAttribute('role', 'img'); track.setAttribute('aria-label', `${r.label}: ${format(r.spent)} of ${format(r.planned)}${r.committed ? `, ${format(r.committed)} committed` : ''}${over ? ', over plan' : ''}`);
+      li.append(top, track); list.appendChild(li);
+    }
+    el.appendChild(list);
+  }
+  // Share against a target: one row per part, the current share as a bar and a 1px tick at the target,
+  // so drift reads at a glance (never two stacked bars to compare).
+  function bullet(el, rows, { format = fmt.pct(1), max = Math.max(...rows.map((r) => Math.max(r.value, r.target))) * 1.15 } = {}) {
+    el.innerHTML = '';
+    const list = document.createElement('ul'); list.style.cssText = 'list-style:none;margin:0;padding:0;display:grid;gap:12px;font-variant-numeric:tabular-nums';
+    for (const r of rows) {
+      const drift = r.value - r.target;
+      const li = document.createElement('li'); li.style.cssText = 'display:grid;grid-template-columns:minmax(90px,30%) 1fr auto;align-items:center;gap:12px';
+      li.innerHTML = `<span>${esc(r.label)}</span><span style="position:relative;height:10px;background:var(--rule,#eceeef);border-radius:2px"><span style="position:absolute;inset:0 auto 0 0;width:${(r.value / max) * 100}%;background:var(--chart-1,#2f6fdf);border-radius:2px"></span><span style="position:absolute;top:-4px;bottom:-4px;left:${(r.target / max) * 100}%;width:2px;margin-left:-1px;background:var(--text,#111)"></span></span><span><b style="font-weight:500">${esc(format(r.value))}</b> <span style="color:${Math.abs(drift) >= (r.tolerance ?? 0.02) ? 'var(--negative,#c4242a)' : 'var(--muted,#5f6368)'}">${drift >= 0 ? '+' : '−'}${esc(format(Math.abs(drift)))} vs ${esc(format(r.target))}</span></span>`;
+      li.setAttribute('aria-label', `${r.label}: ${format(r.value)}, target ${format(r.target)}`);
+      list.appendChild(li);
+    }
+    el.appendChild(list);
+  }
+  // shared by the row charts (timeline, matrix, time strip): a label column with an optional grey subline.
+  // A subline needs a 40-44px row pitch; one-line labels sit on 32px.
+  function rowLabel(g, s, el, r, { y0, pitch, lw }) {
+    const ink = css(el, '--ink', '#111'), muted = css(el, '--axis-ink', '#6b6b6b');
+    if (r.sub) { text(g, fit(s, r.label, lw - 12, 14), { x: 0, y: y0 + pitch / 2 - 3, 'font-size': 14, fill: ink }); text(g, fit(s, r.sub, lw - 12, 12), { x: 0, y: y0 + pitch / 2 + 13, 'font-size': 12, fill: muted }); }
+    else text(g, fit(s, r.label, lw - 12, 14), { x: 0, y: y0 + pitch / 2 + 5, 'font-size': 14, fill: ink });
+  }
+  const dayText = (d) => (typeof d === 'object' && d ? d.label : String(d));
+  // day headers: the full label when every one fits its column, else the short form ('19'), else every k-th short
+  // label with today always shown and its neighbours left out, so no two headers ever touch
+  function dayHeads(g, s, el, days, { x0, cw, y, today }) {
+    const ink = css(el, '--ink', '#111'), muted = css(el, '--axis-ink', '#6b6b6b');
+    const full = days.map(dayText), short = days.map((d) => (typeof d === 'object' && d ? d.short || dayText(d) : dayText(d).split(' ').at(-1)));
+    const wide = (labs) => Math.max(...labs.map((t) => measure(s, t, 12))) + 6;
+    const labs = wide(full) <= cw ? full : short, k = Math.max(1, Math.ceil(wide(labs) / cw));
+    labs.forEach((t, i) => {
+      if (i !== today && (i % k || (today != null && k > 1 && Math.abs(i - today) < k))) return;
+      text(g, t, { x: x0 + i * cw + cw / 2, y, 'text-anchor': 'middle', 'font-size': 12, 'font-weight': i === today ? 600 : 400, fill: i === today ? ink : muted });
+    });
+  }
+  // The style of each kind of booking: a pale fill, a 1px diagonal hatch, a darker grey step, an outline, or the one
+  // chart hue for the screen's main data element. tone: 'negative' turns the edge and the label red (it needs a decision).
+  function kindStyle(el, k = {}) {
+    const ink = css(el, '--ink', '#111'), surface = css(el, '--surface', '#fff'), neg = css(el, '--negative', '#c4242a'), hue = k.colour || css(el, '--chart-1', '#2f6fdf');
+    const tone = k.tone === 'negative' ? { stroke: neg, width: 1.5 } : {};
+    const dash = k.dash ? { dash: '3 2' } : {};
+    if (k.mark === 'hatch') return { fill: mix(el, ink, surface, 0.04), hatch: mix(el, ink, surface, 0.32), ...tone, ...dash };
+    if (k.mark === 'step') return { fill: mix(el, ink, surface, 0.24), ...tone, ...dash };
+    if (k.mark === 'outline') return { fill: surface, stroke: mix(el, ink, surface, 0.55), width: 1, ...tone, ...dash };
+    if (k.mark === 'hue') return { fill: mix(el, hue, surface, 0.18), edge: hue, ...tone, ...dash };
+    return { fill: mix(el, ink, surface, 0.12), ...tone, ...dash };
+  }
+  // Who is away when: people (or rooms, vans) down the left, days across, a bar per booking told apart by its kind.
+  //   rows: [{ label: 'Lena Hoffmann', sub: 'Product design · Berlin', bars: [{ from: 3, to: 7, kind: 'holiday', label, note }] }]
+  //         and { group: 'Brand' } rows for a team subheader
+  //   kinds: { holiday: { label: 'Holiday', mark: 'fill' | 'hatch' | 'step' | 'outline' | 'hue', code: 'H', tone, dash } }
+  //   days: ['Mon 19', …] or [{ label: 'Mon 19', short: '19' }]; weekends: [indices]; today: index;
+  //   holidays: [{ day: index, label: 'All Saints’ Day (Lisbon)' }]; onSelect(bar, row) makes the bars buttons.
+  // A label that does not fit its bar becomes the kind's code inside it, then goes after the bar's end (never into the
+  // days before it), and is always in the bar's tooltip.
+  function timeline(el, rows, kinds = {}, { days = [], weekends = [], today = null, holidays = [], labelWidth = null, rowHeight = null, barHeight = 22, onSelect = null, legend = null, extras = true } = {}) {
+    const draw = () => {
+      const pitch = rowHeight || (rows.some((r) => r.sub) ? 44 : 32), head = 30, groupH = 30;
+      const height = head + rows.reduce((a, r) => a + (r.group ? groupH : pitch), 0) + 2;
+      const { s, w, h } = frame(el, height);
+      const lw = labelWidth || Math.round(Math.min(220, Math.max(w < 480 ? 96 : 120, w * 0.2)));
+      const cw = (w - lw) / Math.max(1, days.length), col = (i) => lw + i * cw;
+      const ink = css(el, '--ink', '#111'), muted = css(el, '--axis-ink', '#6b6b6b'), rule = css(el, '--rule', '#f0f0f0'), raised = css(el, '--raised', '#f4f5f6'), hue = css(el, '--chart-1', '#2f6fdf');
+      const g = svg('g', {}, s);
+      // weekends one tone step darker, faint day lines, the day header (today in ink)
+      for (const i of weekends) svg('rect', { x: col(i), y: head, width: cw, height: h - head, fill: raised }, g);
+      for (let i = 0; i <= days.length; i++) svg('line', { x1: col(i), x2: col(i), y1: head, y2: h, stroke: rule, 'stroke-width': 1, 'shape-rendering': 'crispEdges' }, g);
+      dayHeads(g, s, el, days, { x0: lw, cw, y: head - 10, today });
+      for (const hd of holidays) { const c = svg('circle', { cx: col(hd.day) + cw / 2, cy: head - 3, r: 2, fill: muted }, g); titled(c, hd.label, {}); }
+      if (today != null) svg('line', { x1: col(today) + cw / 2, x2: col(today) + cw / 2, y1: head, y2: h, stroke: hue, 'stroke-width': 1, 'shape-rendering': 'crispEdges' }, g);
+      let y0 = head;
+      for (const r of rows) {
+        if (r.group) { svg('line', { x1: 0, x2: w, y1: y0 + 0.5, y2: y0 + 0.5, stroke: rule, 'stroke-width': 1 }, g); text(g, r.group, { x: 0, y: y0 + 20, 'font-size': 12, 'font-weight': 500, fill: muted }); y0 += groupH; continue; }
+        rowLabel(g, s, el, r, { y0, pitch, lw });
+        const bs = (r.bars || []).filter((b) => b.to >= 0 && b.from < days.length).sort((a, b) => a.from - b.from);
+        bs.forEach((b, k) => {
+          const kind = kinds[b.kind] || {}, st = kindStyle(el, kind);
+          const x0 = col(Math.max(0, b.from)) + 2, x1 = col(Math.min(days.length - 1, b.to) + 1) - 2, by = y0 + (pitch - barHeight) / 2;
+          const grp = svg('g', onSelect ? { tabindex: 0, role: 'button', style: 'cursor:pointer' } : {}, g);
+          paintRect(grp, st, x0, by, x1 - x0, barHeight, 4);
+          const label = b.label ?? kind.label ?? '', code = b.code ?? kind.code, tw = measure(s, label, 12), labInk = kind.tone === 'negative' ? css(el, '--negative', '#c4242a') : ink;
+          const next = bs[k + 1] ? col(Math.max(0, bs[k + 1].from)) : w;
+          // over a hatch the label keeps a halo of the bar's own fill, so the lines never run through the words
+          const halo = st.hatch ? { stroke: st.fill, 'stroke-width': 4, 'stroke-linejoin': 'round', 'paint-order': 'stroke' } : {};
+          if (label && tw + 16 <= x1 - x0) text(grp, label, { x: x0 + 8 + (st.edge ? 2 : 0), y: by + barHeight / 2 + 4, 'font-size': 12, fill: labInk, ...halo });
+          else if (code && measure(s, code, 12) + 8 <= x1 - x0) text(grp, code, { x: (x0 + x1) / 2, y: by + barHeight / 2 + 4, 'text-anchor': 'middle', 'font-size': 12, fill: labInk, ...halo });
+          else if (label && x1 + 6 + tw <= Math.min(next - 6, w)) text(grp, label, { x: x1 + 6, y: by + barHeight / 2 + 4, 'font-size': 12, fill: kind.tone === 'negative' ? labInk : muted });
+          titled(grp, `${r.label}: ${label}${b.note ? ' \u00b7 ' + b.note : ''}`, {});
+          if (onSelect) { grp.addEventListener('click', () => onSelect(b, r)); grp.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(b, r); } }); }
+        });
+        y0 += pitch;
+      }
+      s.setAttribute('aria-label', `${rows.filter((r) => !r.group).length} rows across ${days.length} days, ${dayText(days[0])} to ${dayText(days.at(-1))}`);
+    };
+    draw(); watch(el, draw); settle(draw);
+    const used = new Set(rows.flatMap((r) => (r.bars || []).map((b) => b.kind)));
+    const items = Object.entries(kinds).filter(([id]) => used.has(id)).map(([, k]) => ({ label: k.label, w: 22, draw: (sw) => { const st = kindStyle(el, k); paintRect(sw, st, 0, 0, 22, 12, 3); } }));
+    if (extras && today != null) items.push({ label: 'Today', w: 8, draw: (sw) => svg('line', { x1: 4, x2: 4, y1: 0, y2: 12, stroke: css(el, '--chart-1', '#2f6fdf'), 'stroke-width': 1.5 }, sw) });
+    return { get svg() { return el.querySelector(':scope > svg'); }, legend: legendEl(items, legend) };
+  }
+  // Is there enough cover? A team-by-day grid of slack against the minimum (+2, +1, 0, −1). Cells with room to spare
+  // stay plain, and one hue ramps toward the negative colour as the slack runs out; the headcount is in the tooltip.
+  //   rows: [{ label: 'Product design', sub: 'needs 7 of 10', values: [2, 1, 0, -1, null, …], titles: ['8 in', …] }]
+  //   cols: ['Mon 19', …]; comfort: the slack that needs no attention (2); null is a day with no cover to count (a dash)
+  function matrix(el, rows, { cols = [], comfort = 2, today = null, format = fmt.signed(), labelWidth = null, rowHeight = null, levels = ['Room to spare', 'Tight', 'At the minimum', 'Short'], legend = null } = {}) {
+    const level = (v) => (v >= comfort ? 0 : v > 0 ? 1 : v === 0 ? 2 : 3);
+    const styles = () => { const neg = css(el, '--negative', '#c4242a'), surface = css(el, '--surface', '#fff'), ink = css(el, '--ink', '#111'); return [{ fill: surface, ink: css(el, '--axis-ink', '#6b6b6b'), stroke: css(el, '--grid', '#e5e5e5') }, { fill: mix(el, neg, surface, 0.1), ink }, { fill: mix(el, neg, surface, 0.26), ink }, { fill: neg, ink: surface }]; };
+    const draw = () => {
+      const pitch = rowHeight || (rows.some((r) => r.sub) ? 44 : 32), head = 26;
+      const { s, w, h } = frame(el, head + rows.length * pitch);
+      const lw = labelWidth || Math.round(Math.min(220, Math.max(w < 480 ? 96 : 120, w * 0.22)));
+      const cw = (w - lw) / Math.max(1, cols.length), ST = styles(), muted = css(el, '--axis-ink', '#6b6b6b'), ink = css(el, '--ink', '#111');
+      const g = svg('g', {}, s);
+      dayHeads(g, s, el, cols, { x0: lw, cw, y: head - 10, today });
+      rows.forEach((r, k) => {
+        const y0 = head + k * pitch; rowLabel(g, s, el, r, { y0, pitch, lw });
+        const ch = Math.min(pitch - 6, 28), cy = y0 + (pitch - ch) / 2;
+        r.values.forEach((v, i) => {
+          const cx = lw + i * cw + 1;
+          if (v == null) { svg('rect', { x: cx + cw / 2 - 4, y: cy + ch / 2 - 1, width: 6, height: 2, fill: muted }, g); return; }
+          const st = ST[level(v)], cell = paintRect(g, { fill: st.fill }, cx, cy, cw - 2, ch, 3);
+          text(g, format(v), { x: cx + (cw - 2) / 2, y: cy + ch / 2 + 4, 'text-anchor': 'middle', 'font-size': 12, 'font-weight': level(v) === 3 ? 600 : 400, fill: st.ink });
+          titled(cell, `${r.label}, ${dayText(cols[i])}: ${r.titles?.[i] || format(v) + ' against the minimum'}`, {});
+        });
+      });
+      s.setAttribute('aria-label', `Cover against the minimum for ${rows.length} rows across ${cols.length} days`);
+    };
+    draw(); watch(el, draw); settle(draw);
+    const seen = new Set(rows.flatMap((r) => r.values.filter((v) => v != null).map(level)));
+    const ST = styles();
+    const items = [0, 1, 2, 3].filter((l) => seen.has(l)).map((l) => ({ label: levels[l], w: 14, draw: rectSwatch(l === 0 ? { fill: ST[0].fill, stroke: ST[0].stroke } : { fill: ST[l].fill }, 14, 12, 3) }));
+    return { get svg() { return el.querySelector(':scope > svg'); }, legend: legendEl(items, legend) };
+  }
+  // When, within the day: one row per item on a shared open–close axis. A 2px grey track, an ink dot at today's time and
+  // a hollow tick at the comparison day's, so "earlier than last Sunday" is drawn and not only written.
+  //   rows: [{ label: 'White sourdough', sub: 'Headingley', at: '11:20', compare: '12:05', value: '11:20', note: '3 h 40 m before close' }]
+  //   at or compare may be null (it did not sell out); step: minutes between axis labels (60).
+  function timeStrip(el, rows, { open = '08:00', close = '18:00', step = 60, todayLabel = 'Today', compareLabel = null, labelWidth = null, valueWidth = null, rowHeight = null, legend = null } = {}) {
+    const o = minutes(open), c = minutes(close);
+    const st = { today: { r: 4.5 }, compare: { w: 5, h: 12 } };
+    const dot = (parent, cx, cy) => svg('circle', { cx, cy, r: st.today.r, fill: css(el, '--ink', '#111') }, parent);
+    const tick = (parent, cx, cy) => svg('rect', { x: cx - st.compare.w / 2, y: cy - st.compare.h / 2, width: st.compare.w, height: st.compare.h, rx: 2.5, fill: css(el, '--surface', '#fff'), stroke: css(el, '--axis-ink', '#6b6b6b'), 'stroke-width': 1.5 }, parent);
+    const draw = () => {
+      const narrow = (el.clientWidth || 600) < 560, axisH = 24;
+      const pitch = rowHeight || (narrow ? 62 : rows.some((r) => r.sub || r.note) ? 44 : 32);
+      const { s, w, h } = frame(el, rows.length * pitch + axisH);
+      const lw = narrow ? 0 : labelWidth || Math.round(Math.min(200, Math.max(110, w * 0.26)));
+      const vw = narrow ? 0 : valueWidth ?? Math.min(w * 0.32, Math.max(0, ...rows.map((r) => Math.max(r.value ? measure(s, r.value, 13, 500) : 0, r.note ? measure(s, r.note, 12) : 0))) + (rows.some((r) => r.value || r.note) ? 16 : 0));
+      const x0 = narrow ? 18 : lw + 6, x1 = narrow ? w - 18 : w - vw - 6, tx = (m) => x0 + ((m - o) / Math.max(1, c - o)) * (x1 - x0);
+      const ink = css(el, '--ink', '#111'), muted = css(el, '--axis-ink', '#6b6b6b'), rule = css(el, '--rule', '#f0f0f0');
+      const track = css(el, '--chart-track', mix(el, ink, css(el, '--surface', '#fff'), 0.16));
+      const g = svg('g', {}, s), plotH = rows.length * pitch;
+      // the axis: one step from the opening, the labels thinned by the same rule as the charts
+      const marks = []; for (let m = Math.ceil(o / step) * step; m <= c; m += step) marks.push(m);
+      const picks = xPicks(marks.map(fmt.clock), x1 - x0);
+      for (const i of picks) { const xx = tx(marks[i]); if (!narrow) svg('line', { x1: xx, x2: xx, y1: 0, y2: plotH, stroke: rule, 'stroke-width': 1, 'shape-rendering': 'crispEdges' }, g); const lab = fmt.clock(marks[i]), tw = measure(s, lab, 12); text(g, lab, { x: Math.max(x0 - 2, Math.min(x1 + 6 - tw, xx - tw / 2)), y: plotH + 17, 'font-size': 12, fill: muted }); }
+      rows.forEach((r, k) => {
+        const y0 = k * pitch, cy = narrow ? y0 + pitch - 12 : y0 + pitch / 2;
+        if (narrow) {
+          const vwid = r.value ? measure(s, r.value, 13, 500) + 12 : 0;
+          text(g, fit(s, r.label, w - vwid, 14), { x: 0, y: y0 + 16, 'font-size': 14, fill: ink });
+          if (r.value) text(g, r.value, { x: w, y: y0 + 16, 'text-anchor': 'end', 'font-size': 13, 'font-weight': 500, fill: ink });
+          const second = [r.sub, r.note].filter(Boolean).join(' \u00b7 ');
+          if (second) text(g, fit(s, second, w, 12), { x: 0, y: y0 + 33, 'font-size': 12, fill: muted });
+        } else rowLabel(g, s, el, r, { y0, pitch, lw });
+        svg('line', { x1: x0, x2: x1, y1: cy, y2: cy, stroke: track, 'stroke-width': 2, 'stroke-linecap': 'round' }, g);
+        const cm = minutes(r.compare), am = minutes(r.at);
+        if (cm != null) titled(tick(g, tx(cm), cy), `${compareLabel || 'Comparison'}: ${fmt.clock(cm)}`, {});
+        if (am != null) titled(dot(g, tx(am), cy), `${todayLabel}: ${fmt.clock(am)}`, {});
+        if (narrow) return;
+        if (r.note) { if (r.value) text(g, r.value, { x: w, y: cy - 3, 'text-anchor': 'end', 'font-size': 13, 'font-weight': 500, fill: ink }); text(g, fit(s, r.note, vw - 8, 12), { x: w, y: r.value ? cy + 13 : cy + 4, 'text-anchor': 'end', 'font-size': 12, fill: muted }); }
+        else if (r.value) text(g, r.value, { x: w, y: cy + 5, 'text-anchor': 'end', 'font-size': 13, 'font-weight': 500, fill: ink });
+      });
+      s.setAttribute('aria-label', `${rows.length} rows between ${fmt.clock(o)} and ${fmt.clock(c)}`);
+    };
+    draw(); watch(el, draw); settle(draw);
+    const items = [];
+    if (rows.some((r) => minutes(r.at) != null)) items.push({ label: todayLabel, w: 10, draw: (sw) => dot(sw, 5, 6) });
+    if (compareLabel && rows.some((r) => minutes(r.compare) != null)) items.push({ label: compareLabel, w: 8, draw: (sw) => tick(sw, 4, 6) });
+    return { get svg() { return el.querySelector(':scope > svg'); }, legend: legendEl(items, legend) };
+  }
+  function watch(el, draw) { if (!('ResizeObserver' in window)) return; let w = el.clientWidth; new ResizeObserver(() => { if (Math.abs(el.clientWidth - w) > 4) { w = el.clientWidth; draw(); } }).observe(el); }
+  window.Charts = { line, bars, diverging, ring, barList, plan, bullet, timeline, matrix, timeStrip, ticks, fmt };
+})();
+
+</script>
 <script>
 /* ---------- Curriculum ---------- */
 const L={
@@ -325,12 +1376,15 @@ const B=[
 W.forEach(w=>{w.p=P.findIndex(p=>w.n>=p.from&&w.n<=p.to)});
 const TASKS=W.flatMap(w=>w.d.map((t,i)=>({id:'w'+w.n+'d'+(i+1),w,i,t})));
 
+
 /* ---------- State ---------- */
 const KEY='ai-eng-tracker-v1';
+const SAMPLE=new URLSearchParams(location.search).has('mau');   /* ?mau=1: dữ liệu mẫu, không lưu */
+const NOW=()=>SAMPLE?new Date(2026,10,14,20,30):new Date();
 const pad=n=>String(n).padStart(2,'0');
 const iso=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
 const parse=s=>{const a=String(s).split('-').map(Number);return new Date(a[0],a[1]-1,a[2])};
-const today=()=>iso(new Date());
+const today=()=>iso(NOW());
 const vn=s=>{const d=parse(s);return pad(d.getDate())+'/'+pad(d.getMonth()+1)};
 function nextMonday(){const d=new Date();const add=(8-d.getDay())%7;d.setDate(d.getDate()+add);return iso(d)}
 function fresh(){return {v:1,start:nextMonday(),done:{},log:[],updatedAt:0}}
@@ -339,20 +1393,58 @@ function clean(x){const s=fresh();if(!x||typeof x!=='object')return s;
   if(x.done&&typeof x.done==='object')for(const k of Object.keys(x.done))if(typeof x.done[k]==='string')s.done[k]=x.done[k].slice(0,10);
   if(Array.isArray(x.log))s.log=x.log.filter(e=>e&&typeof e==='object'&&typeof e.date==='string').slice(0,800).map(e=>({id:String(e.id||''),date:e.date.slice(0,10),week:Number(e.week)||0,min:Number(e.min)||0,k:Number(e.k)||0,c:Number(e.c)||0,g:Number(e.g)||0,d:Number(e.d)||0,note:String(e.note||'').slice(0,300)}));
   s.updatedAt=Number(x.updatedAt)||0;return s}
+
+/* ---------- Dữ liệu mẫu: chỉ dùng khi mở trang với ?mau=1, không bao giờ ghi vào localStorage hay Firestore ----------
+   Người học bắt đầu Thứ hai 05/10/2026, hôm nay là Thứ bảy 14/11/2026. Nghỉ ngoài lịch ngày 22/10, 04/11 và 12/11.
+   Mọi tổng số trên trang được tính từ các hàng dưới đây, không gõ tay. */
+const SAMPLE_LOG=[ /* ngày, phút, khái niệm, code, gỡ lỗi, kỷ luật, ghi chú */
+  ['2026-10-05',130,3,2,3,5,'Cài xong VS Code, Git và repo đầu tiên'],
+  ['2026-10-12', 95,3,3,2,4,'Scratch: vòng lặp lồng nhau còn lúng túng'],
+  ['2026-10-19',120,4,3,3,5,'Hiểu biến và kiểu dữ liệu trong C'],
+  ['2026-10-26', 85,3,3,2,3,'Học ít giờ, chưa chạy được mảng hai chiều'],
+  ['2026-10-29',110,4,3,3,4,'Tự giải thích được biên dịch là gì'],
+  ['2026-11-02',135,4,4,3,5,'Viết được tìm kiếm tuyến tính'],
+  ['2026-11-05',115,4,3,3,4,'So sánh được sắp xếp chọn và sắp xếp nổi bọt'],
+  ['2026-11-09',125,4,4,4,5,'Tự dùng debug50 tìm ra lỗi chỉ số'],
+  ['2026-11-10', 95,4,3,3,4,'Đệ quy: vẽ được cây gọi hàm'],
+  ['2026-11-11',140,3,3,2,5,'Con trỏ: còn nhầm & và *'],
+  ['2026-11-13',110,4,3,4,4,'Đọc được bộ nhớ bằng valgrind'],
+  ['2026-11-14',120,4,4,3,5,'Mở file, đọc header WAV, đóng file đúng chỗ']];
+const SAMPLE_NOTES=[
+  {at:new Date(2026,10,13,21,45).getTime(),kind:'kiem-tra',text:'1. Hôm nay đã xong Tuần 6 Buổi 2 và ghi 110 phút.\n2. cs50/week4/doc-file.c dòng 18: mở file nhưng không kiểm tra NULL. Nếu file không tồn tại, chương trình sẽ dừng đột ngột. Hãy tự thêm bước kiểm tra.\n3. Câu hỏi: con trỏ lưu giá trị hay lưu địa chỉ?\n4. Buổi kế tiếp: Buổi 3. Việc nhỏ đầu tiên: xem lại phần file I/O trong bài giảng.'},
+  {at:new Date(2026,10,12,21,45).getTime(),kind:'kiem-tra',text:'Hôm nay bạn chưa học. Chỉ cần 25 phút: mở bài giảng Week 4 và xem phần con trỏ. Mai học tiếp từ chỗ dừng.'},
+  {at:new Date(2026,10,11,21,45).getTime(),kind:'kiem-tra',text:'1. Hôm nay đã xong Tuần 6 Buổi 1, 140 phút.\n2. Không thấy lỗi rõ ràng trong code hôm nay; cách đặt tên biến rõ ràng.\n3. Câu hỏi: & và * khác nhau thế nào?\n4. Buổi kế tiếp: Buổi 2.'}];
+const SAMPLE_CHAT=[
+  {role:'user',content:'Vòng lặp for trong C khác while thế nào?'},
+  {role:'assistant',content:'Cả hai đều lặp lại một đoạn code. **for** gom 3 phần vào một dòng: khởi tạo, điều kiện, bước tăng, hợp khi biết trước số lần lặp. **while** chỉ có điều kiện, hợp khi chưa biết trước khi nào dừng.\nVí dụ đếm 3 lần: `for (int i = 0; i < 3; i++)`.\nBạn thử nghĩ: khi đọc từng dòng của một file, nên dùng loại nào?'}];
+function buildSample(){
+  const skip=new Set(['2026-10-22','2026-11-04']),days=[],d=parse('2026-10-05');
+  while(iso(d)<='2026-11-10'){if(d.getDay()!==0&&!skip.has(iso(d)))days.push(iso(d));d.setDate(d.getDate()+1)}
+  const done={};TASKS.slice(0,days.length).forEach((t,i)=>{done[t.id]=days[i]});
+  Object.assign(done,{w6d1:'2026-11-11',w6d2:'2026-11-13',w6d3:'2026-11-14',g0:'2026-10-10'});
+  const weekOf=date=>{const t=TASKS.filter(x=>done[x.id]===date).pop();return t?t.w.n:0};
+  const log=SAMPLE_LOG.map(([date,min,k,c,g,dd,note],i)=>({id:'mau'+i,date,week:weekOf(date),min,k,c,g,d:dd,note}));
+  return {s:clean({v:1,start:'2026-10-05',done,log,updatedAt:1}),studyDays:days.length};
+}
+
 let state=fresh(),selPhase=null,openWeeks=new Set(),resetArmed=false;
-try{const raw=localStorage.getItem(KEY);if(raw)state=clean(JSON.parse(raw))}catch(e){}
-function saveLocal(){try{localStorage.setItem(KEY,JSON.stringify(state))}catch(e){}}
+let sampleInfo=null;
+if(SAMPLE){sampleInfo=buildSample();state=sampleInfo.s}
+else try{const raw=localStorage.getItem(KEY);if(raw)state=clean(JSON.parse(raw))}catch(e){}
+function saveLocal(){if(SAMPLE)return;try{localStorage.setItem(KEY,JSON.stringify(state))}catch(e){}}
 
 /* ---------- Firebase: dán cấu hình web app của bạn vào đây (xem HUONG-DAN.md, bước 2) ----------
-   Ví dụ: const FIREBASE_CONFIG={apiKey:"...",authDomain:"ten-du-an.firebaseapp.com",projectId:"ten-du-an",appId:"..."};
    Các giá trị này không phải mật khẩu; dữ liệu được bảo vệ bằng đăng nhập Google và Rules của Firestore. */
 const FIREBASE_CONFIG={apiKey:"AIzaSyBTMJ_AQa5qiI-h852af81kWGe2jPexP0A",authDomain:"roadmap-to-ae.firebaseapp.com",projectId:"roadmap-to-ae",storageBucket:"roadmap-to-ae.firebasestorage.app",messagingSenderId:"988459770217",appId:"1:988459770217:web:b2ae509acc5960ca175df8"};
 const FB_VER='10.14.1';
 
 /* ---------- Sync: claude.ai database hoặc Firebase ---------- */
-let ref=null,writing=false,dirty=false,readOnly=false,timer=null,loadTimer=null,reconciled=false,unsubs=[],fb=null,aiNotes=[];
-function setSync(cls,text){const el=document.getElementById('sync');el.className='sync '+cls;document.getElementById('syncText').textContent=text}
-async function flush(){if(!ref||readOnly)return;if(writing){dirty=true;return}
+let ref=null,writing=false,dirty=false,readOnly=false,timer=null,loadTimer=null,reconciled=false,unsubs=[],fb=null,aiNotes=SAMPLE?SAMPLE_NOTES.slice():[];
+let syncState={cls:'',text:'Đang kết nối'};
+function setSync(cls,text){syncState={cls,text};
+  for(const el of document.querySelectorAll('[data-sync]')){el.className='sync '+cls;const t=el.querySelector('[data-sync-text]');if(t)t.textContent=text}
+  const el=document.getElementById('sync');if(el){el.className='sync '+cls;document.getElementById('syncText').textContent=text}}
+async function flush(){if(!ref||readOnly||SAMPLE)return;if(writing){dirty=true;return}
   writing=true;setSync('busy','Đang lưu');
   try{await ref.set(JSON.parse(JSON.stringify(state)));setSync('ok','Đã lưu, đồng bộ mọi thiết bị')}
   catch(e){const c=e&&e.code;
@@ -360,7 +1452,7 @@ async function flush(){if(!ref||readOnly)return;if(writing){dirty=true;return}
     else if(c==='permission-denied')setSync('err','Firestore từ chối ghi: kiểm tra Rules (HUONG-DAN.md, bước 2)');
     else setSync('err','Chưa lưu lên máy chủ được; dữ liệu vẫn nằm trên trình duyệt này')}
   writing=false;if(dirty){dirty=false;flush()}}
-function commit(){state.updatedAt=Date.now();saveLocal();render();if(ref){clearTimeout(timer);timer=setTimeout(flush,700)}}
+function commit(){state.updatedAt=Date.now();saveLocal();render();if(ref&&!SAMPLE){clearTimeout(timer);timer=setTimeout(flush,700)}}
 function detach(){unsubs.forEach(u=>{try{typeof u==='function'&&u()}catch(e){}});unsubs=[];ref=null;reconciled=false;clearTimeout(loadTimer)}
 /* Gắn một document chứa state; dùng chung cho cả hai nơi lưu. Bản mới hơn (updatedAt lớn hơn) thắng. */
 function attach(r){ref=r;
@@ -377,12 +1469,15 @@ function attach(r){ref=r;
     if(needPush&&!reconciled){reconciled=true;clearTimeout(timer);timer=setTimeout(flush,300)}
   },()=>{clearTimeout(loadTimer);setSync('err','Mất kết nối máy chủ; thay đổi chỉ lưu trên trình duyệt này')}))}
 function connect(){
+  if(SAMPLE){setSync('busy','Dữ liệu mẫu: thay đổi không được lưu');return}
   if(window.claude&&typeof window.claude.use==='function'){
     window.claude.use('db').then(db=>{if(!db){setSync('','Lưu trên trình duyệt này');return}attach(db.doc('tracker/state'))})
       .catch(()=>setSync('','Lưu trên trình duyệt này'));return}
   if(FIREBASE_CONFIG){connectFirebase();return}
   setSync('','Lưu trên trình duyệt này');
 }
+function authLabel(){return fb&&fb.user?'Đăng xuất':'Đăng nhập Google để đồng bộ'}
+function paintAuth(){for(const b of document.querySelectorAll('#authBtn,[data-act="auth"]')){b.textContent=b.id==='authBtn'&&!(fb&&fb.user)?'Đăng nhập để đồng bộ':authLabel();if(fb&&fb.user)b.title=fb.user.email||''}}
 async function connectFirebase(){
   setSync('busy','Đang tải Firebase');
   const btn=document.getElementById('authBtn');
@@ -397,9 +1492,8 @@ async function connectFirebase(){
       onSnapshot:(ok,err)=>F.onSnapshot(r,{includeMetadataChanges:true},s=>ok({exists:s.exists(),data:()=>s.data(),metadata:s.metadata}),err)}};
     btn.hidden=false;
     U.onAuthStateChanged(auth,user=>{
-      detach();fb.user=user;aiNotes=[];renderAiNotes();
-      if(!user){btn.textContent='Đăng nhập Google để đồng bộ';setSync('','Chưa đăng nhập: chỉ lưu trên trình duyệt này');return}
-      btn.textContent='Đăng xuất';btn.title=user.email||'';
+      detach();fb.user=user;aiNotes=[];paintAuth();render();
+      if(!user){setSync('','Chưa đăng nhập: chỉ lưu trên trình duyệt này');return}
       attach(docAt('users/'+user.uid+'/tracker/state'));
       /* Nhận xét do script AI trên máy bạn ghi vào (tro-ly/kiem-tra.js) */
       unsubs.push(docAt('users/'+user.uid+'/tracker/ai').onSnapshot(s=>{
@@ -407,108 +1501,347 @@ async function connectFirebase(){
     });
   }catch(e){setSync('err','Không tải được Firebase; dữ liệu vẫn nằm trên trình duyệt này')}
 }
-document.getElementById('authBtn').addEventListener('click',async()=>{if(!fb)return;
+async function authClick(){if(!fb)return;
   if(fb.user){await fb.U.signOut(fb.auth);return}
   try{await fb.U.signInWithPopup(fb.auth,new fb.U.GoogleAuthProvider())}
   catch(e){if(e&&e.code==='auth/popup-blocked')fb.U.signInWithRedirect(fb.auth,new fb.U.GoogleAuthProvider());
-    else if(!(e&&e.code==='auth/popup-closed-by-user'))setSync('err','Đăng nhập lỗi: '+((e&&e.code)||'không rõ'))}});
+    else if(!(e&&e.code==='auth/popup-closed-by-user'))setSync('err',e&&e.code==='auth/unauthorized-domain'?(location.protocol==='file:'?'Không đăng nhập được khi mở file trực tiếp. Mở trang trên GitHub Pages.':'Địa chỉ '+location.hostname+' chưa được phép đăng nhập. Mở trang trên GitHub Pages.'):'Đăng nhập lỗi: '+((e&&e.code)||'không rõ'))}}
+document.getElementById('authBtn').addEventListener('click',authClick);
 
 /* ---------- Derived numbers ---------- */
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const link=l=>'<a href="'+esc(l[1])+'">'+esc(l[0])+'</a>';
+const link=l=>'<a class="link-chip" href="'+esc(l[1])+'" target="_blank" rel="noopener">'+esc(l[0])+'</a>';
+const N0=new Intl.NumberFormat('vi-VN',{maximumFractionDigits:0});
+const N1=new Intl.NumberFormat('vi-VN',{minimumFractionDigits:1,maximumFractionDigits:1});
 const isDone=id=>!!state.done[id];
 const nextTask=()=>TASKS.find(t=>!isDone(t.id))||null;
+const doneCount=()=>TASKS.filter(t=>isDone(t.id)).length;
 function expectedSessions(){const s=parse(state.start),end=parse(today());let n=0;const d=new Date(s);
   for(let i=0;i<500&&d<end;i++){if(d.getDay()!==0)n++;d.setDate(d.getDate()+1)}return Math.min(n,TASKS.length)}
 function streak(){const days=new Set(Object.values(state.done));state.log.forEach(e=>days.add(e.date));
-  const d=new Date();if(!days.has(iso(d)))d.setDate(d.getDate()-1);let n=0;
+  const d=NOW();if(!days.has(iso(d)))d.setDate(d.getDate()-1);let n=0;
   for(let i=0;i<800;i++){const k=iso(d);if(days.has(k))n++;else if(d.getDay()!==0)break;d.setDate(d.getDate()-1)}return n}
+function phaseStats(pi){const ts=TASKS.filter(t=>t.w.p===pi),dn=ts.filter(t=>isDone(t.id)).length;return {total:ts.length,done:dn,pct:Math.round(dn/ts.length*100)}}
+const weekDone=w=>w.d.filter((_,i)=>isDone('w'+w.n+'d'+(i+1))).length;
+const logMinutes=log=>log.reduce((a,e)=>a+e.min,0);
+function daysBack(n){const out=[],d=NOW();d.setDate(d.getDate()-(n-1));for(let i=0;i<n;i++){out.push(iso(d));d.setDate(d.getDate()+1)}return out}
+function minutesByDay(n){const days=daysBack(n);return days.map(day=>state.log.filter(e=>e.date===day).reduce((a,e)=>a+e.min,0))}
+const PHASE_SHORT=['0 Chuẩn bị','1 Nền tảng','2 Công cụ','3 Toán và ML','4 Deep learning','5 AI Eng','6 Triển khai'];
+const CRIT=[['k','Khái niệm'],['c','Code'],['g','Gỡ lỗi'],['d','Kỷ luật']];
+const scoreCls=v=>v<=2?'neg':v===3?'warn':'pos';
+const scorePill=(key,label,v)=>'<span class="pill score '+scoreCls(v)+'" aria-label="'+label+' '+v+'" title="'+label+'">'+v+'</span>';
+/* Số phút lấy thẳng từ mục 5 của báo cáo; luật cứng cho điểm kỷ luật (CLAUDE.md) */
+function phutTuBaoCao(t){const m=String(t).match(/^\s*5\.[^\n]*?(\d{1,3})\s*(phút|ph\b|p\b|min)/im);const n=m?Number(m[1]):0;return n>0&&n<=600?n:0}
+const capKyLuat=m=>m>=120?5:m>=90?4:3;
 
-/* ---------- Render ---------- */
-function renderStats(){const done=TASKS.filter(t=>isDone(t.id)).length,total=TASKS.length,pct=Math.round(done/total*100);
-  const nt=nextTask(),exp=expectedSessions(),diff=done-exp,mins=state.log.reduce((a,e)=>a+e.min,0);
-  let cls='',big,sub;
-  if(parse(today())<parse(state.start)&&done===0){big='Chưa bắt đầu';sub='Lịch bắt đầu ngày '+vn(state.start)}
-  else if(diff>0){cls='good';big='Nhanh '+diff+' buổi';sub='so với lịch 6 buổi mỗi tuần'}
-  else if(diff<0){cls='warn';big='Chậm '+(-diff)+' buổi';sub='học tiếp từ chỗ dừng, không học bù gấp đôi'}
-  else{cls='good';big='Đúng lịch';sub='so với lịch 6 buổi mỗi tuần'}
-  document.getElementById('stats').innerHTML=
-   '<div class="stat"><span>Tiến độ lõi</span><b class="num">'+pct+'%</b><div class="bar"><i style="width:'+pct+'%"></i></div><span class="num">'+done+' / '+total+' buổi</span></div>'+
-   '<div class="stat"><span>Đang học</span><b>'+(nt?'Tuần '+nt.w.n:'Hoàn thành')+'</b><span>'+(nt?'Giai đoạn '+nt.w.p+': '+esc(P[nt.w.p].name):'Đã xong cả 52 tuần')+'</span></div>'+
-   '<div class="stat '+cls+'"><span>So với lịch</span><b>'+big+'</b><span>'+sub+'</span></div>'+
-   '<div class="stat"><span>Chuỗi ngày học</span><b class="num">'+streak()+' ngày</b><span class="num">Tổng '+(mins/60).toFixed(1)+' giờ đã ghi</span></div>'}
-function reportText(nt){return 'BÁO CÁO NGÀY — Tuần '+nt.w.n+' / Buổi '+(nt.i+1)+'\nViệc hôm nay: '+nt.t+'\n1. Hôm nay tôi học: \n2. Tôi đã làm ra: \n3. Giải thích lại bằng lời của tôi: \n4. Chỗ tôi bị kẹt: \n5. Thời gian học thực tế: __ phút'}
-function renderToday(){const el=document.getElementById('today'),nt=nextTask();
-  if(!nt){el.innerHTML='<span class="eyebrow">Hoàn thành</span><div class="task">Bạn đã xong toàn bộ 52 tuần của lõi chính.</div>';return}
-  const keep=document.getElementById('report'),kept=keep&&keep.dataset.id===nt.id?keep.value:null;
-  el.innerHTML='<span class="eyebrow">Buổi học kế tiếp · Tuần '+nt.w.n+' · Buổi '+(nt.i+1)+' / 6</span>'+
-   '<div class="task">'+esc(nt.t)+'</div>'+
-   '<div class="muted">'+esc(nt.w.t)+'. Việc nộp cuối tuần: '+esc(nt.w.out)+'.</div>'+
-   '<div class="links">'+nt.w.r.map(link).join('')+'</div>'+
-   '<div class="row"><button class="btn primary" type="button" data-act="done" data-id="'+nt.id+'">Đánh dấu buổi này đã xong</button></div>'+
-   '<h3>Báo cáo ngày</h3>'+
-   '<textarea id="report" data-id="'+nt.id+'" aria-label="Mẫu báo cáo ngày"></textarea>'+
-   '<div class="row"><button class="btn" type="button" data-act="aigrade">Chấm bằng AI trên máy</button><button class="btn" type="button" data-act="copy">Sao chép báo cáo</button><span class="note" id="copyNote">Điền xong: chấm bằng trợ lý AI trên máy, hoặc sao chép và dán cho Claude chấm.</span></div>';
-  document.getElementById('report').value=kept!==null?kept:reportText(nt)}
-function renderRail(){document.getElementById('rail').innerHTML=P.map((p,i)=>{const ts=TASKS.filter(t=>t.w.p===i),dn=ts.filter(t=>isDone(t.id)).length,pct=Math.round(dn/ts.length*100);
-  return '<button class="phase" type="button" data-phase="'+i+'" aria-pressed="'+(i===selPhase)+'"><span class="t">'+i+'. '+esc(p.name)+'</span><div class="bar"><i style="width:'+pct+'%"></i></div><span class="m"><span>Tuần '+(p.from===p.to?p.from:p.from+' đến '+p.to)+'</span><span class="num">'+pct+'%'+(isDone('g'+i)?' · qua cổng':'')+'</span></span></button>'}).join('')}
-function renderWeeks(){const nt=nextTask(),p=P[selPhase];
-  const html=W.filter(w=>w.p===selPhase).map(w=>{const dn=w.d.filter((_,i)=>isDone('w'+w.n+'d'+(i+1))).length,cur=nt&&nt.w.n===w.n;
-   return '<details class="week'+(cur?' cur':'')+(dn===6?' full':'')+'" data-week="'+w.n+'"'+(openWeeks.has(w.n)?' open':'')+'><summary><span class="n">Tuần '+w.n+'</span><span class="t">'+esc(w.t)+'</span><span class="c">'+dn+' / 6</span></summary>'+
-    '<div class="wbody"><div class="links">'+w.r.map(link).join('')+'</div><div class="out"><b>Việc nộp:</b> '+esc(w.out)+'</div><ul class="tasks">'+
-    w.d.map((t,i)=>{const id='w'+w.n+'d'+(i+1),d=isDone(id);return '<li><label class="'+(d?'done':'')+(nt&&nt.id===id?' next':'')+'"><input type="checkbox" id="c-'+id+'" data-id="'+id+'"'+(d?' checked':'')+'><span class="k">Buổi '+(i+1)+'</span><span class="x">'+esc(t)+(d?' <span class="num muted">'+vn(state.done[id])+'</span>':'')+'</span></label></li>'}).join('')+
-    '</ul></div></details>'}).join('');
-  const gid='g'+selPhase;
-  document.getElementById('weeks').innerHTML='<h2>Giai đoạn '+selPhase+': '+esc(p.name)+'</h2>'+html+
-   '<div class="card gate"><h3>Cổng qua giai đoạn</h3><label><input type="checkbox" id="c-'+gid+'" data-id="'+gid+'"'+(isDone(gid)?' checked':'')+'><span>'+esc(p.gate)+' <span class="muted">Đánh dấu sau khi Claude chấm đạt.</span></span></label></div>'}
-function renderLog(){const el=document.getElementById('logOut'),log=state.log.slice().sort((a,b)=>a.date<b.date?1:a.date>b.date?-1:0);
-  if(!log.length){el.innerHTML='<p class="note" style="margin:0">Chưa có buổi nào. Buổi đầu tiên bạn ghi sẽ hiện ở đây.</p>';return}
-  const last=log.slice(0,7),avg=k=>(last.reduce((a,e)=>a+e[k],0)/last.length).toFixed(1),bars=log.slice(0,14).reverse(),mx=Math.max(120,...bars.map(e=>e.min));
-  const pill=v=>'<span class="pill s'+v+'">'+v+'</span>';
-  el.innerHTML='<div class="row" style="justify-content:space-between;align-items:flex-end"><div class="note">Trung bình '+last.length+' buổi gần nhất: khái niệm <b class="num">'+avg('k')+'</b>, code <b class="num">'+avg('c')+'</b>, gỡ lỗi <b class="num">'+avg('g')+'</b>, kỷ luật <b class="num">'+avg('d')+'</b>, <b class="num">'+Math.round(avg('min'))+'</b> phút mỗi buổi</div>'+
-   '<div class="mins" role="img" aria-label="Số phút học của '+bars.length+' buổi gần nhất" style="width:'+Math.min(bars.length*26,340)+'px">'+bars.map(e=>'<i title="'+vn(e.date)+': '+e.min+' phút" style="height:'+Math.round(e.min/mx*100)+'%"></i>').join('')+'</div></div>'+
-   '<div class="tablebox"><table><thead><tr><th>Ngày</th><th>Tuần</th><th class="num">Phút</th><th>Khái niệm</th><th>Code</th><th>Gỡ lỗi</th><th>Kỷ luật</th><th>Ghi chú</th><th></th></tr></thead><tbody>'+
-   log.map(e=>'<tr><td class="num" style="text-align:left">'+vn(e.date)+'</td><td class="num" style="text-align:left">'+(e.week||'')+'</td><td class="num">'+e.min+'</td><td>'+pill(e.k)+'</td><td>'+pill(e.c)+'</td><td>'+pill(e.g)+'</td><td>'+pill(e.d)+'</td><td>'+esc(e.note)+'</td><td><button class="btn small" type="button" data-act="dellog" data-id="'+esc(e.id)+'" aria-label="Xoá buổi ngày '+vn(e.date)+'">Xoá</button></td></tr>').join('')+'</tbody></table></div>'}
-function renderBranches(){document.getElementById('branches').innerHTML=B.map(b=>{const dn=b.s.filter((_,i)=>isDone('b-'+b.id+'-'+i)).length;
-  return '<div class="card"><div class="row" style="justify-content:space-between"><h3>'+esc(b.name)+'</h3><span class="num muted">'+dn+' / '+b.s.length+'</span></div><span class="note">'+esc(b.time)+'</span><ul class="tasks">'+
-   b.s.map((s,i)=>{const id='b-'+b.id+'-'+i,d=isDone(id);return '<li><label class="'+(d?'done':'')+'" style="grid-template-columns:22px 1fr"><input type="checkbox" id="c-'+id+'" data-id="'+id+'"'+(d?' checked':'')+'><span><span class="x">'+esc(s[0])+'</span>'+(s[1]?' · '+link(s[1]):'')+'</span></label></li>'}).join('')+
-   '</ul><div class="out"><b>Sản phẩm:</b> '+esc(b.out)+'</div></div>'}).join('')}
-function render(){const nt=nextTask();if(selPhase===null){selPhase=nt?nt.w.p:6;if(nt)openWeeks.add(nt.w.n)}
-  renderStats();renderToday();renderRail();renderWeeks();renderLog();renderBranches();
-  const s=document.getElementById('s-start');if(document.activeElement!==s)s.value=state.start}
+/* ---------- Trạng thái giao diện (không nằm trong state đồng bộ) ---------- */
+const RM=matchMedia('(prefers-reduced-motion: reduce)');
+const EASE='cubic-bezier(0.2, 0.8, 0.2, 1)';
+let cur='hom-nay',query={},pendingRender=false,lastToggled=null,lastAdded=null,prevPct=null,prevTab=null,undo=null,noteOpen=false,logRange=7;
+const scrolls={},reportDraft={};
+let logDraft=null,copyNoteText='',lastGrade=null,askDraft='',focusWeek=null,savedStamp=false;
+function defaultLog(){return {date:today(),min:120,k:3,c:3,g:3,d:3,note:''}}
+function reportTask(){const nt=nextTask();return TASKS.filter(t=>state.done[t.id]===today()).pop()||nt}
+function reportText(t){return 'BÁO CÁO NGÀY: Tuần '+t.w.n+' / Buổi '+(t.i+1)+'\nViệc hôm nay: '+t.t+'\n1. Hôm nay tôi học: \n2. Tôi đã làm ra: \n3. Giải thích lại bằng lời của tôi: \n4. Chỗ tôi bị kẹt: \n5. Thời gian học thực tế: __ phút'}
+
+/* ---------- Views ---------- */
+function titleRow(title,sub,action){return '<div class="title-row"><div><h1>'+title+'</h1>'+(sub?'<p class="sub">'+sub+'</p>':'')+'</div>'+(action||'')+'</div>'}
+const notice=()=>SAMPLE?'<p class="notice">Dữ liệu mẫu để xem trước giao diện. Thay đổi trên trang này không được lưu.</p>':'';
+function finding(){const nt=nextTask(),dn=doneCount(),diff=dn-expectedSessions(),d=NOW();
+  if(!nt)return 'Đã xong cả 52 tuần của lõi chính.';
+  const where='Học tiếp Tuần '+nt.w.n+' · Buổi '+(nt.i+1)+'.';
+  if(parse(today())<parse(state.start)&&dn===0)return 'Lịch bắt đầu ngày '+vn(state.start)+'. Buổi đầu: Tuần 1 · Buổi 1.';
+  if(d.getDay()===0)return 'Hôm nay Chủ nhật: nghỉ ngơi. Buổi kế tiếp: Tuần '+nt.w.n+' · Buổi '+(nt.i+1)+'.';
+  if(diff<0)return '<span class="warn">Chậm '+(-diff)+' buổi</span> so với lịch. '+where;
+  if(diff>0)return '<span class="good">Nhanh '+diff+' buổi</span> so với lịch. '+where;
+  return '<span class="good">Đúng lịch.</span> '+where}
+
+function stripSVG(){const CELL=11,STEP=13,PG=8,nt=nextTask();let x=0,cells='',labs='',lines='',count=0;const cols=[];
+  P.forEach((p,pi)=>{const x0=x;
+    W.filter(w=>w.p===pi).forEach(w=>{cols.push({n:w.n,x});
+      w.d.forEach((_,i)=>{const id='w'+w.n+'d'+(i+1),y=i*STEP;
+        if(isDone(id)){count++;cells+='<rect class="c-done" data-id="'+id+'" x="'+x+'" y="'+y+'" width="'+CELL+'" height="'+CELL+'" rx="2"/>'}
+        else if(nt&&nt.id===id)cells+='<rect class="c-next" x="'+(x+1)+'" y="'+(y+1)+'" width="'+(CELL-2)+'" height="'+(CELL-2)+'" rx="2"/>';
+        else cells+='<rect class="c-todo" x="'+(x+0.5)+'" y="'+(y+0.5)+'" width="'+(CELL-1)+'" height="'+(CELL-1)+'" rx="2"/>'});
+      x+=STEP});
+    lines+='<line class="'+(isDone('g'+pi)?'g-done':'g-todo')+'" x1="'+(x)+'" x2="'+(x)+'" y1="0" y2="'+(6*STEP-2)+'"><title>Cổng giai đoạn '+pi+(isDone('g'+pi)?': đã qua':': chưa qua')+'</title></line>';
+    const wpx=x-x0;labs+='<text class="s-lab" x="'+x0+'" y="'+(6*STEP+14)+'">'+esc(wpx>=60?PHASE_SHORT[pi]:String(pi))+'</text>';
+    if(pi<P.length-1)x+=PG});
+  stripCols=cols;
+  return {svg:'<svg viewBox="0 0 '+(x+2)+' 96" role="img" aria-hidden="true" focusable="false"><g class="hov"></g>'+cells+lines+labs+'</svg>',count,width:x+2}}
+let stripCols=[];
+
+function overviewCard(){const nt=nextTask(),dn=doneCount(),exp=expectedSessions(),diff=dn-exp,pct=Math.round(dn/TASKS.length*100),mins=logMinutes(state.log),st=streak();
+  const strip=stripSVG(),started=!(parse(today())<parse(state.start)&&dn===0);
+  const cmp=!started?'<span class="dash" aria-hidden="true">—</span>':diff<0?'<span class="warn-ink">Chậm <span class="mono">'+(-diff)+'</span><small>buổi</small></span>':diff>0?'<span class="good-ink">Nhanh <span class="mono">'+diff+'</span><small>buổi</small></span>':'<span class="good-ink">Đúng lịch</span>';
+  const kpi=(label,value,cap)=>'<div class="kpi"><div class="kpi-label">'+label+'</div><div class="kpi-value">'+value+'</div>'+cap+'</div>';
+  return '<section class="panel overview" id="stats" aria-labelledby="h-ov"><h2 class="sr-only" id="h-ov">Tổng quan</h2><div class="kpis bare">'+
+    kpi('Tiến độ lõi','<span class="mono">'+pct+'</span><small>%</small>','<div class="bar" aria-hidden="true"><i id="pbar" style="width:'+(dn/TASKS.length*100).toFixed(2)+'%"></i></div><div class="bar-ends"><span class="mono">'+dn+'</span><span><span class="mono">'+TASKS.length+'</span> buổi</span></div>')+
+    kpi('Đang học',nt?'Tuần <span class="mono">'+nt.w.n+'</span>':'Đã xong','<div class="kpi-cap">'+(nt?'Giai đoạn '+nt.w.p+': '+esc(P[nt.w.p].name):'Cả 52 tuần')+'</div>')+
+    kpi('So với lịch',cmp,'<div class="kpi-cap">'+(started?'so với <span class="mono">'+exp+'</span> buổi theo lịch':'Chưa bắt đầu · từ <span class="mono">'+vn(state.start)+'</span>')+'</div>')+
+    kpi('Chuỗi ngày học','<span class="mono">'+st+'</span><small>ngày</small>','<div class="kpi-cap"><span class="mono">'+N1.format(mins/60)+'</span> giờ đã ghi</div>')+
+    '</div><div class="strip-wrap"><div class="strip-head"><h3 class="h3">Lộ trình 312 buổi</h3><div class="legend"><span><i class="sw done"></i>Đã xong</span><span><i class="sw next"></i>Kế tiếp</span><span><i class="sw todo"></i>Chưa làm</span></div></div>'+
+    '<a class="strip" id="strip" href="#/lo-trinh?tuan='+(nt?nt.w.n:52)+'" aria-label="Lộ trình 312 buổi: '+strip.count+' buổi đã xong'+(nt?', buổi kế tiếp là Tuần '+nt.w.n+' Buổi '+(nt.i+1):'')+'. Mở lộ trình.">'+strip.svg+'</a><div class="strip-tip" id="stripTip" hidden></div></div></section>'}
+
+function gradeBlock(rt){const g=lastGrade;if(!g||!rt||g.id!==rt.id)return '';
+  if(g.status==='loading')return '<div class="grade" aria-live="polite"><div class="h3">Đang chấm bằng '+esc(aiCfg.model)+'</div><span class="skel" style="width:70%"></span><span class="skel" style="width:90%"></span><span class="skel" style="width:55%"></span></div>';
+  if(g.status==='error')return '<div class="grade err" role="alert"><p>'+esc(g.msg)+'</p><div class="actions"><button class="btn" type="button" data-act="aigrade">Thử lại</button></div></div>';
+  return '<div class="grade" aria-live="polite"><div class="row-head"><h3 class="h3">Kết quả chấm</h3><a class="link-chip" href="#/tro-ly">Trả lời trong Trợ lý AI</a></div><div class="scores">'+
+    CRIT.map(([k,l])=>'<span>'+l+' '+scorePill(k,l,g.s[k])+'</span>').join('')+'</div>'+
+    '<p>'+esc(g.why)+'</p><p><b>Sửa chỗ hiểu sai:</b> '+esc(g.sua)+'</p><p><b>3 câu kiểm tra nhanh</b>, trả lời trong Trợ lý AI:</p><ol>'+g.qs.map(q=>'<li>'+esc(q)+'</li>').join('')+'</ol><p><b>Việc ngày mai:</b> '+esc(g.mai)+'</p></div>'}
+
+function todayCard(){const nt=nextTask(),rt=reportTask();
+  if(!nt&&!rt)return '<section class="panel today" id="today"><h2 class="task">Bạn đã xong cả 52 tuần của lõi chính.</h2></section>';
+  const t=nt||rt,grading=!!(lastGrade&&lastGrade.status==='loading');
+  if(!logDraft)logDraft=defaultLog();
+  const L=logDraft,loggedToday=state.log.some(e=>e.date===today());
+  const sel=(id,label,v)=>'<div class="field"><label for="'+id+'">'+label+'</label><div class="select"><select class="input" id="'+id+'">'+[1,2,3,4,5].map(n=>'<option value="'+n+'"'+(n===Number(v)?' selected':'')+'>'+n+'</option>').join('')+'</select></div></div>';
+  const draft=rt?(reportDraft[rt.id]!=null?reportDraft[rt.id]:reportText(rt)):'';
+  return '<section class="panel today" id="today" aria-labelledby="h-today">'+
+    (nt?'<div class="today-head"><span class="mono">T'+nt.w.n+'·B'+(nt.i+1)+'</span><span>Tuần '+nt.w.n+' · Buổi '+(nt.i+1)+'/6</span><span class="pill next">'+(NOW().getDay()!==0&&parse(today())>=parse(state.start)?'Hôm nay':'Kế tiếp')+'</span></div>'+
+    '<h2 class="task" id="h-today">'+esc(nt.t)+'</h2>'+
+    (NOW().getDay()===0?'<p>Hôm nay Chủ nhật: nghỉ ngơi. Buổi kế tiếp vẫn là Tuần '+nt.w.n+' · Buổi '+(nt.i+1)+'.</p>':'')+
+    '<p>'+esc(nt.w.t)+'. Việc nộp cuối tuần: '+esc(nt.w.out)+'.</p><div class="res">'+nt.w.r.map(link).join('')+'</div>':'<h2 class="task" id="h-today">Bạn đã xong cả 52 tuần của lõi chính.</h2>')+
+    (rt?'<hr class="sep"><div class="row-head report-label"><h3 class="h3"><label for="report">Báo cáo 5 mục · Tuần '+rt.w.n+' · Buổi '+(rt.i+1)+'</label></h3></div>'+
+    '<textarea id="report" class="textarea" data-id="'+rt.id+'" spellcheck="false">'+esc(draft)+'</textarea>'+
+    '<div class="actions"><button class="btn" type="button" data-act="aigrade"'+(grading||aiAbort?' disabled':'')+'>'+(grading?'Đang chấm…':'Chấm bằng AI trên máy')+'</button>'+(grading?'<button class="btn" type="button" data-act="stopgrade">Dừng</button>':'')+
+    '<button class="btn" type="button" data-act="copy">Sao chép báo cáo</button><span class="note" id="copyNote" role="status">'+esc(copyNoteText)+'</span></div>'+gradeBlock(rt):'')+
+    '<hr class="sep"><div class="row-head"><h3 class="h3">Ghi điểm hôm nay</h3>'+(loggedToday?'<span class="pill pos">Đã ghi điểm hôm nay</span>':'<span class="pill warn">Chưa ghi điểm hôm nay</span>')+'</div>'+
+    '<form class="logform" id="logForm"><div class="field"><label for="f-date">Ngày</label><input class="input" type="date" id="f-date" value="'+esc(L.date)+'" required></div>'+
+    '<div class="field"><label for="f-min">Số phút</label><input class="input mono" type="number" id="f-min" min="0" max="600" step="5" value="'+esc(L.min)+'" required></div>'+
+    sel('f-k','Khái niệm',L.k)+sel('f-c','Code',L.c)+sel('f-g','Gỡ lỗi',L.g)+sel('f-d','Kỷ luật',L.d)+
+    '<div class="field wide"><label for="f-note">Ghi chú</label><input class="input" type="text" id="f-note" maxlength="300" value="'+esc(L.note)+'" placeholder="Điều cần ôn lại"></div>'+
+    '<div class="submit"><button class="btn" type="submit">Thêm buổi học</button></div></form></section>'}
+
+function railWeek(){const nt=nextTask(),w=nt?nt.w:W[W.length-1],cnt=weekDone(w);
+  return '<section class="rail-sec" aria-labelledby="h-wk"><div class="rail-head"><h2 id="h-wk">Tuần '+w.n+'</h2><span class="pill '+(cnt===6?'pos':'')+'">'+(cnt===6?'Đủ 6 buổi':'<span class="mono">'+cnt+'</span>/6')+'</span></div>'+
+    '<div class="panel flush"><ul class="trows">'+w.d.map((t,i)=>trow('w'+w.n+'d'+(i+1),'B'+(i+1),t,nt)).join('')+'</ul><div class="foot"><a class="btn ghost" href="#/lo-trinh?tuan='+w.n+'">Mở lộ trình</a></div></div></section>'}
+function trow(id,code,t,nt){const d=isDone(id),isNext=nt&&nt.id===id;
+  return '<li class="trow'+(isNext?' next':'')+(d?' is-done':'')+'"><input type="checkbox" class="check" id="c-'+id+'" data-id="'+id+'"'+(d?' checked':'')+' aria-label="'+esc(code+': '+t)+'"><span class="mono code">'+code+'</span><span class="tname" title="'+esc(t)+'">'+esc(t)+'</span><span class="meta">'+(d?'<span class="mono">'+vn(state.done[id])+'</span>':isNext?'<span class="pill next">Kế tiếp</span>':'')+'</span></li>'}
+
+function aiShort(){return aiState.cls==='ok'?'Đã kết nối · '+aiCfg.model:aiState.cls==='busy'?'Đang kiểm tra trợ lý':'Trợ lý chưa kết nối'}
+function railAI(){const n=aiNotes.slice().sort((a,b)=>(b.at||0)-(a.at||0))[0];let body;
+  if(!SAMPLE&&FIREBASE_CONFIG&&!(fb&&fb.user))body='<p class="empty-line">Đăng nhập để thấy nhận xét tự động.</p>';
+  else if(!n)body='<p class="empty-line">Chưa có nhận xét tự động. Trợ lý viết lúc 21:45 mỗi tối khi máy bật.</p>';
+  else body='<div class="note-card"><div class="when mono">'+esc(new Date(Number(n.at)||0).toLocaleString('vi-VN',{hour:'2-digit',minute:'2-digit',day:'2-digit',month:'2-digit'}))+'</div><p class="note-text'+(noteOpen?'':' clamp')+'" id="noteText">'+esc(String(n.text||''))+'</p><button class="btn ghost" type="button" data-act="note-toggle" aria-expanded="'+noteOpen+'" aria-controls="noteText">'+(noteOpen?'Thu gọn':'Xem đủ')+'</button></div>';
+  return '<section class="rail-sec" aria-labelledby="h-ai"><div class="rail-head"><h2 id="h-ai">Trợ lý AI</h2><span class="ai-line" id="aiRail"><i class="dot '+aiState.cls+'"></i>'+esc(aiShort())+'</span></div>'+
+    '<div class="panel flush">'+body+'<div class="foot"><a class="btn ghost" href="#/tro-ly">Hỏi trợ lý</a></div></div></section>'}
+function railScores(){const rows=state.log.slice().sort((a,b)=>a.date<b.date?1:a.date>b.date?-1:0).slice(0,5);
+  const body=rows.length?rows.map(e=>'<div class="srow"><span class="mono">'+vn(e.date)+'</span><span class="muted mono">T'+e.week+'</span><span class="pills">'+CRIT.map(([k,l])=>scorePill(k,l,e[k])).join('')+'</span><span class="min"><span class="mono">'+N0.format(e.min)+'</span> <span class="unit">phút</span></span></div>').join(''):'<p class="empty-line">Chưa có buổi nào được chấm. Học xong buổi đầu, điền báo cáo rồi bấm Chấm bằng AI.</p>'+CRIT.map(([k,l])=>'<div class="crow"><span>'+l+'</span><span class="dash">—</span></div>').join('')+'<p class="rule-note">Thang 1 đến 5. Kỷ luật: dưới 90 phút tối đa 3, 90 đến 119 phút tối đa 4, từ 120 phút mới được 5.</p>';
+  return '<section class="rail-sec'+(rows.length?' fill':'')+'" aria-labelledby="h-sc"><div class="rail-head"><h2 id="h-sc">Điểm gần đây</h2><span class="note">khái niệm · code · gỡ lỗi · kỷ luật</span></div><div class="panel flush">'+body+'<div class="foot"><a class="btn ghost" href="#/nhat-ky">Xem tất cả</a></div></div></section>'}
+
+function viewToday(){const nt=nextTask();
+  return titleRow('Hôm nay',finding(),nt?'<button class="btn primary" type="button" data-act="done" data-id="'+nt.id+'">Đánh dấu buổi này đã xong</button>':'')+notice()+
+    '<div class="with-rail"><div class="stack">'+overviewCard()+todayCard()+'</div><div class="stack rail">'+railWeek()+railAI()+railScores()+'</div></div>'}
+
+function chatHTML(){if(!chat.length)return '<p class="empty">Hỏi bất cứ điều gì về buổi '+(nextTask()?'Tuần '+nextTask().w.n+' · Buổi '+(nextTask().i+1):'học')+'.</p>';
+  return chat.map((m,i)=>'<div class="msg '+m.role+(m.fresh?' new':'')+'">'+(m.live&&!m.content?'<span class="muted">Đang nghĩ…</span>':md(m.content))+'</div>').join('')}
+function notesList(){if(!SAMPLE&&FIREBASE_CONFIG&&!(fb&&fb.user))return '<li class="muted">Đăng nhập để thấy nhận xét tự động.</li>';
+  const items=aiNotes.slice().sort((a,b)=>(b.at||0)-(a.at||0)).slice(0,3);
+  if(!items.length)return '<li class="muted">Chưa có nhận xét tự động. Trợ lý viết lúc 21:45 mỗi tối khi máy bật.</li>';
+  return items.map(n=>'<li><div class="mono note">'+esc(new Date(Number(n.at)||0).toLocaleString('vi-VN',{hour:'2-digit',minute:'2-digit',day:'2-digit',month:'2-digit'}))+'</div><p class="note-text">'+md(String(n.text||''))+'</p></li>').join('')}
+function viewAI(){const busy=!!aiAbort;
+  return '<div class="title-row"><div><h1>Trợ lý AI</h1><p class="sub ai-sub '+aiState.cls+'" id="aiStatus" role="status">'+esc(aiState.text)+'</p></div></div>'+notice()+
+    '<div class="with-rail"><section class="panel chatpanel" aria-labelledby="h-chat"><h2 class="sr-only" id="h-chat">Cuộc trò chuyện</h2>'+
+    '<div class="chat" id="chat" aria-live="polite">'+chatHTML()+'</div>'+
+    '<form id="askForm" class="form-grid"><label class="sr-only" for="askText">Câu hỏi cho trợ lý</label><textarea id="askText" class="textarea ask-text" placeholder="Ví dụ: con trỏ trong C là gì? Enter để gửi, Shift+Enter xuống dòng.">'+esc(askDraft)+'</textarea>'+
+    '<div class="actions"><button class="btn" type="submit" id="askBtn"'+(busy?' disabled':'')+'>Gửi</button><button class="btn" type="button" id="stopBtn"'+(busy?'':' hidden')+'>Dừng</button><button class="btn ghost" type="button" id="clearChat"'+(busy?' disabled':'')+'>Xoá cuộc trò chuyện</button></div></form></section>'+
+    '<div class="stack rail"><section class="rail-sec" id="aiNotesBox" aria-labelledby="h-notes"><div class="rail-head"><h2 id="h-notes">Nhận xét tự động</h2></div><div class="panel flush"><ul class="notes" id="aiNotes">'+notesList()+'</ul></div></section>'+
+    '<section class="rail-sec fill" aria-labelledby="h-conn"><div class="rail-head"><h2 id="h-conn">Kết nối trên thiết bị này</h2></div><div class="panel form-grid">'+
+    '<div class="field"><label for="ai-url">Địa chỉ Ollama</label><input class="input" type="url" id="ai-url" spellcheck="false" value="'+esc(aiCfg.url)+'"></div>'+
+    '<div class="field"><label for="ai-model">Tên model</label><input class="input" type="text" id="ai-model" spellcheck="false" value="'+esc(aiCfg.model)+'"></div>'+
+    '<div class="actions"><button class="btn" type="button" id="aiTest">Lưu và kiểm tra kết nối</button></div><p class="note">Trên điện thoại: hỏi trợ lý qua bot Telegram.</p></div></section></div></div>'}
+
+function viewRoadmap(){const nt=nextTask(),dn=doneCount();
+  if(selPhase===null)selPhase=nt?nt.w.p:P.length-1;
+  if(nt&&!openWeeks.size)openWeeks.add(nt.w.n);
+  const p=P[selPhase],ps=phaseStats(selPhase),gid='g'+selPhase;
+  const tabs=P.map((x,i)=>{const s=phaseStats(i);return '<button class="ptab" type="button" data-phase="'+i+'" aria-pressed="'+(i===selPhase)+'">'+i+'. '+esc(x.name)+'<span class="pct mono">'+s.pct+'%'+(isDone('g'+i)?' · qua cổng':'')+'</span></button>'}).join('');
+  const weeks=W.filter(w=>w.p===selPhase).map(w=>{const c=weekDone(w),isCur=nt&&nt.w.n===w.n;
+    return '<details class="week'+(isCur?' cur':'')+(c===6?' full':'')+'" data-week="'+w.n+'"'+(openWeeks.has(w.n)?' open':'')+'><summary><span class="mono wn">Tuần '+w.n+'</span><span class="wt">'+esc(w.t)+'</span><span class="mono wc">'+c+'/6</span><span class="chev" aria-hidden="true"></span></summary>'+
+      '<div class="wbody"><div class="res">'+w.r.map(link).join('')+'</div><p class="out">Việc nộp cuối tuần: '+esc(w.out)+'</p><ul class="trows">'+w.d.map((t,i)=>trow('w'+w.n+'d'+(i+1),'B'+(i+1),t,nt)).join('')+'</ul></div></details>'}).join('');
+  return titleRow('Lộ trình','<span class="mono">'+dn+'</span> / <span class="mono">'+TASKS.length+'</span> buổi · '+(nt?'Tuần '+nt.w.n+' đang học':'đã xong cả lộ trình'))+notice()+
+    '<div class="ptabs" id="rail" role="group" aria-label="Chọn giai đoạn">'+tabs+'<span class="tab-ind" id="tabInd" aria-hidden="true"></span></div>'+
+    '<div class="phase-sum"><span>Giai đoạn '+selPhase+': '+esc(p.name)+' · Tuần '+(p.from===p.to?p.from:p.from+' đến '+p.to)+' · <span class="mono">'+ps.done+'</span>/<span class="mono">'+ps.total+'</span> buổi</span><div class="bar" aria-hidden="true"><i style="width:'+(ps.done/ps.total*100).toFixed(2)+'%"></i></div></div>'+
+    '<div class="weeks" id="weeks">'+weeks+'</div>'+
+    '<div class="gate"><input type="checkbox" class="check" id="c-'+gid+'" data-id="'+gid+'"'+(isDone(gid)?' checked':'')+' aria-label="Đã qua cổng giai đoạn '+selPhase+'"><div><h3 class="h3">Cổng qua giai đoạn '+selPhase+(isDone(gid)?' · <span class="good-ink">đã qua ngày '+vn(state.done[gid])+'</span>':'')+'</h3><p>'+esc(p.gate)+'</p><p class="note">Đánh dấu sau khi được chấm đạt.</p></div></div>'}
+
+function logInRange(){const from=daysBack(logRange)[0];return state.log.filter(e=>e.date>=from&&e.date<=today())}
+function viewLog(){const rows=logInRange(),mins=logMinutes(rows),days=daysBack(logRange);
+  const avg=k=>rows.length?rows.reduce((a,e)=>a+e[k],0)/rows.length:null;
+  const avgs=CRIT.map(([k,l])=>({k,l,v:avg(k)}));
+  const weak=rows.length?avgs.slice().sort((a,b)=>a.v-b.v)[0]:null;
+  const sub=weak?'Tiêu chí yếu nhất '+logRange+' ngày qua: '+weak.l+' <span class="mono">'+N1.format(weak.v)+'</span>':'Chưa có buổi nào được chấm trong '+logRange+' ngày qua.';
+  const sorted=state.log.slice().map((e,i)=>({e,i})).sort((a,b)=>a.e.date<b.e.date?1:a.e.date>b.e.date?-1:b.i-a.i).filter(x=>x.e.date>=days[0]);
+  const table='<table class="logtable" id="logOut"><thead><tr><th>Ngày</th><th class="n">Tuần</th><th class="n">Phút</th>'+CRIT.map(([,l])=>'<th class="n">'+l+'</th>').join('')+'<th>Ghi chú</th><th><span class="sr-only">Xoá</span></th></tr></thead><tbody>'+
+    (sorted.length?sorted.map(({e})=>'<tr'+(lastAdded===e.id?' class="fresh"':'')+'><td class="date">'+vn(e.date)+'</td><td class="n">'+(e.week||'')+'</td><td class="n">'+N0.format(e.min)+'</td>'+CRIT.map(([k,l])=>'<td class="n '+k+'">'+scorePill(k,l,e[k])+'</td>').join('')+
+      '<td class="scores-cell">'+CRIT.map(([k,l])=>scorePill(k,l,e[k])).join('')+'</td><td class="note-cell">'+(e.note?esc(e.note):'<span class="muted">-</span>')+'</td><td class="act"><button class="btn ghost" type="button" data-act="dellog" data-id="'+esc(e.id)+'" aria-label="Xoá buổi ngày '+vn(e.date)+'">Xoá</button></td></tr>').join(''):
+      '<tr><td colspan="10" class="empty-cell">Chưa có buổi nào được chấm trong '+logRange+' ngày qua.</td></tr>')+'</tbody></table>';
+  return titleRow('Nhật ký điểm',sub)+notice()+
+    '<div class="filters"><div class="segmented" role="group" aria-label="Khoảng thời gian">'+[7,30].map(n=>'<button type="button" data-range="'+n+'" aria-pressed="'+(logRange===n)+'">'+n+' ngày</button>').join('')+'</div><span class="spacer"></span><span class="count"><span class="mono">'+rows.length+'</span> buổi · <span class="mono">'+N0.format(mins)+'</span> phút</span></div>'+
+    '<div class="with-rail"><section class="panel" aria-labelledby="h-min"><div class="chart-head"><h2 class="h2" id="h-min">Số phút mỗi ngày</h2><span class="meta mono">'+vn(days[0])+' đến '+vn(days[days.length-1])+'</span></div><div class="chart" id="minChart"></div></section>'+
+    '<section class="panel" aria-labelledby="h-avg"><div class="chart-head"><h2 class="h2" id="h-avg">Trung bình '+logRange+' ngày</h2></div>'+
+    avgs.map(a=>'<div class="avg-row'+(weak&&a.k===weak.k?' weak':'')+'"><span>'+a.l+'</span><span class="mono">'+(a.v==null?'<span class="muted">-</span>':N1.format(a.v))+'</span><div class="bar" aria-hidden="true"><i style="width:'+(a.v==null?0:((a.v-1)/4*100).toFixed(1))+'%"></i></div><div class="bar-ends"><span class="mono">1</span><span class="mono">5</span></div></div>').join('')+'</section></div>'+table}
+
+function viewBranches(){const open=isDone('g2');
+  return titleRow('Nhánh mở rộng','Mở sau Giai đoạn 2. Mỗi lần học một nhánh, xen 2 buổi mỗi tuần với lõi chính.')+notice()+
+    (open?'':'<p class="note" style="margin-bottom:16px"><span class="pill">Mở sau Giai đoạn 2</span></p>')+
+    '<div class="branches" id="branches">'+B.map(b=>{const n=b.s.filter((_,i)=>isDone('b-'+b.id+'-'+i)).length;
+      return '<section class="panel branch" aria-labelledby="h-b-'+b.id+'"><div class="row-head"><h2 class="h2" id="h-b-'+b.id+'">'+esc(b.name)+'</h2><span class="pill '+(n===b.s.length?'pos':'')+'"><span class="mono">'+n+'</span>/'+b.s.length+' bước</span></div><p class="note">'+esc(b.time)+'</p><p class="out">'+esc(b.out)+'</p>'+
+        '<ul class="trows">'+b.s.map((s,i)=>{const id='b-'+b.id+'-'+i,d=isDone(id);return '<li class="trow'+(d?' is-done':'')+'"><input type="checkbox" class="check" id="c-'+id+'" data-id="'+id+'"'+(d?' checked':'')+' aria-label="'+esc(s[0])+'"><span class="tname">'+esc(s[0])+(s[1]?'<br>'+link(s[1]):'')+'</span></li>'}).join('')+'</ul></section>'}).join('')+'</div>'}
+
+function viewSettings(){const fbOn=!SAMPLE&&!!FIREBASE_CONFIG&&!(window.claude&&window.claude.use);
+  return titleRow('Cài đặt','')+notice()+
+    '<div class="set-row"><div><h2>Lịch học</h2><p class="desc">Dùng để so tiến độ với lịch 6 buổi mỗi tuần, Chủ nhật nghỉ.</p></div><div class="set-panel"><div class="field"><label for="s-start">Ngày bắt đầu học</label><input class="input" type="date" id="s-start" value="'+esc(state.start)+'"></div>'+
+    '<p>Theo lịch này, đến hôm nay bạn lẽ ra xong <span class="mono">'+expectedSessions()+'</span> buổi. Bạn đã xong <span class="mono">'+doneCount()+'</span>.</p>'+(savedStamp?'<span class="stamp-ok" role="status">Đã lưu</span>':'')+'</div></div>'+
+    '<div class="set-row"><div><h2>Đồng bộ</h2><p class="desc">Đăng nhập Google để mọi thiết bị thấy cùng một tiến độ.</p></div><div class="set-panel"><span class="sync '+syncState.cls+'" data-sync><i></i><span data-sync-text>'+esc(syncState.text)+'</span></span>'+
+    (fbOn?'<div><button class="btn" type="button" data-act="auth">'+authLabel()+'</button></div>':'')+'</div></div>'+
+    '<div class="set-row"><div><h2>Lộ trình gốc</h2><p class="desc">Bản giải thích đầy đủ 52 tuần và cách học.</p></div><div class="set-panel"><a class="link-chip" href="https://claude.ai/artifact/2fNCcPWsHdnHyAq1WpZdqu" target="_blank" rel="noopener">Lộ trình AI Engineering từ gốc</a></div></div>'+
+    '<div class="set-row"><div><h2>Xoá dữ liệu</h2><p class="desc">Mọi ô đã đánh dấu và nhật ký điểm sẽ mất, không khôi phục được.</p></div><div class="set-panel"><div class="actions"><button class="btn danger'+(resetArmed?' armed':'')+'" id="reset" type="button">'+(resetArmed?'Bấm lần nữa để xoá hẳn':'Xoá toàn bộ dữ liệu')+'</button><span class="note" id="resetNote" role="status">'+(resetArmed?'Còn 6 giây để xác nhận.':'')+'</span></div></div></div>'}
+
+/* ---------- Router: mỗi mục điều hướng là một view thật; chỉ view đang mở nằm trong DOM ---------- */
+const VIEWS={'hom-nay':['Hôm nay',viewToday],'tro-ly':['Trợ lý AI',viewAI],'lo-trinh':['Lộ trình',viewRoadmap],'nhat-ky':['Nhật ký điểm',viewLog],'nhanh':['Nhánh mở rộng',viewBranches],'cai-dat':['Cài đặt',viewSettings]};
+function parseHash(){const m=location.hash.match(/^#\/([\w-]+)(?:\?(.*))?$/);const name=m&&VIEWS[m[1]]?m[1]:'hom-nay';return {name,q:Object.fromEntries(new URLSearchParams((m&&m[2])||''))}}
+function go(){const {name,q}=parseHash(),changed=name!==cur;
+  if(changed)scrolls[cur]=window.scrollY;
+  cur=name;query=q;
+  if(name==='lo-trinh'&&q.tuan){const w=W.find(x=>x.n===Number(q.tuan));if(w){selPhase=w.p;openWeeks.add(w.n);focusWeek=w.n}}
+  mount();
+  if(focusWeek!=null){const el=document.querySelector('details[data-week="'+focusWeek+'"]');focusWeek=null;if(el){el.scrollIntoView({block:'center'});el.querySelector('summary').focus({preventScroll:true})}}
+  else if(changed)window.scrollTo(0,scrolls[name]||0);
+  closeNav(false)}
+function typing(){const a=document.activeElement;return !!(a&&document.getElementById('view').contains(a)&&a.matches('textarea,select,input:not([type=checkbox])'))}
+function render(){if(typing()){pendingRender=true;return}mount()}
+function focusKey(el){if(!el||el===document.body)return null;
+  if(el.id)return '#'+CSS.escape(el.id);
+  const d=el.dataset||{};
+  if(d.act&&d.id)return '[data-act="'+d.act+'"][data-id="'+CSS.escape(d.id)+'"]';
+  if(d.act)return '[data-act="'+d.act+'"]';
+  if(d.id)return '[data-id="'+CSS.escape(d.id)+'"]';
+  if(d.phase!=null)return '[data-phase="'+d.phase+'"]';
+  if(d.range)return '[data-range="'+d.range+'"]';
+  if(el.tagName==='SUMMARY'&&el.parentElement.dataset.week)return 'details[data-week="'+el.parentElement.dataset.week+'"] > summary';
+  return null}
+function mount(){const [title,fn]=VIEWS[cur],view=document.getElementById('view');
+  const keep=view.contains(document.activeElement)?focusKey(document.activeElement):null;
+  const tabFrom=cur==='lo-trinh'?prevTab:null;
+  view.innerHTML=fn();
+  document.title=title+' · Sổ học AI Engineering';
+  document.getElementById('viewName').textContent=title;
+  for(const a of document.querySelectorAll('.nav-item'))a.toggleAttribute('aria-current',a.dataset.route===cur),a.dataset.route===cur&&a.setAttribute('aria-current','page');
+  const nt=nextTask();document.getElementById('scope').textContent=nt?'Tuần '+nt.w.n+' · Giai đoạn '+nt.w.p+': '+P[nt.w.p].name:'Đã xong cả 52 tuần';
+  paintAuth();paintAi();
+  if(cur==='hom-nay')afterToday();
+  if(cur==='lo-trinh')afterRoadmap(tabFrom);
+  if(cur==='nhat-ky')afterLog();
+  if(cur==='tro-ly'){const c=document.getElementById('chat');if(c)c.scrollTop=c.scrollHeight;chat.forEach(m=>{delete m.fresh})}
+  if(lastToggled){for(const el of view.querySelectorAll('[data-id="'+CSS.escape(lastToggled)+'"]'))animate(el,[{transform:'scale(0.82)',opacity:0.6},{transform:'none',opacity:1}],160);lastToggled=null}
+  lastAdded=null;
+  if(keep){const el=view.querySelector(keep);if(el)el.focus({preventScroll:true})}}
+document.addEventListener('focusout',()=>{setTimeout(()=>{if(pendingRender&&!typing()){pendingRender=false;mount()}},0)});
+function animate(el,frames,ms){if(RM.matches||!el||!el.animate)return null;return el.animate(frames,{duration:ms,easing:EASE})}
+
+function afterToday(){const dn=doneCount(),pct=dn/TASKS.length*100,bar=document.getElementById('pbar');
+  if(prevPct!=null&&prevPct!==pct)animate(bar,[{width:prevPct.toFixed(2)+'%'},{width:pct.toFixed(2)+'%'}],220);
+  prevPct=pct;
+  const strip=document.getElementById('strip'),tip=document.getElementById('stripTip');if(!strip)return;
+  const svgEl=strip.querySelector('svg'),hov=svgEl.querySelector('.hov');
+  const colAt=ev=>{const r=svgEl.getBoundingClientRect(),vb=svgEl.viewBox.baseVal,vx=(ev.clientX-r.left)/r.width*vb.width;return stripCols.find(c=>vx>=c.x-1&&vx<c.x+12)||null};
+  strip.addEventListener('mousemove',ev=>{const c=colAt(ev);
+    if(!c){tip.hidden=true;hov.innerHTML='';return}
+    const w=W.find(x=>x.n===c.n);hov.innerHTML='<rect class="col-hover" x="'+(c.x-1)+'" y="-2" width="13" height="80" rx="2"/>';
+    tip.textContent='Tuần '+c.n+': '+weekDone(w)+'/6 buổi xong';tip.hidden=false;
+    const wr=strip.parentElement.getBoundingClientRect();tip.style.left=Math.min(ev.clientX-wr.left+12,wr.width-tip.offsetWidth-8)+'px';tip.style.top=(ev.clientY-wr.top+14)+'px'});
+  strip.addEventListener('mouseleave',()=>{tip.hidden=true;hov.innerHTML=''});
+  strip.addEventListener('click',ev=>{const c=colAt(ev);if(c){ev.preventDefault();location.hash='#/lo-trinh?tuan='+c.n}});
+  const nt=nextTask();if(nt&&strip.scrollWidth>strip.clientWidth){const c=stripCols.find(x=>x.n===nt.w.n);if(c)strip.scrollLeft=Math.max(0,c.x/svgEl.viewBox.baseVal.width*strip.scrollWidth-strip.clientWidth/2)}}
+function afterRoadmap(from){const rail=document.getElementById('rail'),ind=document.getElementById('tabInd'),on=rail&&rail.querySelector('[aria-pressed="true"]');if(!on)return;
+  const to={left:on.offsetLeft,width:on.offsetWidth};ind.style.left=to.left+'px';ind.style.width=to.width+'px';
+  if(from&&(from.left!==to.left))animate(ind,[{left:from.left+'px',width:from.width+'px'},{left:to.left+'px',width:to.width+'px'}],200);
+  prevTab=to;
+  /* chỉ cuộn hàng tab khi tab đang chọn bị khuất */
+  if(to.left<rail.scrollLeft||to.left+to.width>rail.scrollLeft+rail.clientWidth)rail.scrollLeft=Math.max(0,to.left-24)}
+function afterLog(){const el=document.getElementById('minChart');if(!el||!window.Charts)return;
+  const days=daysBack(logRange),vals=minutesByDay(logRange);
+  Charts.bars(el,{labels:days.map(vn),values:vals,format:v=>N0.format(v)+' phút',tickFormat:v=>N0.format(v),height:200,reference:{value:120,label:'120 phút'}})}
+
+/* ---------- Thanh điều hướng gập trên điện thoại và máy tính bảng ---------- */
+const navMQ=matchMedia('(max-width: 1100px)');
+function syncNavInert(){const sb=document.getElementById('sidebar');if(navMQ.matches&&!sb.classList.contains('open'))sb.setAttribute('inert','');else sb.removeAttribute('inert')}
+function openNav(){const sb=document.getElementById('sidebar');sb.classList.add('open');sb.removeAttribute('inert');document.getElementById('backdrop').classList.add('show');document.getElementById('menuBtn').setAttribute('aria-expanded','true');const a=sb.querySelector('[aria-current="page"]')||sb.querySelector('.nav-item');a&&a.focus()}
+function closeNav(returnFocus){const sb=document.getElementById('sidebar');if(!sb.classList.contains('open'))return;sb.classList.remove('open');document.getElementById('backdrop').classList.remove('show');document.getElementById('menuBtn').setAttribute('aria-expanded','false');syncNavInert();if(returnFocus)document.getElementById('menuBtn').focus()}
+document.getElementById('menuBtn').addEventListener('click',()=>document.getElementById('sidebar').classList.contains('open')?closeNav(true):openNav());
+document.getElementById('backdrop').addEventListener('click',()=>closeNav(true));
+document.addEventListener('keydown',e=>{const sb=document.getElementById('sidebar');if(!sb.classList.contains('open'))return;
+  if(e.key==='Escape'){e.preventDefault();closeNav(true);return}
+  if(e.key==='Tab'){const f=[...sb.querySelectorAll('a[href],button:not([hidden]):not([disabled])')];if(!f.length)return;const first=f[0],last=f[f.length-1];
+    if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus()}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus()}}});
+navMQ.addEventListener('change',()=>{if(!navMQ.matches)closeNav(false);syncNavInert()});
 
 /* ---------- Events ---------- */
-function toggle(id,on){if(on)state.done[id]=today();else delete state.done[id];
+function toggle(id,on){if(on)state.done[id]=today();else delete state.done[id];lastToggled=id;
   const nt=nextTask();if(nt)openWeeks.add(nt.w.n);commit()}
+function toast(html,ms){const t=document.getElementById('toast');t.innerHTML=html;t.hidden=false;clearTimeout(toast.timer);toast.timer=setTimeout(()=>{t.hidden=true;undo=null},ms)}
 document.addEventListener('change',e=>{const t=e.target;
-  if(t.matches('input[type=checkbox][data-id]'))toggle(t.dataset.id,t.checked);
-  else if(t.id==='s-start'&&t.value){state.start=t.value;commit()}});
-document.addEventListener('toggle',e=>{const d=e.target;if(d.matches&&d.matches('details.week')){const n=Number(d.dataset.week);if(d.open)openWeeks.add(n);else openWeeks.delete(n)}},true);
-document.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
-  if(b.dataset.phase!==undefined){selPhase=Number(b.dataset.phase);renderRail();renderWeeks();return}
+  if(t.matches('input.check[data-id]'))toggle(t.dataset.id,t.checked);
+  else if(t.id==='s-start'&&t.value){state.start=t.value;savedStamp=true;commit()}
+  else if(t.closest&&t.closest('#logForm'))readLogForm()});
+document.addEventListener('input',e=>{const t=e.target;
+  if(t.id==='report')reportDraft[t.dataset.id]=t.value;
+  else if(t.id==='askText')askDraft=t.value;
+  else if(t.closest&&t.closest('#logForm'))readLogForm()});
+function readLogForm(){const v=id=>{const el=document.getElementById(id);return el?el.value:''};
+  logDraft={date:v('f-date')||today(),min:v('f-min'),k:Number(v('f-k')),c:Number(v('f-c')),g:Number(v('f-g')),d:Number(v('f-d')),note:v('f-note')}}
+document.addEventListener('click',e=>{const b=e.target.closest('button,summary');if(!b)return;
+  if(b.tagName==='SUMMARY'){toggleWeek(e,b);return}
+  if(b.dataset.phase!==undefined){const r=document.getElementById('rail'),on=r&&r.querySelector('[aria-pressed="true"]');prevTab=on?{left:on.offsetLeft,width:on.offsetWidth}:null;selPhase=Number(b.dataset.phase);mount();
+    const w=document.getElementById('weeks');animate(w,[{opacity:0.4},{opacity:1}],180);return}
+  if(b.dataset.range){logRange=Number(b.dataset.range);mount();const c=document.getElementById('minChart');animate(c,[{opacity:0.4},{opacity:1}],180);return}
   const act=b.dataset.act;
-  if(act==='done'){const nt=nextTask();toggle(b.dataset.id,true);const nx=nextTask();if(nx&&nt&&nx.w.p!==nt.w.p)selPhase=nx.w.p;render()}
-  else if(act==='copy'){const ta=document.getElementById('report'),note=document.getElementById('copyNote');
-    const ok=()=>{note.textContent='Đã sao chép. Dán vào Project "Học AI Engineering" để Claude chấm.'},fail=()=>{ta.focus();ta.select();note.textContent='Trình duyệt chặn sao chép tự động. Nội dung đã được bôi đen, hãy nhấn Ctrl+C hoặc Cmd+C.'};
+  if(act==='done'){toggle(b.dataset.id,true)}
+  else if(act==='copy'){const ta=document.getElementById('report');if(!ta)return;
+    const ok=()=>{copyNoteText='Đã sao chép. Dán cho Claude nếu muốn Claude chấm.';const n=document.getElementById('copyNote');if(n)n.textContent=copyNoteText},
+      fail=()=>{ta.focus();ta.select();const n=document.getElementById('copyNote');if(n)n.textContent='Trình duyệt chặn sao chép. Nội dung đã được bôi đen: nhấn Ctrl+C.'};
     try{navigator.clipboard.writeText(ta.value).then(ok,fail)}catch(err){fail()}}
   else if(act==='aigrade')aiGrade();
-  else if(act==='dellog'){state.log=state.log.filter(x=>x.id!==b.dataset.id);commit()}
-  else if(b.id==='reset'){const note=document.getElementById('resetNote');
-    if(!resetArmed){resetArmed=true;b.textContent='Nhấn lần nữa để xoá hẳn';note.textContent='Mọi ô đã đánh dấu và nhật ký sẽ mất, không khôi phục được.';setTimeout(()=>{resetArmed=false;b.textContent='Xoá toàn bộ dữ liệu';note.textContent=''},6000)}
-    else{resetArmed=false;const start=state.start;state=fresh();state.start=start;selPhase=null;openWeeks=new Set();b.textContent='Xoá toàn bộ dữ liệu';note.textContent='Đã xoá.';commit()}}});
-document.getElementById('logForm').addEventListener('submit',e=>{e.preventDefault();const v=id=>document.getElementById(id).value,nt=nextTask();
-  state.log.push({id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),date:v('f-date')||today(),week:nt?nt.w.n:52,min:Math.max(0,Math.min(600,Number(v('f-min'))||0)),k:Number(v('f-k')),c:Number(v('f-c')),g:Number(v('f-g')),d:Number(v('f-d')),note:v('f-note').trim().slice(0,300)});
-  document.getElementById('f-note').value='';commit()});
+  else if(act==='stopgrade'){if(aiAbort)aiAbort.abort()}
+  else if(act==='note-toggle'){noteOpen=!noteOpen;mount()}
+  else if(act==='auth')authClick();
+  else if(act==='dellog'){const i=state.log.findIndex(x=>x.id===b.dataset.id);if(i<0)return;
+    const row=b.closest('tr'),entry=state.log[i];undo={entry,i};
+    const finish=()=>{state.log.splice(state.log.indexOf(entry),1);commit();toast('Đã xoá buổi '+vn(entry.date)+'<button class="btn" type="button" data-act="undo">Hoàn tác</button>',5000)};
+    const a=row&&animate(row,[{opacity:1},{opacity:0}],180);if(a)a.onfinish=finish;else finish()}
+  else if(act==='undo'){if(!undo)return;state.log.splice(Math.min(undo.i,state.log.length),0,undo.entry);lastAdded=undo.entry.id;undo=null;document.getElementById('toast').hidden=true;commit()}
+  else if(b.id==='reset'){if(!resetArmed){resetArmed=true;mount();clearTimeout(viewSettings.t);viewSettings.t=setTimeout(()=>{resetArmed=false;if(cur==='cai-dat')mount()},6000)}
+    else{resetArmed=false;clearTimeout(viewSettings.t);const start=state.start;state=fresh();state.start=start;selPhase=null;openWeeks=new Set();lastGrade=null;logDraft=null;commit();const n=document.getElementById('resetNote');if(n)n.textContent='Đã xoá.'}}
+  else if(b.id==='stopBtn'){if(aiAbort)aiAbort.abort()}
+  else if(b.id==='clearChat'){if(aiAbort)return;chat=[];saveAi();mount()}
+  else if(b.id==='aiTest'){aiCfg.url=document.getElementById('ai-url').value.trim()||AI_DEFAULT.url;aiCfg.model=document.getElementById('ai-model').value.trim()||AI_DEFAULT.model;saveAi();aiPing()}});
+function toggleWeek(e,sum){const d=sum.parentElement,body=d.querySelector('.wbody'),n=Number(d.dataset.week);e.preventDefault();
+  if(d.open){openWeeks.delete(n);const a=animate(body,[{height:body.offsetHeight+'px'},{height:'0px'}],180);if(a)a.onfinish=()=>{d.open=false};else d.open=false}
+  else{openWeeks.add(n);d.open=true;animate(body,[{height:'0px'},{height:body.offsetHeight+'px'}],200)}}
+document.addEventListener('submit',e=>{
+  if(e.target.id==='logForm'){e.preventDefault();readLogForm();const L=logDraft,rt=reportTask();
+    const entry={id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),date:L.date||today(),week:rt?rt.w.n:52,min:Math.max(0,Math.min(600,Number(L.min)||0)),k:L.k,c:L.c,g:L.g,d:L.d,note:String(L.note||'').trim().slice(0,300)};
+    state.log.push(entry);lastAdded=entry.id;logDraft=defaultLog();lastGrade=null;commit();toast('Đã ghi buổi '+vn(entry.date),3000)}
+  else if(e.target.id==='askForm'){e.preventDefault();if(aiAbort||!askDraft.trim())return;const q=askDraft;askDraft='';aiAsk(q)}});
+document.addEventListener('keydown',e=>{if(e.target.id==='askText'&&e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();document.getElementById('askForm').requestSubmit()}});
 
 /* ---------- Trợ lý AI: gọi Ollama chạy trên máy của bạn ---------- */
 const AI_KEY='ai-eng-assistant-v1',AI_DEFAULT={url:'http://localhost:11434',model:'qwen3:8b'};
-let aiCfg={...AI_DEFAULT},chat=[],aiAbort=null;
+let aiCfg={...AI_DEFAULT},chat=[],aiAbort=null,aiState={cls:'busy',text:'Đang kiểm tra Ollama'};
 try{const x=JSON.parse(localStorage.getItem(AI_KEY)||'{}');
   if(typeof x.url==='string'&&x.url)aiCfg.url=x.url;if(typeof x.model==='string'&&x.model)aiCfg.model=x.model;
-  if(Array.isArray(x.chat))chat=x.chat.filter(m=>m&&(m.role==='user'||m.role==='assistant')&&typeof m.content==='string').slice(-30)}catch(e){}
-function saveAi(){try{localStorage.setItem(AI_KEY,JSON.stringify({url:aiCfg.url,model:aiCfg.model,chat:chat.filter(m=>m.role!=='error').slice(-30)}))}catch(e){}}
+  if(!SAMPLE&&Array.isArray(x.chat))chat=x.chat.filter(m=>m&&(m.role==='user'||m.role==='assistant')&&typeof m.content==='string').slice(-30)}catch(e){}
+if(SAMPLE)chat=SAMPLE_CHAT.map(m=>({...m}));
+function saveAi(){if(SAMPLE)return;try{localStorage.setItem(AI_KEY,JSON.stringify({url:aiCfg.url,model:aiCfg.model,chat:chat.filter(m=>m.role!=='error'&&!m.live).slice(-30)}))}catch(e){}}
 const aiBase=()=>aiCfg.url.replace(/\/+$/,'');
-function setAi(cls,text){const el=document.getElementById('aiStatus');el.className='ai-status '+cls;el.textContent=text}
+function setAi(cls,text){aiState={cls,text};paintAi()}
+function paintAi(){const dot=document.getElementById('aiTopDot');if(dot)dot.className='dot '+aiState.cls;
+  const t=document.getElementById('aiTopText');if(t)t.textContent=aiShort();
+  const s=document.getElementById('aiStatus');if(s){s.className='sub ai-sub '+aiState.cls;s.textContent=aiState.text}
+  const r=document.getElementById('aiRail');if(r)r.innerHTML='<i class="dot '+aiState.cls+'"></i>'+esc(aiShort())}
+function renderAiNotes(){render()}
 const AI_RULES=[
  'Bạn là trợ lý học tập cho một người Việt mới hoàn toàn về lập trình, đang theo lộ trình AI Engineering 52 tuần (6 buổi mỗi tuần, 2 đến 3 giờ mỗi buổi, Chủ nhật nghỉ).',
  'Luôn trả lời bằng tiếng Việt, câu ngắn, giải thích từ gốc, không giả định kiến thức có sẵn. Thuật ngữ tiếng Anh giữ nguyên và giải thích nghĩa.',
@@ -518,8 +1851,8 @@ const AI_RULES=[
  'Nếu không chắc, nói thẳng là không chắc và chỉ chỗ tra cứu trong tài liệu của buổi học.',
  'Nếu người học nản hoặc bỏ buổi: động viên ngắn, nhắc học tiếp từ chỗ dừng, không học bù gấp đôi.'].join('\n');
 const DOW=['Chủ nhật','Thứ hai','Thứ ba','Thứ tư','Thứ năm','Thứ sáu','Thứ bảy'];
-function aiContext(){const nt=nextTask(),done=TASKS.filter(t=>isDone(t.id)).length,L=[];
-  L.push('Hôm nay: '+today()+' ('+DOW[new Date().getDay()]+'). Ngày bắt đầu học: '+state.start+'.');
+function aiContext(){const nt=nextTask(),done=doneCount(),L=[];
+  L.push('Hôm nay: '+today()+' ('+DOW[NOW().getDay()]+'). Ngày bắt đầu học: '+state.start+'.');
   L.push('Đã xong '+done+'/'+TASKS.length+' buổi; theo lịch lẽ ra '+expectedSessions()+' buổi. Chuỗi ngày học: '+streak()+' ngày.');
   if(nt){L.push('Buổi kế tiếp chưa xong: Tuần '+nt.w.n+', Buổi '+(nt.i+1)+': '+nt.t+'.');
     L.push('Giai đoạn '+nt.w.p+': '+P[nt.w.p].name+'. Chủ đề tuần: '+nt.w.t+'. Việc nộp cuối tuần: '+nt.w.out+'.');
@@ -550,36 +1883,30 @@ async function offline(){let p='';try{p=(await navigator.permissions.query({name
   return 'Không kết nối được Ollama ở '+aiCfg.url+'. Kiểm tra: ứng dụng Ollama đã mở chưa, và biến OLLAMA_ORIGINS đã cho phép trang này chưa (HUONG-DAN.md, bước 3). Nếu Chrome hỏi quyền truy cập mạng cục bộ, chọn Cho phép.'}
 async function aiPing(){setAi('busy','Đang kiểm tra Ollama');
   if(location.protocol==='https:'&&/^http:/i.test(aiCfg.url)&&!/^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:|\/|$)/i.test(aiCfg.url)){
-    setAi('err','Trang HTTPS không gọi được địa chỉ http ngoài localhost. Trên điện thoại hãy dùng địa chỉ https của Tailscale.');return false}
+    setAi('err','Trang HTTPS không gọi được địa chỉ http ngoài localhost. Trên điện thoại hãy hỏi trợ lý qua bot Telegram.');return false}
   try{const ctl=new AbortController(),t=setTimeout(()=>ctl.abort(),4000);
     const r=await fetch(aiBase()+'/api/tags',{signal:ctl.signal});clearTimeout(t);
     const names=((await r.json()).models||[]).map(m=>m.name);
     if(!names.some(n=>n===aiCfg.model||n===aiCfg.model+':latest')){setAi('err','Ollama đang chạy nhưng chưa có model '+aiCfg.model+'. Mở terminal và gõ: ollama pull '+aiCfg.model);return false}
-    setAi('ok','Đã kết nối · '+aiCfg.model);return true}
+    setAi('ok','Đã kết nối · '+aiCfg.model+'. Chạy bằng Ollama trên máy của bạn, không cần Claude hay Internet.');return true}
   catch(e){setAi('err',await offline());return false}}
 function md(s){return esc(s)
-  .replace(/```[\w-]*\n?([\s\S]*?)```/g,(m,c)=>'<code style="display:block;padding:6px 8px;white-space:pre;overflow-x:auto">'+c+'</code>')
+  .replace(/```[\w-]*\n?([\s\S]*?)```/g,(m,c)=>'<code style="display:block;white-space:pre;overflow-x:auto">'+c+'</code>')
   .replace(/`([^`\n]+)`/g,'<code>$1</code>').replace(/\*\*([^*\n]+)\*\*/g,'<b>$1</b>')}
-function renderChat(live){const el=document.getElementById('chat');
-  el.innerHTML=chat.map(m=>'<div class="msg '+m.role+'">'+md(m.content)+'</div>').join('')+
-    (live!==undefined?'<div class="msg assistant"><span class="muted">Đang nghĩ…</span></div>':'');
-  el.scrollTop=el.scrollHeight}
-function renderAiNotes(){const items=aiNotes.slice().sort((a,b)=>(b.at||0)-(a.at||0)).slice(0,3);
-  document.getElementById('aiNotesBox').hidden=!items.length;
-  document.getElementById('aiNotes').innerHTML=items.map(n=>'<li><span class="when">'+esc(new Date(Number(n.at)||0).toLocaleString('vi-VN'))+'</span>'+md(String(n.text||''))+'</li>').join('')}
-/* Chạy một lượt hỏi AI: khoá nút, cho phép dừng, ghi lỗi dễ hiểu vào khung chat */
+function paintChat(){const el=document.getElementById('chat');if(!el)return;el.innerHTML=chatHTML();el.scrollTop=el.scrollHeight}
+function paintBusy(){const busy=!!aiAbort,a=document.getElementById('askBtn'),s=document.getElementById('stopBtn'),c=document.getElementById('clearChat');
+  if(a)a.disabled=busy;if(s)s.hidden=!busy;if(c)c.disabled=busy}
 async function aiRun(userText,job){if(aiAbort)return;
-  chat.push({role:'user',content:userText});renderChat('');
-  aiAbort=new AbortController();document.getElementById('askBtn').disabled=true;document.getElementById('stopBtn').hidden=false;
-  const st={partial:''};
-  try{chat.push({role:'assistant',content:await job(aiAbort.signal,st)||'(không có câu trả lời)'});setAi('ok','Đã kết nối · '+aiCfg.model)}
-  catch(e){if(e&&e.name==='AbortError'){if(st.partial)chat.push({role:'assistant',content:st.partial+' …(đã dừng)'})}
-    else{const m=e instanceof TypeError?await offline():String(e&&e.message||e);chat.push({role:'error',content:m});setAi('err',m)}}
-  finally{aiAbort=null;document.getElementById('askBtn').disabled=false;document.getElementById('stopBtn').hidden=true;saveAi();renderChat()}}
+  chat.push({role:'user',content:userText,fresh:true});const live={role:'assistant',content:'',live:true,fresh:true};chat.push(live);
+  aiAbort=new AbortController();paintChat();paintBusy();
+  try{const out=await job(aiAbort.signal,live);live.content=out||'(không có câu trả lời)';setAi('ok','Đã kết nối · '+aiCfg.model+'. Chạy bằng Ollama trên máy của bạn, không cần Claude hay Internet.')}
+  catch(e){if(e&&e.name==='AbortError'){if(live.content)live.content+=' …(đã dừng)';else chat.splice(chat.indexOf(live),1)}
+    else{chat.splice(chat.indexOf(live),1);const m=e instanceof TypeError?await offline():String(e&&e.message||e);chat.push({role:'error',content:m,fresh:true});setAi('err',m)}}
+  finally{delete live.live;aiAbort=null;saveAi();paintChat();paintBusy()}}
 function sysMsg(extra){return {role:'system',content:AI_RULES+(extra?'\n\n'+extra:'')+'\n\nTÌNH HÌNH HỌC HIỆN TẠI:\n'+aiContext()}}
 function aiAsk(text){text=text.trim();if(!text)return;
-  aiRun(text,(signal,st)=>{const box=document.getElementById('chat');
-    return ollama([sysMsg(),...chat.filter(m=>m.role!=='error').slice(-12)],{signal,onToken:t=>{st.partial=t;box.lastElementChild.innerHTML=md(t);box.scrollTop=box.scrollHeight}})})}
+  aiRun(text,(signal,live)=>ollama([sysMsg(),...chat.filter(m=>m.role!=='error'&&!m.live).slice(-12)],{signal,onToken:t=>{live.content=t;const el=document.getElementById('chat');
+    if(el&&el.lastElementChild){el.lastElementChild.innerHTML=md(t);el.scrollTop=el.scrollHeight}}}))}
 const SCORE={type:'integer',minimum:1,maximum:5};
 const GRADE_SCHEMA={type:'object',properties:{khai_niem:SCORE,code:SCORE,go_loi:SCORE,ky_luat:SCORE,ly_do:{type:'string'},sua_hieu_sai:{type:'string'},
   cau_hoi:{type:'array',items:{type:'string'}},viec_ngay_mai:{type:'string'},so_phut:{type:'integer'}},
@@ -593,44 +1920,46 @@ const GRADE_RULES=['NHIỆM VỤ: chấm báo cáo ngày, trả về JSON. Bốn
  'ly_do: 2 đến 4 câu giải thích vì sao cho từng điểm. sua_hieu_sai: sửa chỗ hiểu sai nếu có, không có thì ghi "Không thấy chỗ hiểu sai".',
  'cau_hoi: đúng 3 câu hỏi kiểm tra nhanh về nội dung hôm nay. viec_ngay_mai: buổi kế tiếp sau buổi trong báo cáo, theo lộ trình, vừa sức 2 giờ.',
  'so_phut: số phút người học ghi; không ghi thì 0.'].join('\n');
-/* Tìm số phút ở mục 5 của báo cáo ("5. Thời gian học thực tế: 95 phút"); không thấy thì 0 */
-function phutTuBaoCao(t){const m=String(t).match(/^\s*5\.[^\n]*?(\d{1,3})\s*(phút|ph\b|p\b|min)/im);const n=m?Number(m[1]):0;return n>0&&n<=600?n:0}
-const capKyLuat=m=>m>=120?5:m>=90?4:3;
-function aiGrade(){const ta=document.getElementById('report'),nt=nextTask(),note=document.getElementById('copyNote');if(!ta||!nt)return;
+async function aiGrade(){const ta=document.getElementById('report'),rt=reportTask();if(!ta||!rt||aiAbort)return;
   const rep=ta.value.trim();
-  if(!rep||rep===reportText(nt).trim()){note.textContent='Điền 5 mục của báo cáo trước, rồi mới chấm.';ta.focus();return}
-  document.getElementById('h-ai').scrollIntoView({behavior:'smooth',block:'start'});
-  aiRun('Chấm giúp tôi báo cáo này:\n\n'+rep,async signal=>{
-    const raw=await ollama([sysMsg(GRADE_RULES),{role:'user',content:rep}],{format:GRADE_SCHEMA,signal});
-    let g;try{g=JSON.parse(raw)}catch(e){throw new Error('Model trả về không đúng định dạng. Thử chấm lại.')}
+  if(!rep||rep===reportText(rt).trim()){copyNoteText='Điền 5 mục của báo cáo trước, rồi mới chấm.';const n=document.getElementById('copyNote');if(n)n.textContent=copyNoteText;ta.focus();return}
+  copyNoteText='';lastGrade={id:rt.id,status:'loading'};aiAbort=new AbortController();mount();
+  chat.push({role:'user',content:'Chấm giúp tôi báo cáo này:\n\n'+rep});
+  try{const raw=await ollama([sysMsg(GRADE_RULES),{role:'user',content:rep}],{format:GRADE_SCHEMA,signal:aiAbort.signal});
+    let g;try{g=JSON.parse(raw)}catch(e){throw new Error('Model trả về không đúng định dạng. Bấm Thử lại.')}
     const cl=n=>Math.max(1,Math.min(5,Math.round(Number(n)||3))),s={k:cl(g.khai_niem),c:cl(g.code),g:cl(g.go_loi),d:cl(g.ky_luat)};
-    /* Số phút lấy thẳng từ báo cáo, không tin con số model đọc; rồi áp luật cứng cho điểm kỷ luật */
     const mins=phutTuBaoCao(rep)||Math.max(0,Math.min(600,Math.round(Number(g.so_phut)||0))),cap=capKyLuat(mins);
     let why=String(g.ly_do||'');
     if(s.d>cap){s.d=cap;why+=' (Kỷ luật tối đa '+cap+' vì '+(mins?'học '+mins+' phút, dưới 120 phút':'chưa ghi số phút')+'.)'}
-    const set=(id,v)=>{document.getElementById(id).value=String(v)};
-    set('f-date',today());set('f-k',s.k);set('f-c',s.c);set('f-g',s.g);set('f-d',s.d);
-    if(mins>0)set('f-min',mins);
-    set('f-note',('AI trên máy: '+why).slice(0,300));
-    return 'Điểm: khái niệm '+s.k+', code '+s.c+', gỡ lỗi '+s.g+', kỷ luật '+s.d+'.\n\n'+why+
-      '\n\n**Sửa chỗ hiểu sai:** '+String(g.sua_hieu_sai||'')+
-      '\n\n**3 câu kiểm tra nhanh** (trả lời ngay trong ô chat):\n'+(Array.isArray(g.cau_hoi)?g.cau_hoi:[]).slice(0,3).map((q,i)=>(i+1)+'. '+q).join('\n')+
-      '\n\n**Việc ngày mai:** '+String(g.viec_ngay_mai||'')+
-      '\n\nĐã điền sẵn điểm vào mục "Nhật ký chấm điểm". Xem lại rồi nhấn "Thêm buổi học".'})}
-document.getElementById('askForm').addEventListener('submit',e=>{e.preventDefault();const t=document.getElementById('askText');if(aiAbort||!t.value.trim())return;aiAsk(t.value);t.value=''});
-document.getElementById('askText').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();document.getElementById('askForm').requestSubmit()}});
-document.getElementById('stopBtn').addEventListener('click',()=>{if(aiAbort)aiAbort.abort()});
-document.getElementById('clearChat').addEventListener('click',()=>{if(aiAbort)return;chat=[];saveAi();renderChat()});
-document.getElementById('aiTest').addEventListener('click',()=>{
-  aiCfg.url=document.getElementById('ai-url').value.trim()||AI_DEFAULT.url;aiCfg.model=document.getElementById('ai-model').value.trim()||AI_DEFAULT.model;
-  document.getElementById('ai-url').value=aiCfg.url;document.getElementById('ai-model').value=aiCfg.model;saveAi();aiPing()});
+    const qs=(Array.isArray(g.cau_hoi)?g.cau_hoi:[]).slice(0,3).map(String);
+    lastGrade={id:rt.id,status:'done',s,why,sua:String(g.sua_hieu_sai||''),qs,mai:String(g.viec_ngay_mai||'')};
+    logDraft={date:today(),min:mins>0?mins:(logDraft?logDraft.min:120),...s,note:('AI trên máy: '+why).slice(0,300)};
+    chat.push({role:'assistant',content:'Điểm: khái niệm '+s.k+', code '+s.c+', gỡ lỗi '+s.g+', kỷ luật '+s.d+'.\n\n'+why+'\n\n**Sửa chỗ hiểu sai:** '+lastGrade.sua+'\n\n**3 câu kiểm tra nhanh** (trả lời ngay ở đây):\n'+qs.map((q,i)=>(i+1)+'. '+q).join('\n')+'\n\n**Việc ngày mai:** '+lastGrade.mai});
+    setAi('ok','Đã kết nối · '+aiCfg.model+'. Chạy bằng Ollama trên máy của bạn, không cần Claude hay Internet.')}
+  catch(e){if(e&&e.name==='AbortError')lastGrade=null;
+    else{const m=e instanceof TypeError?await offline():String(e&&e.message||e);lastGrade={id:rt.id,status:'error',msg:m};setAi('err',m)}}
+  finally{aiAbort=null;saveAi();render()}}
+
+/* ---------- Kiểm tra dữ liệu mẫu: các con số phải khớp nhau ---------- */
+if(SAMPLE){const minsAll=logMinutes(state.log),week7=minutesByDay(7),strip=stripSVG(),p1=phaseStats(1);
+  console.assert(sampleInfo.studyDays===30,'Mẫu: 30 ngày học từ 05/10 đến 10/11',sampleInfo.studyDays);
+  console.assert(doneCount()===33,'Mẫu: 33 buổi lõi đã xong',doneCount());
+  console.assert(strip.count===doneCount(),'Mẫu: số ô teal trong dải bằng số buổi đã xong',strip.count);
+  console.assert(expectedSessions()===35,'Mẫu: 35 buổi theo lịch',expectedSessions());
+  console.assert(doneCount()-expectedSessions()===-2,'Mẫu: chậm 2 buổi');
+  console.assert(nextTask().id==='w6d4','Mẫu: buổi kế tiếp là Tuần 6 Buổi 4',nextTask().id);
+  console.assert(minsAll===1380,'Mẫu: tổng 1.380 phút',minsAll);
+  console.assert(week7.join(',')==='0,125,95,140,0,110,120'&&week7.reduce((a,b)=>a+b,0)===590,'Mẫu: 7 ngày gần nhất 590 phút',week7);
+  console.assert(p1.done===27&&p1.total===72,'Mẫu: Giai đoạn 1 xong 27/72 buổi',p1);
+  console.assert(state.log.every(e=>e.d<=capKyLuat(e.min)),'Mẫu: điểm kỷ luật theo luật cứng');
+  console.assert(state.log.every(e=>e.week>0),'Mẫu: mỗi buổi chấm khớp một buổi đã đánh dấu');
+  console.assert(streak()===2,'Mẫu: chuỗi 2 ngày (13/11 và 14/11; 12/11 nghỉ)',streak())}
 
 /* ---------- Start ---------- */
-document.getElementById('ai-url').value=aiCfg.url;document.getElementById('ai-model').value=aiCfg.model;
-renderChat();aiPing();
-['f-k','f-c','f-g','f-d'].forEach(id=>{document.getElementById(id).innerHTML=[1,2,3,4,5].map(n=>'<option value="'+n+'"'+(n===3?' selected':'')+'>'+n+'</option>').join('')});
-document.getElementById('f-date').value=today();
-render();connect();
+window.addEventListener('hashchange',go);
+syncNavInert();
+go();connect();aiPing();
+
 </script>
 </body>
 </html>

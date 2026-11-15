@@ -21,6 +21,12 @@ rồi mở http://localhost:8000.
 
 - Bản trên GitHub Pages có `FIREBASE_CONFIG` trong `index.html`: đăng nhập Google, lưu ở Firestore `users/{uid}/tracker/state`, đồng bộ tức thì và vẫn chạy khi mất mạng. Nhận xét của AI nằm ở `users/{uid}/tracker/ai`.
 
+## Giao diện
+
+Một file `index.html`, 6 màn hình theo hash route: `#/hom-nay` (mặc định), `#/tro-ly`, `#/lo-trinh`, `#/nhat-ky`, `#/nhanh`, `#/cai-dat`. Kiểu khung: thanh bên và thanh trên trên nền xanh-xám, nội dung trên một tấm trắng. Phông Be Vietnam Pro (giao diện) và JetBrains Mono (con số), bản cục bộ và giấy phép nằm ở `assets/fonts/`.
+
+Thêm `?mau=1` vào địa chỉ để xem giao diện với dữ liệu mẫu (khối "Dữ liệu mẫu" trong `index.html`). Chế độ này không ghi gì vào trình duyệt hay Firebase.
+
 ## Trợ lý AI và nhắc học
 
 Cài theo `HUONG-DAN.md`. Tóm tắt:
