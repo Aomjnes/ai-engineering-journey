@@ -103,8 +103,15 @@ async function xuLy(text) {
       const m = u.message; if (!m || typeof m.text !== 'string') continue;
       const chat = String(m.chat.id);
       if (!cfg.telegramChatId) {
-        console.log('Chat ID của bạn là: ' + chat + '  -> ghi vào "telegramChatId" trong tro-ly/cau-hinh.json rồi chạy lại bot.');
-        await C.guiTin(cfg, 'Chat ID của bạn là ' + chat + '. Ghi số này vào telegramChatId trong tro-ly/cau-hinh.json rồi chạy lại bot.', chat).catch(() => {});
+        // Người đầu tiên nhắn bot được ghi nhận là chủ bot; từ đó bot chỉ trả lời người này.
+        const p = require('path').join(__dirname, 'cau-hinh.json'), fs = require('fs');
+        if (fs.existsSync(p)) {
+          const f = JSON.parse(fs.readFileSync(p, 'utf8')); f.telegramChatId = chat;
+          fs.writeFileSync(p, JSON.stringify(f, null, 2) + '\n');
+        }
+        cfg.telegramChatId = chat;
+        console.log('Đã lưu Chat ID ' + chat + ' vào tro-ly/cau-hinh.json. Từ giờ bot chỉ trả lời chat này.');
+        await C.guiTin(cfg, 'Đã nhận bạn là chủ bot (Chat ID ' + chat + '). Từ giờ mình chỉ trả lời bạn.\n\n' + HELP, chat).catch(() => {});
         continue;
       }
       if (chat !== cfg.telegramChatId) { console.log('Bỏ qua tin từ người lạ (chat ' + chat + ').'); continue; }
