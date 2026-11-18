@@ -1,6 +1,6 @@
 # Gửi lời nhắc học qua Telegram, chạy trên máy chủ của GitHub (máy tính bạn tắt vẫn nhắc).
 # Giờ trong "cron" là giờ UTC; giờ Việt Nam = UTC + 7. GitHub có thể trễ vài phút đến một tiếng.
-# Trưa, chiều, khuya chỉ gửi khi hôm nay chưa học. Đổi giọng: sửa GIONG (gat hoặc hien).
+# Trưa, chiều, khuya chỉ gửi khi hôm nay chưa học. Đổi giọng: sửa GIONG bên dưới.
 name: Nhắc học
 
 on:
@@ -23,7 +23,7 @@ jobs:
     timeout-minutes: 5
     env:
       TZ: Asia/Ho_Chi_Minh
-      GIONG: gat
+      GIONG: xucpham   # xucpham (chửi thẳng), gat (mỉa mai) hoặc hien (nhẹ nhàng)
       FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
       FIREBASE_UID: ${{ secrets.FIREBASE_UID }}
       TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}

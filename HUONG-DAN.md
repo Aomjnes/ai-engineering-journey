@@ -170,7 +170,7 @@ Chạy thử ngay:
 gh workflow run nhac-nho.yml -f mode=sang
 ```
 
-Telegram nhận được tin nhắc học là xong. Lịch tự chạy thứ hai đến thứ bảy: 7:30 sáng (việc hôm nay), 12:00 và 17:00 (chỉ khi chưa học), 20:30 (đã học chưa), 22:30 (vẫn trắng hoặc chưa ghi điểm); 20:00 Chủ nhật tổng kết tuần. Giọng mặc định là gắt (`GIONG: gat` trong workflow); đổi thành `hien` nếu muốn nhẹ nhàng. Muốn đổi giờ, sửa `.github/workflows/nhac-nho.yml` (giờ trong đó là giờ UTC, tức giờ Việt Nam trừ 7).
+Telegram nhận được tin nhắc học là xong. Lịch tự chạy thứ hai đến thứ bảy: 7:30 sáng (việc hôm nay), 12:00 và 17:00 (chỉ khi chưa học), 20:30 (đã học chưa), 22:30 (vẫn trắng hoặc chưa ghi điểm); 20:00 Chủ nhật tổng kết tuần. Giọng đặt ở `GIONG` trong workflow: `xucpham` (đang dùng, chửi thẳng, xưng mày, câu ở `tro-ly/cau-xuc-pham.js`), `gat` (mỉa mai, câu ở `tro-ly/cau-nhac.js`) hoặc `hien` (nhẹ nhàng). Câu được chọn theo ngày nên mỗi ngày một khác; muốn thêm câu thì thêm vào mảng trong file tương ứng. Muốn đổi giờ, sửa `.github/workflows/nhac-nho.yml` (giờ trong đó là giờ UTC, tức giờ Việt Nam trừ 7).
 
 ---
 

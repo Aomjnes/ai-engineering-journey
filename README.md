@@ -34,7 +34,7 @@ Cài theo `HUONG-DAN.md`. Tóm tắt:
 - Khung "Trợ lý AI" trên trang gọi Ollama ở `http://localhost:11434` (mặc định model `qwen3:8b`).
 - `tro-ly/bot.js`: bot Telegram chạy trên máy, trả lời bằng Ollama, đánh dấu buổi học, chấm báo cáo.
 - `tro-ly/kiem-tra.js`: AI đọc code mới sửa và tiến độ, ghi nhận xét lên trang và Telegram (21:45 mỗi tối).
-- `tro-ly/nhac-nho.js` + `.github/workflows/nhac-nho.yml`: nhắc học qua Telegram trên GitHub Actions.
+- `tro-ly/nhac-nho.js` + `.github/workflows/nhac-nho.yml`: nhắc học qua Telegram trên GitHub Actions, 5 lần mỗi ngày. Kho câu giọng gắt ở `tro-ly/cau-nhac.js`.
 - Cấu hình bí mật nằm trong `tro-ly/cau-hinh.json` và `tro-ly/service-account.json`, đã có trong `.gitignore`.
 - `du-lieu/cham-diem.jsonl`: các lần Claude chấm, dùng để tự fine-tune sau này.
 
