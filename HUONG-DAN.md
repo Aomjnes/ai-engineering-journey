@@ -9,7 +9,7 @@ Làm lần lượt từ bước 1. Mỗi bước dùng được ngay, chưa làm
  Máy tính  ───┼── mở trang web ────────┤
               │                        └── Firebase: lưu tiến độ, đồng bộ tức thì
               │
-              └── Telegram ◄── GitHub Actions: nhắc học 7:30, 20:30, tổng kết Chủ nhật (máy tắt vẫn chạy)
+              └── Telegram ◄── GitHub Actions: nhắc học 5 lần/ngày, tổng kết Chủ nhật (máy tắt vẫn chạy)
                      ▲
                      └──── bot.js trên máy tính ◄──► Ollama (AI chạy bằng card RTX 3070)
                            kiem-tra.js 21:45 mỗi tối: AI đọc code bạn sửa hôm nay, nhận xét
@@ -170,7 +170,7 @@ Chạy thử ngay:
 gh workflow run nhac-nho.yml -f mode=sang
 ```
 
-Telegram nhận tin "Chào buổi sáng..." là xong. Lịch tự chạy: 7:30 sáng và 20:30 tối thứ hai đến thứ bảy, 20:00 Chủ nhật tổng kết tuần. Muốn đổi giờ, sửa `.github/workflows/nhac-nho.yml` (giờ trong đó là giờ UTC, tức giờ Việt Nam trừ 7).
+Telegram nhận được tin nhắc học là xong. Lịch tự chạy thứ hai đến thứ bảy: 7:30 sáng (việc hôm nay), 12:00 và 17:00 (chỉ khi chưa học), 20:30 (đã học chưa), 22:30 (vẫn trắng hoặc chưa ghi điểm); 20:00 Chủ nhật tổng kết tuần. Giọng mặc định là gắt (`GIONG: gat` trong workflow); đổi thành `hien` nếu muốn nhẹ nhàng. Muốn đổi giờ, sửa `.github/workflows/nhac-nho.yml` (giờ trong đó là giờ UTC, tức giờ Việt Nam trừ 7).
 
 ---
 

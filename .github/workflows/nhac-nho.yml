@@ -1,16 +1,20 @@
 # Gửi lời nhắc học qua Telegram, chạy trên máy chủ của GitHub (máy tính bạn tắt vẫn nhắc).
 # Giờ trong "cron" là giờ UTC; giờ Việt Nam = UTC + 7. GitHub có thể trễ vài phút đến một tiếng.
+# Trưa, chiều, khuya chỉ gửi khi hôm nay chưa học. Đổi giọng: sửa GIONG (gat hoặc hien).
 name: Nhắc học
 
 on:
   schedule:
-    - cron: '30 0 * * 1-6'   # 07:30 sáng thứ hai đến thứ bảy: việc hôm nay
-    - cron: '30 13 * * 1-6'  # 20:30 tối thứ hai đến thứ bảy: đã học chưa
-    - cron: '0 13 * * 0'     # 20:00 tối Chủ nhật: tổng kết tuần
+    - cron: '30 0 * * 1-6'   # 07:30 sáng: việc hôm nay
+    - cron: '0 5 * * 1-6'    # 12:00 trưa: chưa học thì nhắc
+    - cron: '0 10 * * 1-6'   # 17:00 chiều: chưa học thì nhắc
+    - cron: '30 13 * * 1-6'  # 20:30 tối: đã học chưa
+    - cron: '30 15 * * 1-6'  # 22:30 khuya: vẫn trắng hoặc chưa ghi điểm
+    - cron: '0 13 * * 0'     # 20:00 Chủ nhật: tổng kết tuần
   workflow_dispatch:          # nút "Run workflow" để chạy thử
     inputs:
       mode:
-        description: 'sang, toi, tuan hoặc tu-dong'
+        description: 'sang, trua, chieu, toi, khuya, tuan hoặc tu-dong'
         default: 'tu-dong'
 
 jobs:
@@ -19,6 +23,7 @@ jobs:
     timeout-minutes: 5
     env:
       TZ: Asia/Ho_Chi_Minh
+      GIONG: gat
       FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
       FIREBASE_UID: ${{ secrets.FIREBASE_UID }}
       TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
@@ -28,4 +33,17 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: node tro-ly/nhac-nho.js "${{ github.event.inputs.mode || 'tu-dong' }}"
+      - name: Chọn lời nhắc theo lịch
+        id: mode
+        run: |
+          case "${{ github.event.schedule }}" in
+            '30 0 * * 1-6')  m=sang ;;
+            '0 5 * * 1-6')   m=trua ;;
+            '0 10 * * 1-6')  m=chieu ;;
+            '30 13 * * 1-6') m=toi ;;
+            '30 15 * * 1-6') m=khuya ;;
+            '0 13 * * 0')    m=tuan ;;
+            *)               m="${{ github.event.inputs.mode || 'tu-dong' }}" ;;
+          esac
+          echo "m=$m" >> "$GITHUB_OUTPUT"
+      - run: node tro-ly/nhac-nho.js "${{ steps.mode.outputs.m }}"
