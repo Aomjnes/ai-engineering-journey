@@ -158,8 +158,8 @@ function publicEvaluation(text: string, ev: WritingEvaluation, blocked: { blocke
     metrics: { gai: ev.gai, lri: ev.lri },
     verdictEn: ev.verdictEn,
     verdictVi: ev.verdictVi,
-    // The native upgrade is shown for study only; the UI renders it non-copyable and the server rejects pasted copies.
-    nativeUpgrade: ev.nativeUpgrade,
+    // The native upgrade is withheld while the gate is blocked: the learner repairs their own text first.
+    nativeUpgrade: blocked.blocked ? null : ev.nativeUpgrade,
   };
 }
 
@@ -300,14 +300,66 @@ export async function submitExitTicket(userId: string, lessonId: string, sentenc
   return { results, errors: errorsOut, remaining, nextStage: remaining === 0 ? "COMPLETED" : "EXIT_TICKET" };
 }
 
-/** Lesson payload for the workspace. Rubrics and model answers are never sent. */
+const AttemptEvidenceSchema = z
+  .object({
+    chunks: z.array(z.object({ chunk: z.string(), present: z.boolean(), counted: z.boolean(), note: z.string() })).optional(),
+    nativeUpgrade: z.string().optional(),
+    verdictEn: z.string().optional(),
+    verdictVi: z.string().optional(),
+    blockReasons: z.array(z.string()).optional(),
+  })
+  .passthrough();
+
+/** Lesson payload for the workspace. Rubrics are never sent; the native upgrade only after the gate passes. */
 export async function lessonView(userId: string, lessonId: string) {
   await requireProfile(userId);
-  const lesson = await prisma.lessonUnit.findUnique({ where: { id: lessonId }, include: { chunks: true, article: { include: { feed: { select: { name: true } } } } } });
+  const lesson = await prisma.lessonUnit.findUnique({ where: { id: lessonId }, include: { chunks: true, article: { include: { feed: { select: { name: true, topic: true } } } } } });
   if (!lesson || lesson.userId !== userId) throw new AppError(404, "LESSON_NOT_FOUND", "Lesson not found.");
   const subs = await prisma.submissionAttempt.findMany({ where: { lessonId }, orderBy: { createdAt: "asc" }, include: { errors: true } });
-  const cards = await prisma.srsCard.findMany({ where: { userId, chunk: { lessonId } }, select: { chunkId: true } });
+  const cards = await prisma.srsCard.findMany({ where: { userId, chunk: { lessonId } }, select: { chunkId: true, dueAt: true } });
   const shadow = shadowSentenceFor(lesson);
+  const productionSubs = subs.filter((s) => s.kind === "PRODUCTION" || s.kind === "REWRITE");
+  const production = productionSubs.map((s) => {
+    const ev = AttemptEvidenceSchema.safeParse(s.evidence ?? {});
+    const e = ev.success ? ev.data : {};
+    return {
+      id: s.id,
+      kind: s.kind,
+      text: s.text,
+      attemptNumber: s.attemptNumber,
+      passedGate: s.passedGate,
+      gai: s.gai,
+      lri: s.lri,
+      createdAt: s.createdAt,
+      reasons: e.blockReasons ?? [],
+      chunks: e.chunks ?? [],
+      verdictEn: e.verdictEn ?? "",
+      verdictVi: e.verdictVi ?? "",
+      nativeUpgrade: s.passedGate ? (e.nativeUpgrade ?? null) : null,
+      errors: s.errors
+        .sort((a, b) => a.spanStart - b.spanStart)
+        .map((x) => ({ start: x.spanStart, end: x.spanEnd, original: x.original, correction: x.correction, category: x.category, subtype: x.subtype, severity: x.severity, ruleEn: x.ruleEn, ruleVi: x.ruleVi })),
+    };
+  });
+
+  // Receipt: draft repair delta (first draft → passing draft) and the profile change recorded for this session.
+  let receipt = null;
+  const first = production[0];
+  const passing = [...production].reverse().find((p) => p.passedGate);
+  if (lesson.stage === "COMPLETED" && first) {
+    const session = await prisma.proficiencySnapshot.findFirst({ where: { userId, trigger: "SESSION", takenAt: { gte: new Date(first.createdAt.getTime() - 5000) } }, orderBy: { takenAt: "asc" } });
+    const before = session ? await prisma.proficiencySnapshot.findFirst({ where: { userId, takenAt: { lt: session.takenAt } }, orderBy: { takenAt: "desc" } }) : null;
+    const resolvedSubtypes = passing ? first.errors.filter((e) => !passing.errors.some((p) => p.subtype === e.subtype)).length : 0;
+    receipt = {
+      chunks: lesson.chunks.map((c) => ({ phrase: c.phrase, meaningVi: c.meaningVi, nextReview: cards.find((k) => k.chunkId === c.id)?.dueAt ?? null })),
+      firstDraft: { gai: first.gai, lri: first.lri, errors: first.errors.length },
+      finalDraft: passing ? { gai: passing.gai, lri: passing.lri, errors: passing.errors.length } : null,
+      profileDelta: session && before ? { gai: session.gai - before.gai, lri: session.lri - before.lri, composite: session.composite - before.composite, level: session.abilityLevel - before.abilityLevel } : null,
+      errorsLogged: first.errors.length,
+      errorsRepaired: resolvedSubtypes,
+      rewrites: production.length - 1,
+    };
+  }
   return {
     id: lesson.id,
     stage: lesson.stage,
@@ -316,14 +368,13 @@ export async function lessonView(userId: string, lessonId: string) {
     comprehensibility: lesson.comprehensibility,
     readingText: lesson.readingText,
     authenticExcerpt: lesson.authenticExcerpt,
-    article: { title: lesson.article.title, url: lesson.article.url, source: lesson.article.feed.name, publishedAt: lesson.article.publishedAt, cefrTier: lesson.article.cefrTier, difficulty: lesson.article.difficultyScore },
+    article: { title: lesson.article.title, url: lesson.article.url, source: lesson.article.feed.name, topic: lesson.article.feed.topic, publishedAt: lesson.article.publishedAt, cefrTier: lesson.article.cefrTier, difficulty: lesson.article.difficultyScore },
     chunks: lesson.chunks.map((c) => ({ id: c.id, phrase: c.phrase, sourceSentence: c.sourceSentence, meaningEn: c.meaningEn, meaningVi: c.meaningVi, cefrTier: c.cefrTier, isStretch: c.isStretch, lockedIn: cards.some((k) => k.chunkId === c.id) })),
-    grammarInWild: lesson.grammarInWild,
+    grammarInWild: z.array(z.object({ pattern: z.string(), example: z.string(), explanationEn: z.string(), explanationVi: z.string() })).catch([]).parse(lesson.grammarInWild),
     questions: questionsOf(lesson).map((q) => ({ id: q.id, type: q.type, prompt: q.prompt, passed: subs.some((s) => s.kind === "COMPREHENSION" && s.questionId === q.id && s.passedGate) })),
     productionPrompt: lesson.productionPrompt,
     shadowSentence: shadow?.text ?? null,
-    production: subs
-      .filter((s) => s.kind === "PRODUCTION" || s.kind === "REWRITE")
-      .map((s) => ({ kind: s.kind, text: s.text, attemptNumber: s.attemptNumber, passedGate: s.passedGate, gai: s.gai, lri: s.lri, createdAt: s.createdAt })),
+    production,
+    receipt,
   };
 }

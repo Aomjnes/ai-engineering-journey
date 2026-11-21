@@ -67,19 +67,17 @@ export async function detoxExamples(userId: string, subtype: string) {
   });
 }
 
-/** The learner rewrites sentences containing a recurring error; clean rewrite clears that target. */
-export async function submitDetoxRewrite(userId: string, subtype: string, text: string, now: Date) {
-  const progress = await prisma.userProgress.findUnique({ where: { userId } });
-  if (!progress?.detoxStartedAt) throw new AppError(409, "DETOX_NOT_STARTED", "Start the Error Detox first.");
-  const targets = TargetsSchema.parse(progress.detoxTargets ?? []);
-  const target = targets.find((t) => t.subtype === subtype);
-  if (!target) throw new AppError(404, "NOT_A_TARGET", `${subtype} is not part of this detox.`);
+/**
+ * Repairs one recurring pattern: the learner rewrites their own past sentences (or writes new ones) without the
+ * pattern. A clean result (no error of that subtype, gate not blocked) marks earlier errors of that subtype resolved.
+ */
+export async function repairPattern(userId: string, subtype: string, text: string, now: Date) {
   const guard = guardSubmission(text, { minWords: 8, maxWords: 200 });
   if (!guard.ok) throw new AppError(422, guard.code ?? "REJECTED", guard.message ?? "Rejected.");
   const examples = await detoxExamples(userId, subtype);
   const ev = await evaluateWriting({
     text,
-    prompt: `Rewrite these sentences correctly in your own words, fixing the ${subtype} pattern:\n${examples.map((e) => `- ${e.submission.text.slice(0, 300)}`).join("\n")}`,
+    prompt: `Rewrite these sentences correctly in your own words, fixing the ${subtype} pattern:\n${examples.map((e) => `- ${e.submission.text.slice(0, 300)}`).join("\n") || "(write 3 original sentences that would normally trigger this pattern)"}`,
     requiredChunks: [],
     mode: "detox",
     focusSubtype: subtype,
@@ -87,14 +85,23 @@ export async function submitDetoxRewrite(userId: string, subtype: string, text: 
   const repeated = ev.errors.filter((e) => e.subtype === subtype);
   const clean = repeated.length === 0 && !ev.gate.blocked;
   await saveSubmission({ userId, kind: "DETOX", text, wordCount: countWords(text), taskDifficulty: 0, gai: ev.gai.gai, lri: ev.lri.lri, passedGate: clean, errors: ev.errors });
-  if (clean) {
+  if (clean) await prisma.errorLog.updateMany({ where: { userId, subtype, resolved: false, createdAt: { lt: now } }, data: { resolved: true } });
+  return { clean, repeated, errors: ev.errors, gate: ev.gate, verdictEn: ev.verdictEn, verdictVi: ev.verdictVi };
+}
+
+/** Detox variant of repairPattern: also ticks the detox target. */
+export async function submitDetoxRewrite(userId: string, subtype: string, text: string, now: Date) {
+  const progress = await prisma.userProgress.findUnique({ where: { userId } });
+  if (!progress?.detoxStartedAt) throw new AppError(409, "DETOX_NOT_STARTED", "Start the Error Detox first.");
+  const targets = TargetsSchema.parse(progress.detoxTargets ?? []);
+  const target = targets.find((t) => t.subtype === subtype);
+  if (!target) throw new AppError(404, "NOT_A_TARGET", `${subtype} is not part of this detox.`);
+  const out = await repairPattern(userId, subtype, text, now);
+  if (out.clean) {
     target.cleared = true;
-    await prisma.$transaction([
-      prisma.userProgress.update({ where: { userId }, data: { detoxTargets: targets } }),
-      prisma.errorLog.updateMany({ where: { userId, subtype, resolved: false, createdAt: { lt: now } }, data: { resolved: true } }),
-    ]);
+    await prisma.userProgress.update({ where: { userId }, data: { detoxTargets: targets } });
   }
-  return { clean, repeated, errors: ev.errors, gate: ev.gate, verdictEn: ev.verdictEn, verdictVi: ev.verdictVi, targets };
+  return { ...out, targets };
 }
 
 export async function completeDetox(userId: string, now: Date) {

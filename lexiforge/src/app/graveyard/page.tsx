@@ -1,23 +1,41 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Timer } from "lucide-react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { ArrowRight, Check, CheckCircle2, ShieldAlert, Timer, X } from "lucide-react";
 import { api, errorMessage } from "@/lib/client/api";
+import { humanize, timeAgo } from "@/lib/client/format";
+import { countWords } from "@/lib/metrics/text";
+import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Textarea } from "@/components/ui/textarea";
+import { Input, Textarea } from "@/components/ui/textarea";
+import { Segmented } from "@/components/ui/segmented";
+import { Skeleton } from "@/components/ui/skeleton";
+import { EmptyState, EVAL_PHASES, PhasedStatus } from "@/components/lf/states";
+import { CATEGORY_LABEL } from "@/components/lf/severity";
+import { usePrefs } from "@/components/lf/prefs";
+import { useShell } from "@/components/lf/shell-data";
+import { submitOnModEnter } from "@/components/lesson/common";
 
 interface DueCard {
   id: string;
+  mode: "context" | "nuance";
   state: string;
   overdueDays: number;
   cueVi: string;
   cueEn: string;
   gapped: string;
 }
-
-interface GraveRow {
+interface ReviewResult {
+  ratingLabel: string;
+  answer: string;
+  typed: string;
+  intervalDays: number;
+  stability: number;
+  retrievabilityAtReview: number;
+}
+interface Pattern {
   subtype: string;
   category: string;
   count: number;
@@ -28,28 +46,47 @@ interface GraveRow {
   halfLifeDays: number | string | null;
   examples: Array<{ original: string; correction: string; ruleEn: string; ruleVi: string }>;
 }
-
+interface Example {
+  original: string;
+  correction: string;
+  ruleEn: string;
+  ruleVi: string;
+  severity: string;
+  submission: { text: string };
+}
 interface Status {
   locked: boolean;
   reasons: string[];
   overdueCards: number;
   errorDebt: number;
-  top: Array<{ subtype: string; count: number; weight: number }>;
+  top: Array<{ subtype: string; count: number }>;
   detox: { startedAt: string; secondsRemaining: number; targets: Array<{ subtype: string; cleared: boolean }> } | null;
 }
-
 interface AccountabilityResponse {
   status: Status;
-  graveyard: GraveRow[];
-  examples: Record<string, Array<{ original: string; correction: string; ruleEn: string; ruleVi: string; severity: string; submission: { text: string } }>>;
+  graveyard: Pattern[];
+  examples: Record<string, Example[]>;
 }
 
-function SrsStudio({ onReviewed }: { onReviewed: () => void }) {
+function statusOf(p: Pattern): { label: string; variant: "critical" | "moderate" | "mastered" | "neutral" } {
+  if (p.unresolved === 0) return { label: "Resolved", variant: "mastered" };
+  if (p.halfLifeDays === "not decaying") return { label: "Persistent", variant: "critical" };
+  if (typeof p.halfLifeDays === "number") return { label: "Decaying", variant: "moderate" };
+  return { label: "Watching", variant: "neutral" };
+}
+
+// ───────────────────────────── SRS ─────────────────────────────
+
+function SrsQueue() {
+  const { refresh } = useShell();
   const [cards, setCards] = useState<DueCard[] | null>(null);
   const [typed, setTyped] = useState("");
-  const [feedback, setFeedback] = useState<string | null>(null);
+  const [result, setResult] = useState<ReviewResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [reviewed, setReviewed] = useState(0);
   const shownAt = useRef(0);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
     try {
@@ -65,61 +102,278 @@ function SrsStudio({ onReviewed }: { onReviewed: () => void }) {
   }, [load]);
 
   const card = cards?.[0];
-  async function submit() {
-    if (!card) return;
+  useEffect(() => {
+    if (card && !result) inputRef.current?.focus();
+  }, [card, result]);
+
+  async function check() {
+    if (!card || busy) return;
+    setBusy(true);
     try {
-      const r = await api<{ ratingLabel: string; answer: string; nextDueAt: string }>("/api/srs", { cardId: card.id, typed, responseMs: Date.now() - shownAt.current });
-      setFeedback(`${r.ratingLabel}. Answer: “${r.answer}”. Next review ${new Date(r.nextDueAt).toLocaleDateString()}.`);
-      setTyped("");
-      setCards((c) => (c ? c.slice(1) : c));
-      shownAt.current = Date.now();
-      onReviewed();
+      setResult(await api<ReviewResult>("/api/srs", { cardId: card.id, typed, responseMs: Date.now() - shownAt.current }));
+      setReviewed((n) => n + 1);
+      void refresh();
     } catch (e) {
       setError(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+  function next() {
+    setResult(null);
+    setTyped("");
+    setCards((c) => (c ? c.slice(1) : c));
+    shownAt.current = Date.now();
+  }
+
+  if (error) return <p className="rounded-md bg-critical-wash p-3 text-[13px] text-critical-ink">{error}</p>;
+  if (!cards) return <Skeleton className="mx-auto h-72 max-w-xl" />;
+  if (!card)
+    return (
+      <EmptyState
+        icon={<CheckCircle2 />}
+        title={reviewed ? `Queue cleared — ${reviewed} review${reviewed === 1 ? "" : "s"} done` : "Nothing due right now"}
+        body="Retention is measured at your next scheduled reviews. Complete a lesson's exit ticket to add new chunks."
+      />
+    );
+
+  const passed = result && result.ratingLabel !== "Again";
+  return (
+    <div className="mx-auto max-w-xl">
+      <div className="mb-3 flex items-center justify-between text-[12.5px] text-ink-3">
+        <span className="tabular-nums">{cards.length} due{reviewed ? ` · ${reviewed} done` : ""}</span>
+        {card.overdueDays > 0 && <span className="tabular-nums text-moderate-ink">{card.overdueDays} day{card.overdueDays === 1 ? "" : "s"} overdue</span>}
+      </div>
+      <div className="rounded-lg border border-line bg-card p-6 shadow-lift">
+        <p className="eyebrow">{card.mode === "context" ? "Complete your own sentence" : "Express this nuance in English"}</p>
+        <p className="mt-3 text-[15px] font-medium text-ink">{card.cueVi}</p>
+        <p className="mt-0.5 text-[13px] text-ink-3">{card.cueEn}</p>
+        {card.mode === "context" && <p className="mt-4 rounded-md bg-surface p-4 font-serif text-[18px] leading-relaxed text-ink">{card.gapped}</p>}
+        {!result ? (
+          <form
+            className="mt-5 flex gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void check();
+            }}
+          >
+            <Input ref={inputRef} value={typed} onChange={(e) => setTyped(e.target.value)} onPaste={(e) => e.preventDefault()} autoComplete="off" spellCheck={false} aria-label="Type the expression from memory" placeholder="Type it from memory…" className="font-serif text-[16px]" />
+            <Button type="submit" disabled={busy}>Check</Button>
+          </form>
+        ) : (
+          <div className="animate-in mt-5 space-y-3">
+            <div className={cn("flex items-start gap-2 rounded-md p-3 text-[14px]", passed ? "bg-mastered-wash" : "bg-critical-wash")}>
+              {passed ? <Check className="mt-0.5 size-4 shrink-0 text-mastered-ink" aria-hidden /> : <X className="mt-0.5 size-4 shrink-0 text-critical-ink" aria-hidden />}
+              <div>
+                <p className={cn("font-semibold", passed ? "text-mastered-ink" : "text-critical-ink")}>{result.ratingLabel}</p>
+                <p className="text-ink">
+                  <span className="font-serif text-[16px]">{result.answer}</span>
+                  {result.typed && result.typed.trim().toLowerCase() !== result.answer.toLowerCase() && <span className="ml-2 text-[13px] text-ink-3">you typed “{result.typed}”</span>}
+                </p>
+              </div>
+            </div>
+            <p className="text-[12.5px] tabular-nums text-ink-3">
+              Next review: {result.intervalDays < 1 ? "in 10 minutes" : `${result.intervalDays} day${result.intervalDays === 1 ? "" : "s"}`} · Stability {result.stability.toFixed(1)} d · recall chance at review {Math.round(result.retrievabilityAtReview * 100)}%
+            </p>
+            <Button onClick={next} autoFocus>Next <ArrowRight aria-hidden /></Button>
+          </div>
+        )}
+      </div>
+      <p className="mt-3 text-center text-[12px] text-ink-3">Exact = Good (Easy under 6 s) · ≤ 2 typos = Hard · otherwise Again. Scheduling: FSRS-4.5.</p>
+    </div>
+  );
+}
+
+// ───────────────────────────── Repair drill ─────────────────────────────
+
+function RepairDrill({ pattern, onClose, onDone }: { pattern: Pattern; onClose: () => void; onDone: () => void }) {
+  const { pick } = usePrefs();
+  const [examples, setExamples] = useState<Example[] | null>(null);
+  const [sentences, setSentences] = useState(["", "", ""]);
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<{ clean: boolean; verdictEn: string; verdictVi: string; repeated: Array<{ original: string; correction: string }> } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    api<{ examples: Example[] }>("/api/accountability", { action: "examples", subtype: pattern.subtype })
+      .then((r) => setExamples(r.examples))
+      .catch((e) => setError(errorMessage(e)));
+  }, [pattern.subtype]);
+
+  const ready = sentences.every((s) => countWords(s) >= 4);
+  async function submit() {
+    if (!ready || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await api<typeof result & object>("/api/accountability", { action: "drill", subtype: pattern.subtype, sentences });
+      setResult(r);
+      if (r.clean) onDone();
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setBusy(false);
     }
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>SRS studio</CardTitle>
-        <CardDescription>Type the missing chunk from memory. Grading is automatic: exact = Good (Easy if under 6 s), ≤ 2 typos = Hard, otherwise Again.</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        {error && <p className="text-sm text-destructive">{error}</p>}
-        {cards === null && <p className="text-sm text-muted-foreground">Loading…</p>}
-        {cards?.length === 0 && <p className="text-sm text-muted-foreground">No cards due. Retention is measured on your next scheduled reviews.</p>}
-        {card && (
-          <div className="space-y-2">
-            <p className="text-xs text-muted-foreground">{cards?.length} due{card.overdueDays > 0 ? ` · this card is ${card.overdueDays} day(s) overdue` : ""}</p>
-            <p className="text-sm font-semibold">{card.cueVi}</p>
-            <p className="text-xs text-muted-foreground">{card.cueEn}</p>
-            <p className="reading">{card.gapped}</p>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                void submit();
-              }}
-              className="flex gap-2"
-            >
-              <input className="flex-1 rounded-md border bg-card px-3 py-2 text-sm" value={typed} onChange={(e) => setTyped(e.target.value)} onPaste={(e) => e.preventDefault()} autoComplete="off" aria-label="Missing chunk" />
-              <Button type="submit">Check</Button>
-            </form>
-          </div>
+    <div className="animate-in rounded-lg border border-line bg-card p-5">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="eyebrow">3-sentence repair drill</p>
+          <h3 className="mt-1 text-[16px] font-semibold">{humanize(pattern.subtype)}</h3>
+          {pattern.examples[0] && <p className="mt-1 text-[13px] text-ink-2">{pick(pattern.examples[0].ruleEn, pattern.examples[0].ruleVi)}</p>}
+        </div>
+        <button type="button" onClick={onClose} aria-label="Close drill" className="rounded p-1 text-ink-3 hover:bg-surface hover:text-ink"><X className="size-4" /></button>
+      </div>
+      <div className="mt-4">
+        <p className="eyebrow mb-2">Your past sentences</p>
+        {!examples ? (
+          <Skeleton className="h-16" />
+        ) : examples.length === 0 ? (
+          <p className="text-[13px] text-ink-3">All logged instances are resolved. Write three fresh sentences that would normally trigger this pattern.</p>
+        ) : (
+          <ul className="space-y-1.5">
+            {examples.map((e, i) => (
+              <li key={i} className="rounded-md bg-surface px-3 py-2 font-serif text-[15px] text-ink-2">
+                “{e.submission.text.length > 180 ? `${e.submission.text.slice(0, 180)}…` : e.submission.text}” <span className="font-sans text-[12.5px] text-critical-ink line-through">{e.original}</span>
+              </li>
+            ))}
+          </ul>
         )}
-        {feedback && <p className="text-sm">{feedback}</p>}
-      </CardContent>
-    </Card>
+      </div>
+      <div className="mt-4 space-y-2">
+        {sentences.map((s, i) => (
+          <div key={i} className="flex items-center gap-2">
+            <span className="num w-5 text-[12px] text-ink-3">{i + 1}</span>
+            <Input value={s} onChange={(e) => setSentences((arr) => arr.map((x, j) => (j === i ? e.target.value : x)))} onPaste={(e) => e.preventDefault()} onKeyDown={submitOnModEnter(() => void submit())} disabled={busy} className="font-serif" aria-label={`Repair sentence ${i + 1}`} />
+          </div>
+        ))}
+      </div>
+      <div className="mt-3 flex items-center gap-3">
+        <PhasedStatus className="flex-1" phases={EVAL_PHASES.slice(0, 3)} active={busy} />
+        <Button className="ml-auto" onClick={() => void submit()} disabled={!ready || busy}>{busy ? "Verifying…" : "Verify repair"}</Button>
+      </div>
+      {error && <p className="mt-3 rounded-md bg-critical-wash p-3 text-[13px] text-critical-ink">{error}</p>}
+      {result && (
+        <div className={cn("mt-3 rounded-md p-3 text-[13.5px]", result.clean ? "bg-mastered-wash text-mastered-ink" : "bg-critical-wash text-critical-ink")}>
+          {result.clean ? "Clean. Logged instances of this pattern are now marked resolved." : `Still present: ${result.repeated.map((r) => `“${r.original}” → “${r.correction}”`).join("; ") || pick(result.verdictEn, result.verdictVi)}`}
+        </div>
+      )}
+    </div>
   );
 }
 
-export default function GraveyardPage() {
+// ───────────────────────────── Detox ─────────────────────────────
+
+function DetoxPanel({ data, reload }: { data: AccountabilityResponse; reload: () => Promise<void> }) {
+  const { pick } = usePrefs();
+  const [now, setNow] = useState(() => Date.now());
+  const [texts, setTexts] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState<string | null>(null);
+  const [notes, setNotes] = useState<Record<string, string>>({});
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  const s = data.status;
+  const detox = s.detox;
+  const remaining = detox ? Math.max(0, 300 - Math.floor((now - new Date(detox.startedAt).getTime()) / 1000)) : 300;
+
+  async function act(key: string, body: Record<string, unknown>, after?: (r: unknown) => void) {
+    setBusy(key);
+    setError(null);
+    try {
+      const r = await api<unknown>("/api/accountability", body);
+      after?.(r);
+      await reload();
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <section aria-labelledby="detox-title" className="rounded-lg border border-line border-l-[3px] border-l-critical bg-card p-5">
+      <div className="flex flex-wrap items-start gap-4">
+        <ShieldAlert className="size-5 text-critical" aria-hidden />
+        <div className="min-w-0 flex-1">
+          <h2 id="detox-title" className="text-[15px] font-semibold">Error Detox</h2>
+          <p className="mt-0.5 text-[13px] tabular-nums text-ink-2">{s.overdueCards} overdue · error debt {s.errorDebt}{s.locked ? " · new lessons locked" : ""}</p>
+          {s.reasons.length > 0 && <p className="mt-1 text-[12.5px] text-ink-3">{s.reasons.join(" ")}</p>}
+        </div>
+        {detox ? (
+          <span className="num flex items-center gap-1.5 rounded-full bg-surface px-3 py-1 text-[13px]">
+            <Timer className="size-3.5" aria-hidden />
+            {remaining > 0 ? `${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, "0")}` : "time served"}
+          </span>
+        ) : (
+          <Button variant="danger" onClick={() => void act("start", { action: "start" })} disabled={busy !== null}>Start 5-Min Error Detox</Button>
+        )}
+      </div>
+      {detox && (
+        <div className="mt-5 space-y-4">
+          {detox.targets.length === 0 && <p className="text-[13.5px] text-ink-2">No recurring pattern to repair — clear your overdue reviews in the SRS queue, then finish.</p>}
+          {detox.targets.map((t) => (
+            <div key={t.subtype} className={cn("rounded-md border p-4", t.cleared ? "border-mastered/30 bg-mastered-wash/40" : "border-line")}>
+              <div className="flex items-center gap-2">
+                <span className="text-[14px] font-semibold">{humanize(t.subtype)}</span>
+                {t.cleared && <Badge variant="mastered"><Check aria-hidden />Cleared</Badge>}
+              </div>
+              {!t.cleared && (
+                <>
+                  <p className="mt-1 text-[13px] text-ink-2">You keep making this mistake. Your own sentences:</p>
+                  <ul className="mt-2 space-y-1.5">
+                    {(data.examples[t.subtype] ?? []).map((e, i) => (
+                      <li key={i} className="rounded bg-surface px-3 py-2 font-serif text-[14.5px] text-ink-2">
+                        “{e.submission.text.slice(0, 200)}” — <span className="font-sans text-[12.5px] text-critical-ink line-through">{e.original}</span> <span className="font-sans text-[12.5px] text-ink-3">{pick(e.ruleEn, e.ruleVi)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <Textarea rows={3} className="mt-3 font-serif" placeholder="Rewrite these sentences correctly, in your own words." value={texts[t.subtype] ?? ""} onChange={(e) => setTexts((x) => ({ ...x, [t.subtype]: e.target.value }))} onPaste={(e) => e.preventDefault()} disabled={busy !== null} />
+                  <div className="mt-2 flex items-center gap-3">
+                    <PhasedStatus className="flex-1" phases={EVAL_PHASES.slice(0, 3)} active={busy === t.subtype} />
+                    <Button
+                      size="sm"
+                      className="ml-auto"
+                      disabled={busy !== null || countWords(texts[t.subtype] ?? "") < 8}
+                      onClick={() =>
+                        void act(t.subtype, { action: "rewrite", subtype: t.subtype, text: texts[t.subtype] ?? "" }, (r) => {
+                          const res = r as { clean: boolean; repeated: Array<{ original: string; correction: string }> };
+                          setNotes((n) => ({ ...n, [t.subtype]: res.clean ? "" : `Still wrong: ${res.repeated.map((x) => `“${x.original}” → “${x.correction}”`).join("; ") || "the gate is still blocked."}` }));
+                        })
+                      }
+                    >
+                      Submit repair
+                    </Button>
+                  </div>
+                  {notes[t.subtype] && <p className="mt-2 text-[13px] text-critical-ink">{notes[t.subtype]}</p>}
+                </>
+              )}
+            </div>
+          ))}
+          <div className="flex items-center justify-end gap-3">
+            {remaining > 0 && <span className="text-[12.5px] text-ink-3">The detox lasts at least five minutes (server-timed).</span>}
+            <Button onClick={() => void act("complete", { action: "complete" })} disabled={busy !== null || remaining > 0 || detox.targets.some((t) => !t.cleared)}>Finish detox</Button>
+          </div>
+        </div>
+      )}
+      {error && <p className="mt-3 rounded-md bg-critical-wash p-3 text-[13px] text-critical-ink">{error}</p>}
+    </section>
+  );
+}
+
+// ───────────────────────────── Page ─────────────────────────────
+
+function GraveyardInner() {
+  const params = useSearchParams();
+  const { status: shell } = useShell();
+  const [tab, setTab] = useState<"srs" | "patterns">(params.get("tab") === "patterns" ? "patterns" : "srs");
   const [data, setData] = useState<AccountabilityResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [rewrites, setRewrites] = useState<Record<string, string>>({});
-  const [results, setResults] = useState<Record<string, string>>({});
-  const [now, setNow] = useState(() => Date.now());
+  const [drill, setDrill] = useState<Pattern | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -131,150 +385,99 @@ export default function GraveyardPage() {
   useEffect(() => {
     void load();
   }, [load]);
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, []);
 
-  async function act(body: Record<string, unknown>, after?: (r: unknown) => void) {
-    setBusy(true);
-    setError(null);
-    try {
-      const r = await api<unknown>("/api/accountability", body);
-      after?.(r);
-      await load();
-    } catch (e) {
-      setError(errorMessage(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  const status = data?.status;
-  const detox = status?.detox;
-  const remaining = detox ? Math.max(0, 300 - Math.floor((now - new Date(detox.startedAt).getTime()) / 1000)) : 0;
+  const showDetox = data && (data.status.locked || data.status.detox || params.get("tab") === "detox");
 
   return (
-    <div className="flex flex-col gap-6">
-      <h1 className="text-xl font-semibold">Error Graveyard & SRS studio</h1>
-      {error && <p className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">{error}</p>}
+    <div className="space-y-6">
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="eyebrow">Weakness lab</p>
+          <h1 className="mt-1 font-serif text-[30px] font-medium leading-tight tracking-[-0.015em]">Error Graveyard</h1>
+          <p className="mt-1 text-[14px] text-ink-2">Every mistake you have made is logged here until you prove it is gone.</p>
+        </div>
+        <Segmented
+          label="View"
+          value={tab}
+          onChange={setTab}
+          options={[
+            { value: "srs", label: <span className="tabular-nums">Active SRS Queue{shell?.dueCards ? ` · ${shell.dueCards}` : ""}</span> },
+            { value: "patterns", label: "Recurring Error Patterns" },
+          ]}
+        />
+      </header>
+      {error && <p className="rounded-md bg-critical-wash p-3 text-[13px] text-critical-ink">{error}</p>}
+      {showDetox && data && <DetoxPanel data={data} reload={load} />}
 
-      <Card id="detox" className={status?.locked ? "border-destructive/60" : undefined}>
-        <CardHeader>
-          <CardTitle>Error Detox</CardTitle>
-          <CardDescription>
-            {status ? `${status.overdueCards} overdue cards · recurring-error debt ${status.errorDebt}. ${status.locked ? "New lessons are LOCKED." : "Lessons unlocked."}` : "Loading…"}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3 text-sm">
-          {status?.locked && (
-            <ul className="list-disc pl-5 text-destructive">
-              {status.reasons.map((r) => (
-                <li key={r}>{r}</li>
-              ))}
-            </ul>
+      {tab === "srs" && <SrsQueue />}
+
+      {tab === "patterns" && (
+        <div className="space-y-4">
+          {drill && (
+            <RepairDrill
+              key={drill.subtype}
+              pattern={drill}
+              onClose={() => setDrill(null)}
+              onDone={() => void load()}
+            />
           )}
-          {!detox && (
-            <Button variant={status?.locked ? "destructive" : "outline"} disabled={busy || (status?.top.length ?? 0) === 0 && !status?.locked} onClick={() => act({ action: "start" })}>
-              Start 5-minute Error Detox
-            </Button>
-          )}
-          {detox && (
-            <div className="space-y-4">
-              <p className="flex items-center gap-1 tabular-nums">
-                <Timer className="h-4 w-4" aria-hidden /> {remaining > 0 ? `${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, "0")} minimum remaining` : "Minimum time served."}
-              </p>
-              {detox.targets.length === 0 && <p className="text-muted-foreground">No recurring patterns to repair; review overdue cards below, then finish.</p>}
-              {detox.targets.map((t) => (
-                <div key={t.subtype} className="space-y-2 rounded border p-3">
-                  <p className="font-mono text-xs">{t.subtype} {t.cleared && <Badge variant="success">cleared</Badge>}</p>
-                  {!t.cleared && (
-                    <>
-                      <p className="text-muted-foreground">You keep making this mistake. Your own sentences:</p>
-                      <ul className="space-y-1">
-                        {(data?.examples[t.subtype] ?? []).map((e, i) => (
-                          <li key={i} className="reading">
-                            “{e.submission.text.slice(0, 220)}” — <span className="text-destructive line-through">{e.original}</span> ({e.ruleVi})
-                          </li>
-                        ))}
-                      </ul>
-                      <Textarea rows={3} placeholder="Rewrite these sentences correctly, in your own words." value={rewrites[t.subtype] ?? ""} onChange={(e) => setRewrites((r) => ({ ...r, [t.subtype]: e.target.value }))} onPaste={(e) => e.preventDefault()} />
-                      <Button
-                        size="sm"
-                        disabled={busy}
-                        onClick={() =>
-                          act({ action: "rewrite", subtype: t.subtype, text: rewrites[t.subtype] ?? "" }, (r) => {
-                            const res = r as { clean: boolean; verdictEn: string; repeated: Array<{ original: string; correction: string }> };
-                            setResults((x) => ({ ...x, [t.subtype]: res.clean ? "Clean." : `Still wrong: ${res.repeated.map((e) => `“${e.original}” → “${e.correction}”`).join("; ") || res.verdictEn}` }));
-                          })
-                        }
-                      >
-                        Submit repair
-                      </Button>
-                      {results[t.subtype] && <p className="text-sm">{results[t.subtype]}</p>}
-                    </>
-                  )}
-                </div>
-              ))}
-              <Button disabled={busy || remaining > 0 || detox.targets.some((t) => !t.cleared)} onClick={() => act({ action: "complete" })}>Finish detox</Button>
+          {!data ? (
+            <Skeleton className="h-64" />
+          ) : data.graveyard.length === 0 ? (
+            <EmptyState title="No errors logged yet" body="Patterns appear here after your first graded writing." />
+          ) : (
+            <div className="overflow-x-auto rounded-lg border border-line bg-card">
+              <table className="w-full min-w-[720px] text-[13.5px]">
+                <thead>
+                  <tr className="border-b border-line text-left text-[11.5px] uppercase tracking-wider text-ink-3">
+                    <th className="px-4 py-2.5 font-semibold">Pattern</th>
+                    <th className="px-3 py-2.5 text-right font-semibold">Occurrences</th>
+                    <th className="px-3 py-2.5 text-right font-semibold">Open</th>
+                    <th className="px-3 py-2.5 text-right font-semibold">Half-life</th>
+                    <th className="px-3 py-2.5 font-semibold">Status</th>
+                    <th className="px-3 py-2.5 font-semibold">Last seen</th>
+                    <th className="px-4 py-2.5" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.graveyard.map((p) => {
+                    const st = statusOf(p);
+                    const ex = p.examples[0];
+                    return (
+                      <tr key={p.subtype} className={cn("border-b border-line last:border-0", drill?.subtype === p.subtype && "bg-surface")}>
+                        <td className="px-4 py-3">
+                          <p className="font-medium text-ink">
+                            {humanize(p.subtype)}
+                            {ex && <span className="ml-1.5 font-serif font-normal text-ink-3">(“{ex.original}”)</span>}
+                          </p>
+                          <p className="text-[12px] text-ink-3">{CATEGORY_LABEL[p.category] ?? p.category} · {p.severity.CRITICAL} crit · {p.severity.MODERATE} mod · {p.severity.MINOR} minor</p>
+                        </td>
+                        <td className="num px-3 py-3 text-right">{p.count}</td>
+                        <td className="num px-3 py-3 text-right">{p.unresolved}</td>
+                        <td className="num px-3 py-3 text-right text-ink-2">{p.halfLifeDays === null ? "—" : typeof p.halfLifeDays === "number" ? `${p.halfLifeDays} d` : "∞"}</td>
+                        <td className="px-3 py-3"><Badge variant={st.variant}>{st.label}</Badge></td>
+                        <td className="num px-3 py-3 text-ink-3">{timeAgo(p.lastSeen)}</td>
+                        <td className="px-4 py-3 text-right">
+                          <Button size="sm" variant="outline" onClick={() => { setDrill(p); window.scrollTo({ top: 0, behavior: "smooth" }); }}>Repair drill</Button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           )}
-        </CardContent>
-      </Card>
-
-      <SrsStudio onReviewed={() => void load()} />
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Error Graveyard</CardTitle>
-          <CardDescription>Every logged mistake, grouped by pattern. Half-life = days for the weighted error rate to halve (fit over sessions).</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {data && data.graveyard.length === 0 && <p className="text-sm text-muted-foreground">No errors logged yet.</p>}
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-xs text-muted-foreground">
-                  <th className="py-1">Pattern</th>
-                  <th className="py-1 text-right">Count</th>
-                  <th className="py-1 text-right">Open</th>
-                  <th className="py-1">Severity</th>
-                  <th className="py-1 text-right">Half-life</th>
-                  <th className="py-1">Latest example</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data?.graveyard.map((g) => (
-                  <tr key={g.subtype} className="border-t align-top">
-                    <td className="py-2 pr-2">
-                      <p className="font-mono text-xs">{g.subtype}</p>
-                      <p className="text-[11px] text-muted-foreground">{g.category}</p>
-                    </td>
-                    <td className="py-2 text-right tabular-nums">{g.count}</td>
-                    <td className="py-2 text-right tabular-nums">{g.unresolved}</td>
-                    <td className="py-2">
-                      <div className="flex gap-1">
-                        {g.severity.CRITICAL > 0 && <Badge variant="critical">{g.severity.CRITICAL} crit</Badge>}
-                        {g.severity.MODERATE > 0 && <Badge variant="moderate">{g.severity.MODERATE} mod</Badge>}
-                        {g.severity.MINOR > 0 && <Badge variant="minor">{g.severity.MINOR} min</Badge>}
-                      </div>
-                    </td>
-                    <td className="py-2 text-right tabular-nums">{g.halfLifeDays === null ? "—" : typeof g.halfLifeDays === "number" ? `${g.halfLifeDays} d` : g.halfLifeDays}</td>
-                    <td className="py-2">
-                      {g.examples[0] && (
-                        <p>
-                          <span className="text-destructive line-through">{g.examples[0].original}</span> → {g.examples[0].correction}
-                          <span className="block text-xs text-muted-foreground">{g.examples[0].ruleVi}</span>
-                        </p>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
+          <p className="text-[12.5px] text-ink-3">Half-life: days for the weighted error rate of a pattern to halve (least-squares fit over sessions). ∞ = not decaying.</p>
+        </div>
+      )}
     </div>
+  );
+}
+
+export default function GraveyardPage() {
+  return (
+    <Suspense fallback={<Skeleton className="h-96" />}>
+      <GraveyardInner />
+    </Suspense>
   );
 }

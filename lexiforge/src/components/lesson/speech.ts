@@ -60,32 +60,58 @@ export function useSpeechToText(onFinal: (text: string) => void) {
   return { supported, listening, error, start, stop };
 }
 
-/** Text-to-speech over a list of sentences with per-sentence highlight callback. */
+export type TtsState = "idle" | "playing" | "paused";
+
+/** Sentence-level text-to-speech with highlight index, pause/resume, rewind and live rate changes. */
 export function useTts() {
   const [speakingIndex, setSpeakingIndex] = useState<number | null>(null);
+  const [state, setState] = useState<TtsState>("idle");
   const [supported, setSupported] = useState(false);
+  const run = useRef(0);
   useEffect(() => setSupported(typeof window !== "undefined" && "speechSynthesis" in window), []);
+  useEffect(() => () => {
+    if (typeof window !== "undefined" && "speechSynthesis" in window) window.speechSynthesis.cancel();
+  }, []);
 
   const stop = useCallback(() => {
+    run.current++;
     window.speechSynthesis.cancel();
     setSpeakingIndex(null);
+    setState("idle");
   }, []);
 
   const speak = useCallback((sentences: string[], rate: number, from = 0) => {
+    const id = ++run.current;
     window.speechSynthesis.cancel();
     const voice = window.speechSynthesis.getVoices().find((v) => v.lang.startsWith("en"));
-    sentences.slice(from).forEach((text, k) => {
+    const start = Math.max(0, Math.min(from, sentences.length - 1));
+    sentences.slice(start).forEach((text, k) => {
       const u = new SpeechSynthesisUtterance(text);
       u.lang = "en-US";
       u.rate = rate;
       if (voice) u.voice = voice;
-      u.onstart = () => setSpeakingIndex(from + k);
+      u.onstart = () => {
+        if (run.current === id) setSpeakingIndex(start + k);
+      };
       u.onend = () => {
-        if (from + k === sentences.length - 1) setSpeakingIndex(null);
+        if (run.current === id && start + k === sentences.length - 1) {
+          setSpeakingIndex(null);
+          setState("idle");
+        }
       };
       window.speechSynthesis.speak(u);
     });
+    setState("playing");
   }, []);
 
-  return { supported, speakingIndex, speak, stop };
+  const pause = useCallback(() => {
+    window.speechSynthesis.pause();
+    setState("paused");
+  }, []);
+  const resume = useCallback(() => {
+    window.speechSynthesis.resume();
+    setState("playing");
+  }, []);
+
+  return { supported, speakingIndex, state, speak, stop, pause, resume };
 }

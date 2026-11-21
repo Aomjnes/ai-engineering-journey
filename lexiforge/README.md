@@ -63,9 +63,12 @@ npm run build
 
 ## Pages
 
-- `/onboarding` — mandatory 3-part adaptive placement audit and baseline report
-- `/` — proficiency telemetry, promotion lock conditions, i+1-matched live lessons, metrics & analytics
-- `/lesson/[id]` — 4-stage workspace: reading + TTS + click-to-explain, comprehension, production with the
-  Error-Repair Gate, exit ticket
-- `/graveyard` — Error Detox, SRS studio (typed recall, FSRS-4.5), Error Graveyard with half-lives
-- `/promotion` — zero-hint Band Promotion Audit (only when unlocked)
+- `/onboarding` — distraction-free 3-step calibration audit → Diagnostic Dossier
+- `/` **Today** — accountability gate, telemetry + promotion-lock checklist, i+1-matched live briefings
+- `/lesson/[id]` (**Workspace**, `/workspace` resumes the active one) — stepper, 62/38 reading + 4-mode inspector,
+  audio/shadowing pill, comprehension, production with the Error-Repair Gate, exit ticket and Arsenal receipt
+- `/graveyard` — Active SRS queue, recurring error patterns with 3-sentence repair drills, Error Detox
+- `/metrics` — radar with next-band ring, 30-day trajectory, errors/100 words, heatmap, evidence ledger
+- `/promotion` — zero-hint Band Promotion Audit (only when unlocked) · `/settings` — configuration status
+
+Keyboard: `Space` play/pause audio · `1–4` explainer modes · `⌘/Ctrl+Enter` submit · `Esc` close · `?` legend.

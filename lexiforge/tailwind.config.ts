@@ -1,22 +1,36 @@
 import type { Config } from "tailwindcss";
 
+const c = (v: string) => `rgb(var(--${v}) / <alpha-value>)`;
+
 export default {
-  darkMode: "class",
   content: ["./src/**/*.{ts,tsx}"],
   theme: {
     extend: {
       colors: {
-        border: "hsl(var(--border))",
-        background: "hsl(var(--background))",
-        foreground: "hsl(var(--foreground))",
-        muted: { DEFAULT: "hsl(var(--muted))", foreground: "hsl(var(--muted-foreground))" },
-        primary: { DEFAULT: "hsl(var(--primary))", foreground: "hsl(var(--primary-foreground))" },
-        destructive: { DEFAULT: "hsl(var(--destructive))", foreground: "hsl(var(--destructive-foreground))" },
-        warning: "hsl(var(--warning))",
-        success: "hsl(var(--success))",
-        card: { DEFAULT: "hsl(var(--card))", foreground: "hsl(var(--card-foreground))" },
+        canvas: c("canvas"),
+        card: c("card"),
+        surface: c("surface"),
+        ink: { DEFAULT: c("ink"), 2: c("ink-2"), 3: c("ink-3") },
+        line: { DEFAULT: c("line"), strong: c("line-strong") },
+        accent: { DEFAULT: c("accent"), fg: c("accent-fg"), wash: c("accent-wash") },
+        critical: { DEFAULT: c("critical"), ink: c("critical-ink"), wash: c("critical-wash") },
+        moderate: { DEFAULT: c("moderate"), ink: c("moderate-ink"), wash: c("moderate-wash") },
+        minor: { DEFAULT: c("minor"), ink: c("minor-ink"), wash: c("minor-wash") },
+        mastered: { DEFAULT: c("mastered"), ink: c("mastered-ink"), wash: c("mastered-wash") },
+        chunk: c("chunk"),
       },
-      borderRadius: { lg: "0.5rem", md: "0.375rem", sm: "0.25rem" },
+      fontFamily: {
+        serif: ["var(--font-serif)", "ui-serif", "Georgia", "serif"],
+        sans: ["var(--font-sans)", "ui-sans-serif", "system-ui", "sans-serif"],
+        mono: ["var(--font-mono)", "ui-monospace", "monospace"],
+      },
+      borderRadius: { lg: "10px", md: "8px", sm: "6px" },
+      transitionTimingFunction: { lf: "cubic-bezier(0.16, 1, 0.3, 1)" },
+      transitionDuration: { DEFAULT: "180ms" },
+      boxShadow: {
+        lift: "0 1px 2px rgb(0 0 0 / 0.04), 0 8px 24px -12px rgb(0 0 0 / 0.12)",
+        sheet: "0 -8px 32px -12px rgb(0 0 0 / 0.25)",
+      },
     },
   },
   plugins: [],

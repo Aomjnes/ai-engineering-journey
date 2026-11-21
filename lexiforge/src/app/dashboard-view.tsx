@@ -3,35 +3,158 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, ArrowUpRight, Lock, RefreshCw, ShieldAlert } from "lucide-react";
+import { ArrowDownRight, ArrowRight, ArrowUpRight, Clock, ExternalLink, KeyRound, Lock, Newspaper, RefreshCw, ShieldAlert } from "lucide-react";
 import type { dashboardData } from "@/lib/dashboard/service";
 import { api, errorMessage } from "@/lib/client/api";
+import { humanize, signed, timeAgo } from "@/lib/client/format";
+import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { ErrorDecayChart, ErrorHeatmap, SkillRadar, TrendChart } from "@/components/charts";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { EmptyState } from "@/components/lf/states";
+import { PromotionAction, PromotionLockList } from "@/components/lf/promotion-lock-card";
+import { useShell } from "@/components/lf/shell-data";
 
-type Dashboard = Extract<Awaited<ReturnType<typeof dashboardData>>, { calibrated: true }>;
+type DashboardResponse = Awaited<ReturnType<typeof dashboardData>>;
+type Dashboard = Extract<DashboardResponse, { calibrated: true }>;
 
+interface Article {
+  id: string;
+  title: string;
+  source: string;
+  topic: string;
+  url: string;
+  preview: string;
+  publishedAt: string | null;
+  cefrTier: string;
+  difficulty: number;
+  wordCount: number;
+  estMinutes: number;
+  match: string;
+  delivery: "GRADED_BRIDGE" | "AUTHENTIC";
+}
+interface LessonRow {
+  id: string;
+  title: string;
+  source: string;
+  url: string;
+  publishedAt: string | null;
+  stage: string;
+  isGraded: boolean;
+  chunkCount: number;
+  difficulty: number;
+}
 interface LessonsResponse {
   level: number;
   target: number;
-  articles: Array<{ id: string; title: string; source: string; url: string; publishedAt: string | null; cefrTier: string; difficulty: number; fkGrade: number; wordCount: number; match: string; delivery: string }>;
-  lessons: Array<{ id: string; title: string; stage: string; createdAt: string; isGraded: boolean }>;
+  articles: Article[];
+  lessons: LessonRow[];
+}
+
+const STAGE_NUM: Record<string, number> = { INPUT: 1, COMPREHENSION: 2, PRODUCTION: 3, EXIT_TICKET: 4, COMPLETED: 4 };
+const tierLabel = (subBand: string, a: Article) => (a.delivery === "GRADED_BRIDGE" ? `${subBand} Bridge + Original` : `Authentic ${a.cefrTier}`);
+
+function TodaySkeleton() {
+  return (
+    <div className="space-y-8" aria-label="Loading today's briefing">
+      <Skeleton className="h-8 w-64" />
+      <div className="grid gap-px overflow-hidden rounded-lg border border-line md:grid-cols-3">
+        {[0, 1, 2].map((i) => (
+          <div key={i} className="space-y-3 bg-card p-5">
+            <Skeleton className="h-3 w-24" />
+            <Skeleton className="h-8 w-28" />
+            <Skeleton className="h-3 w-40" />
+          </div>
+        ))}
+      </div>
+      <div className="grid gap-4 md:grid-cols-3">
+        {[0, 1, 2].map((i) => (
+          <div key={i} className="space-y-3 rounded-lg border border-line bg-card p-5">
+            <Skeleton className="h-3 w-32" />
+            <Skeleton className="h-5 w-full" />
+            <Skeleton className="h-5 w-3/4" />
+            <Skeleton className="h-3 w-full" />
+            <Skeleton className="h-3 w-2/3" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function BriefingCard({ a, subBand, locked, llm, starting, onStart }: { a: Article; subBand: string; locked: boolean; llm: boolean; starting: boolean; onStart: () => void }) {
+  return (
+    <article className="group flex flex-col rounded-lg border border-line bg-card p-5 transition-[border-color,box-shadow] duration-200 ease-lf hover:border-line-strong hover:shadow-lift">
+      <div className="flex items-center gap-2 text-[12px] text-ink-3">
+        <span className="font-medium text-ink-2">{a.source}</span>
+        <span aria-hidden>·</span>
+        <span className="num">{a.publishedAt ? timeAgo(a.publishedAt) : "undated"}</span>
+        <a href={a.url} target="_blank" rel="noreferrer" aria-label={`Open original on ${a.source}`} className="ml-auto rounded p-0.5 hover:text-ink">
+          <ExternalLink className="size-3.5" aria-hidden />
+        </a>
+      </div>
+      <div className="mt-2.5 flex flex-wrap gap-1.5">
+        <Badge variant="outline" className="capitalize">{a.topic}</Badge>
+        <Badge variant={a.match === "i+1 match" ? "accent" : a.match === "too hard" ? "moderate" : "neutral"}>{tierLabel(subBand, a)}</Badge>
+      </div>
+      <h3 className="mt-3 font-serif text-[21px] font-medium leading-[1.25] tracking-[-0.01em] text-ink">{a.title}</h3>
+      <p className="mt-2 line-clamp-2 text-[13.5px] leading-relaxed text-ink-2">{a.preview}</p>
+      <div className="mt-auto flex items-center gap-3 pt-5 text-[12px] text-ink-3">
+        <span className="num flex items-center gap-1"><Clock className="size-3.5" aria-hidden />~{a.estMinutes} min</span>
+        <span className="num" title="Text difficulty on the 0–100 level scale">D {a.difficulty.toFixed(0)}</span>
+        <span className="num">{a.match}</span>
+        <span className="ml-auto">
+          {locked ? (
+            <span className="flex items-center gap-1 text-ink-3" title="Clear the Error Detox to unlock new lessons"><Lock className="size-3.5" aria-hidden />Locked</span>
+          ) : (
+            <Button size="sm" variant="ink" onClick={onStart} disabled={!llm || starting} title={!llm ? "Add an LLM API key in .env to synthesize lessons" : undefined}>
+              {starting ? "Synthesizing…" : "Start"}
+            </Button>
+          )}
+        </span>
+      </div>
+    </article>
+  );
+}
+
+function InProgressCard({ l }: { l: LessonRow }) {
+  const n = STAGE_NUM[l.stage] ?? 1;
+  return (
+    <Link href={`/lesson/${l.id}`} className="group flex flex-col rounded-lg border border-line bg-card p-5 transition-[border-color,box-shadow] duration-200 ease-lf hover:border-line-strong hover:shadow-lift">
+      <div className="flex items-center gap-2 text-[12px] text-ink-3">
+        <span className="font-medium text-ink-2">{l.source}</span>
+        <span aria-hidden>·</span>
+        <span className="num">{l.chunkCount} chunks</span>
+        <Badge variant="accent" className="ml-auto">In progress</Badge>
+      </div>
+      <h3 className="mt-3 font-serif text-[21px] font-medium leading-[1.25] tracking-[-0.01em] text-ink">{l.title}</h3>
+      <div className="mt-auto pt-5">
+        <div className="mb-1.5 flex items-center justify-between text-[12px]">
+          <span className="num text-ink-2">Stage {n}/4</span>
+          <span className="flex items-center gap-1 font-medium text-ink group-hover:text-accent">Resume <ArrowRight className="size-3.5" aria-hidden /></span>
+        </div>
+        <div className="flex gap-1" aria-hidden>
+          {[1, 2, 3, 4].map((s) => (
+            <span key={s} className={cn("h-1 flex-1 rounded-full", s < n ? "bg-accent" : s === n ? "bg-accent/40" : "bg-surface")} />
+          ))}
+        </div>
+      </div>
+    </Link>
+  );
 }
 
 export function DashboardView() {
   const router = useRouter();
+  const { sync, syncing, refresh } = useShell();
   const [data, setData] = useState<Dashboard | null>(null);
   const [lessons, setLessons] = useState<LessonsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [syncing, setSyncing] = useState(false);
-  const [syncReport, setSyncReport] = useState<string | null>(null);
   const [starting, setStarting] = useState<string | null>(null);
+  const [showAll, setShowAll] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      const d = await api<Awaited<ReturnType<typeof dashboardData>>>("/api/dashboard");
+      const d = await api<DashboardResponse>("/api/dashboard");
       if (!d.calibrated) {
         router.replace("/onboarding");
         return;
@@ -45,28 +168,17 @@ export function DashboardView() {
 
   useEffect(() => {
     void load();
+    const onSynced = () => void load();
+    window.addEventListener("lf:synced", onSynced);
+    return () => window.removeEventListener("lf:synced", onSynced);
   }, [load]);
-
-  async function sync() {
-    setSyncing(true);
-    setSyncReport(null);
-    try {
-      const r = await api<{ stored: number; feeds: Array<{ feed: string; ok: boolean; error?: string }> }>("/api/ingest", {});
-      const failed = r.feeds.filter((f) => !f.ok);
-      setSyncReport(`Stored ${r.stored} new article(s). ${failed.length ? `Unreachable: ${failed.map((f) => f.feed).join(", ")}.` : "All feeds reachable."}`);
-      await load();
-    } catch (e) {
-      setSyncReport(errorMessage(e));
-    } finally {
-      setSyncing(false);
-    }
-  }
 
   async function start(articleId: string) {
     setStarting(articleId);
     setError(null);
     try {
       const r = await api<{ lessonId: string }>("/api/lessons/synthesize", { articleId });
+      await refresh();
       router.push(`/lesson/${r.lessonId}`);
     } catch (e) {
       setError(errorMessage(e));
@@ -74,232 +186,137 @@ export function DashboardView() {
     }
   }
 
-  if (error && !data) return <p className="text-destructive">{error}</p>;
-  if (!data) return <p className="text-sm text-muted-foreground">Loading telemetry…</p>;
+  if (error && !data) return <EmptyState title="Today's briefing could not load" body={error} action={<Button onClick={() => void load()}>Retry</Button>} />;
+  if (!data) return <TodaySkeleton />;
+
   const t = data.telemetry;
   const acc = data.accountability;
+  const inProgress = lessons?.lessons.filter((l) => l.stage !== "COMPLETED") ?? [];
+  const fresh = lessons?.articles ?? [];
+  const visible = showAll ? fresh : fresh.slice(0, Math.max(0, 3 - inProgress.length));
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? "Morning briefing" : hour < 18 ? "Afternoon briefing" : "Evening briefing";
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="space-y-8">
+      <header className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="eyebrow">{new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}</p>
+          <h1 className="mt-1 font-serif text-[30px] font-medium leading-tight tracking-[-0.015em]">{greeting}</h1>
+        </div>
+        {lessons && (
+          <p className="text-[12.5px] tabular-nums text-ink-3">
+            Level {lessons.level.toFixed(1)} → i+1 target {lessons.target.toFixed(1)}
+          </p>
+        )}
+      </header>
+
       {!data.llm && (
-        <div className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 p-3 text-sm">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden />
-          <span>No LLM key configured. Grading, lesson synthesis and the explainer are disabled. Add ANTHROPIC_API_KEY, OPENAI_API_KEY or GEMINI_API_KEY to <code>.env</code> and restart.</span>
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-line bg-card p-4 text-[13.5px]">
+          <KeyRound className="size-4 text-moderate-ink" aria-hidden />
+          <span className="flex-1 text-ink-2">No LLM key is configured. Grading, lesson synthesis and the explainer stay off until you add one.</span>
+          <Link href="/settings" className={buttonVariants({ variant: "outline", size: "sm" })}>Open settings</Link>
         </div>
       )}
 
-      {/* Proficiency telemetry header */}
-      <section className="grid gap-4 md:grid-cols-3 [&>*]:min-w-0">
-        <Card>
-          <CardHeader>
-            <CardDescription>Current CEFR sub-band</CardDescription>
-            <CardTitle className="text-3xl font-bold">{t.subBand}</CardTitle>
-          </CardHeader>
-          <CardContent className="text-xs text-muted-foreground">
-            Ability level {t.abilityLevel.toFixed(1)} / 100 · composite {data.composite.toFixed(1)}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardDescription>Estimated IELTS band (diagnostic equivalent)</CardDescription>
-            <CardTitle className="text-3xl font-bold">{t.ielts.band.toFixed(1)}</CardTitle>
-          </CardHeader>
-          <CardContent className="text-xs text-muted-foreground">
-            95% interval {t.ielts.low.toFixed(1)}–{t.ielts.high.toFixed(1)} (±{t.ielts.halfWidth}) · based on {t.evidence.words} graded words, {t.evidence.items} items
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardDescription>Promotion to {t.nextBand ?? "—"}</CardDescription>
-            <CardTitle className="text-3xl font-bold">
-              {t.consecutiveQualifying}/{t.requiredConsecutive}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2 text-xs">
-            <div className="h-1.5 w-full rounded bg-muted">
-              <div className="h-1.5 rounded bg-primary" style={{ width: `${Math.min(100, (100 * t.consecutiveQualifying) / t.requiredConsecutive)}%` }} />
-            </div>
-            {t.promotion.unlocked ? (
-              <Link href="/promotion" className="inline-flex items-center gap-1 font-medium text-primary">
-                Band Promotion Audit unlocked <ArrowUpRight className="h-3 w-3" aria-hidden />
-              </Link>
+      {/* A — Accountability gate */}
+      {acc.locked && (
+        <section aria-labelledby="gate-title" className="animate-in flex flex-col gap-4 rounded-lg border border-line border-l-[3px] border-l-critical bg-card p-5 md:flex-row md:items-center">
+          <ShieldAlert className="hidden size-5 shrink-0 text-critical md:block" aria-hidden />
+          <div className="flex-1">
+            <h2 id="gate-title" className="text-[15px] font-semibold">New lessons are locked until your error debt is cleared.</h2>
+            <p className="mt-1 text-[13.5px] tabular-nums text-ink-2">
+              {[acc.overdueCards > 0 ? `${acc.overdueCards} overdue chunk${acc.overdueCards === 1 ? "" : "s"}` : null, ...acc.top.slice(0, 2).map((p) => `Recurring flaw: ${humanize(p.subtype)} (${p.count}×)`)].filter(Boolean).join(" · ")}
+            </p>
+            <p className="mt-1 text-[12.5px] text-ink-3">{acc.reasons.join(" ")}</p>
+          </div>
+          <Link href="/graveyard?tab=detox" className={buttonVariants({ variant: "danger", size: "md" })}>Start 5-Min Error Detox</Link>
+        </section>
+      )}
+
+      {/* B — Telemetry & promotion lock strip */}
+      <section aria-label="Proficiency telemetry" className="grid overflow-hidden rounded-lg border border-line bg-line md:grid-cols-[1fr_1.4fr_auto] [&>*]:min-w-0" style={{ gap: 1 }}>
+        <div className="bg-card p-5">
+          <p className="eyebrow">Current level</p>
+          <div className="mt-2 flex items-baseline gap-3">
+            <span className="num text-[34px] font-semibold leading-none tracking-tight">{t.subBand}</span>
+            <span className="num text-[15px] text-ink-2">IELTS ≈ {t.ielts.band.toFixed(1)}</span>
+          </div>
+          <p className="mt-1 text-[12px] tabular-nums text-ink-3">range {t.ielts.low.toFixed(1)}–{t.ielts.high.toFixed(1)} · est. diagnostic equivalent</p>
+          <div className="mt-3 text-[13px]">
+            {t.decaying ? (
+              <span className="flex items-center gap-1 text-moderate-ink"><ArrowDownRight className="size-4" aria-hidden />Decay applied — {data.ledger.decayedDays} idle day(s) beyond grace</span>
+            ) : t.weekDelta ? (
+              <span className={cn("flex items-center gap-1 font-medium tabular-nums", t.weekDelta.gai >= 0 ? "text-mastered-ink" : "text-critical-ink")}>
+                {t.weekDelta.gai >= 0 ? <ArrowUpRight className="size-4" aria-hidden /> : <ArrowDownRight className="size-4" aria-hidden />}
+                {signed(t.weekDelta.gai)} GAI this week · level {signed(t.weekDelta.level)}
+              </span>
             ) : (
-              <ul className="space-y-1 text-muted-foreground">
-                {t.promotion.unmet.map((u) => (
-                  <li key={u} className="flex gap-1">
-                    <Lock className="mt-0.5 h-3 w-3 shrink-0" aria-hidden />
-                    {u}
-                  </li>
-                ))}
-              </ul>
+              <span className="text-ink-3">Trend appears after your next session.</span>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
+        <div className="bg-card p-5">
+          <p className="eyebrow mb-3">Promotion lock → {t.nextBand ?? "top band"}</p>
+          <PromotionLockList checks={t.checks} compact />
+        </div>
+        <div className="flex flex-col justify-center gap-2 bg-card p-5 md:w-56">
+          <PromotionAction unlocked={t.promotion.unlocked} nextBand={t.nextBand} />
+        </div>
       </section>
 
-      {/* Accountability */}
-      {acc.locked ? (
-        <div className="flex flex-col gap-2 rounded-md border border-destructive/50 bg-destructive/10 p-4 text-sm md:flex-row md:items-center md:justify-between">
-          <div className="flex gap-2">
-            <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-destructive" aria-hidden />
-            <div>
-              <p className="font-semibold">New lessons are locked. You have unpaid error debt.</p>
-              <ul className="mt-1 list-disc pl-5 text-muted-foreground">
-                {acc.reasons.map((r) => (
-                  <li key={r}>{r}</li>
-                ))}
-              </ul>
-              {acc.top.length > 0 && <p className="mt-1">Your top recurring mistakes: {acc.top.map((p) => `${p.subtype} ×${p.count}`).join(", ")}.</p>}
-            </div>
-          </div>
-          <Button variant="destructive" onClick={() => router.push("/graveyard#detox")}>Start 5-minute Error Detox</Button>
-        </div>
-      ) : (
-        (acc.overdueCards > 0 || acc.errorDebt > 0) && (
-          <div className="rounded-md border p-3 text-sm text-muted-foreground">
-            {acc.overdueCards} overdue review card(s) · recurring-error debt {acc.errorDebt}. Lock triggers at 15 cards or debt 12.{" "}
-            <Link href="/graveyard" className="text-primary">Review now</Link>
-          </div>
-        )
-      )}
-
-      {/* Today's lessons */}
-      <section>
-        <div className="mb-2 flex items-center justify-between gap-2">
+      {/* C — Live briefings */}
+      <section aria-labelledby="brief-title">
+        <div className="mb-4 flex items-center justify-between gap-3">
           <div>
-            <h2 className="text-sm font-semibold">Today&apos;s i+1-matched live lessons</h2>
-            {lessons && <p className="text-xs text-muted-foreground">Your level {lessons.level.toFixed(1)} → target difficulty {lessons.target.toFixed(1)}</p>}
+            <h2 id="brief-title" className="text-[15px] font-semibold">Today&apos;s live briefings</h2>
+            <p className="text-[12.5px] text-ink-3">Real articles from the last 72 hours, ranked by distance to your i+1 target.</p>
           </div>
-          <Button variant="outline" size="sm" onClick={sync} disabled={syncing}>
-            <RefreshCw className={`h-4 w-4 ${syncing ? "animate-spin" : ""}`} aria-hidden />
-            {syncing ? "Syncing…" : "Sync Live Content Now"}
+          <Button variant="outline" size="sm" onClick={() => void sync()} disabled={syncing}>
+            <RefreshCw className={cn(syncing && "animate-spin")} aria-hidden />
+            {syncing ? "Syncing…" : "Sync now"}
           </Button>
         </div>
-        {syncReport && <p className="mb-2 text-xs text-muted-foreground">{syncReport}</p>}
-        {error && <p className="mb-2 text-sm text-destructive">{error}</p>}
-        {lessons && lessons.articles.length === 0 && <p className="rounded-md border p-4 text-sm text-muted-foreground">No unused articles from the last 3 days. Press “Sync Live Content Now”.</p>}
-        <div className="grid gap-3 md:grid-cols-2 [&>*]:min-w-0">
-          {lessons?.articles.map((a) => (
-            <Card key={a.id}>
-              <CardHeader>
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <Badge variant="outline">{a.source}</Badge>
-                  <Badge>{a.cefrTier}</Badge>
-                  <Badge variant={a.match === "i+1 match" ? "success" : a.match === "too hard" ? "critical" : "minor"}>{a.match}</Badge>
-                  {a.delivery === "GRADED_BRIDGE" && <Badge variant="minor">graded bridge + original</Badge>}
-                </div>
-                <CardTitle className="mt-1 leading-snug">{a.title}</CardTitle>
-                <CardDescription>
-                  {a.publishedAt ? new Date(a.publishedAt).toLocaleString() : "date unknown"} · D {a.difficulty.toFixed(1)} · FK grade {a.fkGrade.toFixed(1)} · {a.wordCount} words
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="flex items-center justify-between">
-                <a href={a.url} target="_blank" rel="noreferrer" className="text-xs text-muted-foreground hover:underline">Original article</a>
-                <Button size="sm" onClick={() => start(a.id)} disabled={starting !== null || acc.locked || !data.llm}>
-                  {starting === a.id ? "Building lesson…" : "Start lesson"}
-                </Button>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-        {lessons && lessons.lessons.length > 0 && (
-          <div className="mt-4">
-            <h3 className="mb-1 text-xs font-semibold text-muted-foreground">Your lessons</h3>
-            <ul className="divide-y rounded-md border text-sm">
-              {lessons.lessons.map((l) => (
-                <li key={l.id} className="flex items-center justify-between px-3 py-2">
-                  <Link href={`/lesson/${l.id}`} className="hover:underline">{l.title}</Link>
-                  <Badge variant={l.stage === "COMPLETED" ? "success" : "outline"}>{l.stage}</Badge>
-                </li>
+        {error && <p className="mb-3 rounded-md bg-critical-wash p-3 text-[13px] text-critical-ink">{error}</p>}
+        {!lessons ? (
+          <div className="grid gap-4 md:grid-cols-3">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-56" />)}</div>
+        ) : fresh.length === 0 && inProgress.length === 0 ? (
+          <EmptyState
+            icon={<Newspaper />}
+            title="No live articles yet"
+            body="Pull today's articles from BBC, The Guardian, NPR, Aeon, TechCrunch, The Verge and Quanta. Each is profiled for difficulty and matched to your level."
+            action={<Button onClick={() => void sync()} disabled={syncing}>{syncing ? "Syncing…" : "Sync live content"}</Button>}
+          />
+        ) : (
+          <>
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 [&>*]:min-w-0">
+              {inProgress.slice(0, 3).map((l) => <InProgressCard key={l.id} l={l} />)}
+              {visible.map((a) => (
+                <BriefingCard key={a.id} a={a} subBand={t.subBand} locked={acc.locked} llm={!!data.llm} starting={starting === a.id} onStart={() => void start(a.id)} />
               ))}
-            </ul>
-          </div>
+            </div>
+            {!showAll && fresh.length > visible.length && (
+              <button type="button" onClick={() => setShowAll(true)} className="mt-4 text-[13px] font-medium text-ink-2 hover:text-ink">
+                Show {fresh.length - visible.length} more briefing{fresh.length - visible.length === 1 ? "" : "s"} →
+              </button>
+            )}
+          </>
         )}
       </section>
 
-      {/* Metrics */}
-      <section className="grid gap-4 md:grid-cols-2 [&>*]:min-w-0">
-        <Card>
-          <CardHeader>
-            <CardTitle>5-axis skill radar</CardTitle>
-            <CardDescription>GAI grammar · LRI lexis · CPR comprehension · RSS retention · ERI error decay (0–100)</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <SkillRadar data={data.radar} />
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>30-day trend</CardTitle>
-            <CardDescription>Proficiency snapshots after every verified session</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <TrendChart data={data.trend} />
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Errors per 100 words</CardTitle>
-            <CardDescription>First-attempt production only — rewrites never count</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ErrorDecayChart data={data.errorDecay} />
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Recurring error heatmap</CardTitle>
-            <CardDescription>Occurrences per error pattern per ISO week (last 8 weeks)</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ErrorHeatmap weeks={data.heatmap.weeks} rows={data.heatmap.rows} />
-          </CardContent>
-        </Card>
-      </section>
-
-      <section className="grid gap-4 md:grid-cols-2 [&>*]:min-w-0">
-        <Card>
-          <CardHeader>
-            <CardTitle>Today&apos;s acquired arsenal</CardTitle>
-            <CardDescription>Chunks locked into FSRS in the last 24 hours, with your own sentence</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {data.arsenal.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Nothing locked in yet today. Finish a lesson&apos;s exit ticket.</p>
-            ) : (
-              <ul className="space-y-2 text-sm">
-                {data.arsenal.map((a) => (
-                  <li key={a.phrase + a.sentence}>
-                    <span className="font-semibold">{a.phrase}</span>
-                    <span className="block text-muted-foreground">{a.sentence}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Live sources</CardTitle>
-            <CardDescription>Feed health from the last ingestion</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ul className="space-y-1 text-xs">
-              {data.feeds.map((f) => (
-                <li key={f.name} className="flex items-center justify-between gap-2">
-                  <span>{f.name}</span>
-                  <span className="flex items-center gap-2 text-muted-foreground">
-                    {f.articles} articles
-                    <Badge variant={f.status === "ACTIVE" ? "success" : f.status === "FAILING" ? "critical" : "minor"} title={f.lastError ?? undefined}>
-                      {f.lastFetchedAt ? f.status : "never fetched"}
-                    </Badge>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
-      </section>
+      {data.arsenal.length > 0 && (
+        <section aria-labelledby="arsenal-title" className="rounded-lg border border-line bg-card p-5">
+          <h2 id="arsenal-title" className="text-[15px] font-semibold">Today&apos;s acquired arsenal</h2>
+          <ul className="mt-3 grid gap-3 sm:grid-cols-2">
+            {data.arsenal.map((a) => (
+              <li key={a.phrase + a.sentence} className="border-l-2 border-mastered pl-3">
+                <p className="font-medium">{a.phrase}</p>
+                <p className="font-serif text-[14.5px] text-ink-2">{a.sentence}</p>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
     </div>
   );
 }

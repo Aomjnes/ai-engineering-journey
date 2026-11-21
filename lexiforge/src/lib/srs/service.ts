@@ -25,8 +25,11 @@ export async function dueCards(userId: string, now: Date, limit = 30) {
   const cards = await prisma.srsCard.findMany({ where: { userId, dueAt: { lte: now } }, orderBy: [{ dueAt: "asc" }], take: limit });
   return cards.map((c) => {
     const back = BackSchema.safeParse(JSON.parse(c.back));
+    // Alternate active-production formats: fill-in-your-own-context, then nuance → expression.
+    const mode: "context" | "nuance" = c.reps % 2 === 0 ? "context" : "nuance";
     return {
       id: c.id,
+      mode,
       state: c.state,
       overdueDays: Math.max(0, Math.floor((now.getTime() - c.dueAt.getTime()) / 86_400_000)),
       cueVi: back.success ? back.data.meaningVi : "",
@@ -55,5 +58,15 @@ export async function reviewCard(userId: string, cardId: string, typed: string, 
     prisma.srsReview.create({ data: { cardId: card.id, rating, elapsedDays: out.elapsedDays, retrievability: out.retrievabilityAtReview, recalled: out.recalled, reviewedAt: now } }),
     prisma.userProgress.upsert({ where: { userId }, update: { lastReviewAt: now }, create: { userId, lastReviewAt: now } }),
   ]);
-  return { rating, ratingLabel: ["", "Again", "Hard", "Good", "Easy"][rating], answer: card.front, nextDueAt: out.card.dueAt, stability: out.card.stability, retrievabilityAtReview: out.retrievabilityAtReview };
+  const intervalDays = Math.max(0, (out.card.dueAt.getTime() - now.getTime()) / 86_400_000);
+  return {
+    rating,
+    ratingLabel: ["", "Again", "Hard", "Good", "Easy"][rating],
+    answer: card.front,
+    typed,
+    nextDueAt: out.card.dueAt,
+    intervalDays: Math.round(intervalDays * 10) / 10,
+    stability: out.card.stability,
+    retrievabilityAtReview: out.retrievabilityAtReview,
+  };
 }

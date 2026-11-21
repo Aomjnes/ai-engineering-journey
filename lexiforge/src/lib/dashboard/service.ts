@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/db";
 import { detectProvider } from "@/lib/env";
 import { accountabilityStatus } from "@/lib/accountability/service";
-import { bandLabel, eriGate, ieltsEstimate, nextBand, promotionStatus, QUALIFYING_THRESHOLD, REQUIRED_CONSECUTIVE, type SubBand } from "@/lib/metrics/scoring";
+import { bandLabel, COMPOSITE_WEIGHTS, computeEri, eriGate, ieltsEstimate, nextBand, promotionStatus, QUALIFYING_THRESHOLD, REQUIRED_CONSECUTIVE, RECURRENCE_CEILING, RSS_PROMOTION_FLOOR, type SubBand } from "@/lib/metrics/scoring";
 import { applyDecay, computeRetention, loadProductionSessions } from "@/lib/profile/service";
 
 const DAY = 86_400_000;
@@ -27,7 +27,7 @@ export async function dashboardData(userId: string, now: Date) {
     prisma.srsCard.findMany({ where: { userId, createdAt: { gte: new Date(now.getTime() - DAY) }, chunkId: { not: null } }, select: { front: true, back: true, createdAt: true } }),
     prisma.submissionAttempt.findMany({
       where: { userId, kind: { in: ["PRODUCTION", "DIAGNOSTIC_WRITING", "PROMOTION_AUDIT"] }, attemptNumber: 1, rejected: false },
-      select: { createdAt: true, wordCount: true, errors: { select: { subtype: true, severity: true } } },
+      select: { createdAt: true, wordCount: true, gai: true, lri: true, errors: { select: { subtype: true, severity: true } } },
       orderBy: { createdAt: "asc" },
     }),
   ]);
@@ -57,6 +57,62 @@ export async function dashboardData(userId: string, now: Date) {
     .sort((a, b) => b.total - a.total)
     .slice(0, 10);
   const ielts = ieltsEstimate(profile.abilityLevel, profile.evidenceWords, profile.evidenceItems);
+  const next = nextBand(band);
+  const rssEvidence = retention.matureReviews > 0;
+  type CheckStatus = "PASS" | "PROGRESS" | "BLOCKED" | "LOCKED" | "NO_DATA";
+  const checks: Array<{ key: string; label: string; status: CheckStatus; detail: string }> = [
+    {
+      key: "sessions",
+      label: "Qualifying sessions",
+      status: profile.consecutiveQualifying >= REQUIRED_CONSECUTIVE ? "PASS" : "PROGRESS",
+      detail: `${profile.consecutiveQualifying}/${REQUIRED_CONSECUTIVE} consecutive · composite ≥ ${QUALIFYING_THRESHOLD[band]} on ≥ ${bandLabel(band)} text, first-try gate pass`,
+    },
+    {
+      key: "eri",
+      label: "Critical error recurrence",
+      status: gate.passes ? "PASS" : "BLOCKED",
+      detail: gate.passes ? `No critical pattern in > ${RECURRENCE_CEILING} of last 5 sessions` : `Over ceiling: ${gate.offending.join(", ")}`,
+    },
+    {
+      key: "rss",
+      label: `Retention ≥ ${RSS_PROMOTION_FLOOR}`,
+      status: !rssEvidence ? "NO_DATA" : (retention.rss ?? 0) >= RSS_PROMOTION_FLOOR ? "PASS" : "BLOCKED",
+      detail: rssEvidence ? `RSS ${retention.rss?.toFixed(1)} from ${retention.matureReviews} mature reviews` : "No reviews ≥ 7 days old yet — not required until evidence exists",
+    },
+    {
+      key: "audit",
+      label: "Band Promotion Audit",
+      status: promotion.unlocked ? "PASS" : "LOCKED",
+      detail: promotion.unlocked ? `Unlocked — zero-hint audit at ${next ? bandLabel(next) : "—"}` : "Unlocks when every check above passes",
+    },
+  ];
+  const weekAgo = now.getTime() - 7 * DAY;
+  const baseline = [...snapshots].reverse().find((s) => s.takenAt.getTime() <= weekAgo) ?? snapshots[0];
+  const latest = snapshots[snapshots.length - 1];
+  const weekDelta = baseline && latest && baseline !== latest ? { gai: latest.gai - baseline.gai, level: latest.abilityLevel - baseline.abilityLevel, composite: latest.composite - baseline.composite } : null;
+  const recent = production.slice(-5);
+  const avg = (xs: Array<number | null>) => {
+    const v = xs.filter((x): x is number => x !== null);
+    return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null;
+  };
+  const recentCpr = await prisma.submissionAttempt.findMany({ where: { userId, kind: "COMPREHENSION", attemptNumber: 1 }, orderBy: { createdAt: "desc" }, take: 9, select: { cpr: true } });
+  const eri = computeEri(sessions, now);
+  const ledger = {
+    weights: COMPOSITE_WEIGHTS,
+    recent: {
+      sessions: recent.length,
+      gai: avg(recent.map((r) => r.gai)),
+      lri: avg(recent.map((r) => r.lri)),
+      cpr: avg(recentCpr.map((r) => r.cpr)),
+      cprItems: recentCpr.length,
+      e100: avg(recent.map((r) => (r.wordCount ? (100 * r.errors.length) / r.wordCount : null))),
+    },
+    rss: { r7: retention.r7, r30: retention.r30, current: retention.current, matureReviews: retention.matureReviews },
+    eri: { density: eri.recurrenceDensity, recurring: eri.recurringSubtypes, sessions: sessions.length },
+    level: profile.abilityLevel,
+    decayedDays: profile.decayedDays,
+    lastActivityAt: profile.lastActivityAt,
+  };
   return {
     calibrated: true as const,
     llm: detectProvider()?.provider ?? null,
@@ -69,6 +125,10 @@ export async function dashboardData(userId: string, now: Date) {
       requiredConsecutive: REQUIRED_CONSECUTIVE,
       qualifyingThreshold: QUALIFYING_THRESHOLD[band],
       promotion,
+      checks,
+      weekDelta,
+      decaying: profile.decayedDays > 0,
+      benchmark: next ? QUALIFYING_THRESHOLD[next] : null,
       evidence: { words: profile.evidenceWords, items: profile.evidenceItems, rssReviews: retention.matureReviews, eriSessions: sessions.length },
     },
     radar: [
@@ -84,6 +144,7 @@ export async function dashboardData(userId: string, now: Date) {
     heatmap: { weeks, rows: heatmap },
     accountability,
     feeds: feeds.map((f) => ({ name: f.name, status: f.status, lastFetchedAt: f.lastFetchedAt, lastError: f.lastError, articles: f._count.articles })),
+    ledger,
     arsenal: arsenal.map((c) => {
       let sentence = "";
       try {

@@ -1,508 +1,400 @@
 "use client";
 
-import { use, useCallback, useEffect, useMemo, useState } from "react";
+import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { Mic, Pause, Play, Volume2 } from "lucide-react";
+import { ArrowLeft, Check, ExternalLink, Lock, X } from "lucide-react";
 import type { lessonView } from "@/lib/lessons/flow";
 import type { Explanation } from "@/lib/explain/service";
-import type { DiffSegment } from "@/lib/evaluation/spans";
 import { api, errorMessage } from "@/lib/client/api";
-import { countWords, splitSentences } from "@/lib/metrics/text";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Textarea } from "@/components/ui/textarea";
-import { ExplainerDrawer } from "@/components/lesson/explainer";
-import { useSpeechToText, useTts } from "@/components/lesson/speech";
+import { timeAgo } from "@/lib/client/format";
 import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
+import { Segmented } from "@/components/ui/segmented";
+import { Skeleton } from "@/components/ui/skeleton";
+import { AudioShadowingBar } from "@/components/lf/audio-bar";
+import { EXPLAIN_TABS, ModeExplainer, type ExplainState, type ExplainTab } from "@/components/lf/mode-explainer";
+import { isTypingTarget } from "@/components/lf/app-shell";
+import { usePrefs } from "@/components/lf/prefs";
+import { useShell } from "@/components/lf/shell-data";
+import { EmptyState } from "@/components/lf/states";
+import { useTts } from "@/components/lesson/speech";
+import { ReadingPane, sentencesOf, type ReadingChunk } from "@/components/lesson/reading-pane";
+import { ShadowingCheck } from "@/components/lesson/shadowing";
+import { ComprehensionStage } from "@/components/lesson/comprehension";
+import { ProductionStage, type Attempt } from "@/components/lesson/production";
+import { ArsenalReceipt, ExitTicketStage } from "@/components/lesson/exit-ticket";
 
 type Lesson = Awaited<ReturnType<typeof lessonView>>;
-const STAGES = ["INPUT", "COMPREHENSION", "PRODUCTION", "EXIT_TICKET", "COMPLETED"] as const;
-const STAGE_LABEL: Record<(typeof STAGES)[number], string> = { INPUT: "1 · Input & shadowing", COMPREHENSION: "2 · Comprehension", PRODUCTION: "3 · Production", EXIT_TICKET: "4 · Exit ticket", COMPLETED: "Completed" };
+type StageKey = "INPUT" | "COMPREHENSION" | "PRODUCTION" | "EXIT_TICKET" | "COMPLETED";
 
-interface EvalError {
-  original: string;
-  correction: string;
-  subtype: string;
-  severity: "CRITICAL" | "MODERATE" | "MINOR";
-  category: string;
-  ruleEn: string;
-  ruleVi: string;
-}
+const STEPS: Array<{ key: Exclude<StageKey, "COMPLETED">; label: string }> = [
+  { key: "INPUT", label: "Input & Dissect" },
+  { key: "COMPREHENSION", label: "Comprehension" },
+  { key: "PRODUCTION", label: "Produce & Repair" },
+  { key: "EXIT_TICKET", label: "Exit Ticket" },
+];
+const ORDER: StageKey[] = ["INPUT", "COMPREHENSION", "PRODUCTION", "EXIT_TICKET", "COMPLETED"];
 
-interface ProductionResult {
-  blocked: boolean;
-  reasons: string[];
-  diff: DiffSegment[];
-  errors: EvalError[];
-  chunks: Array<{ chunk: string; present: boolean; counted: boolean; note: string }>;
-  metrics: { gai: { gai: number; weightedErrorsPer100W: number }; lri: { lri: number } };
-  verdictEn: string;
-  verdictVi: string;
-  nativeUpgrade: string;
-  nextStage: string;
-  session?: { composite: number; qualified: boolean; levelBefore: number; levelAfter: number };
-}
-
-function sevVariant(s: string) {
-  return s === "CRITICAL" ? "critical" : s === "MODERATE" ? "moderate" : "minor";
-}
-
-function DictateButton({ onText }: { onText: (t: string) => void }) {
-  const stt = useSpeechToText(onText);
-  if (!stt.supported) return null;
+function Stepper({ stage, viewing, onView }: { stage: StageKey; viewing: StageKey; onView: (s: StageKey) => void }) {
+  const current = ORDER.indexOf(stage);
   return (
-    <Button type="button" variant={stt.listening ? "destructive" : "outline"} size="sm" onClick={stt.listening ? stt.stop : stt.start}>
-      <Mic className="h-4 w-4" aria-hidden /> {stt.listening ? "Stop" : "Speak"}
-    </Button>
+    <nav aria-label="Lesson stages" className="sticky top-14 z-10 -mx-4 border-b border-line bg-canvas/92 px-4 py-2.5 backdrop-blur supports-[backdrop-filter]:bg-canvas/80 md:-mx-8 md:px-8">
+      <ol className="flex items-center gap-1 overflow-x-auto">
+        {STEPS.map((s, i) => {
+          const done = i < current;
+          const locked = i > current;
+          const isView = viewing === s.key || (viewing === "COMPLETED" && s.key === "EXIT_TICKET");
+          return (
+            <li key={s.key} className="flex shrink-0 items-center gap-1">
+              {i > 0 && <span className={cn("h-px w-4 md:w-8", done || i <= current ? "bg-accent/50" : "bg-line")} aria-hidden />}
+              <button
+                type="button"
+                disabled={locked}
+                onClick={() => onView(stage === "COMPLETED" && s.key === "EXIT_TICKET" ? "COMPLETED" : s.key)}
+                aria-current={isView ? "step" : undefined}
+                title={locked ? "Locked until the previous stage passes" : undefined}
+                className={cn(
+                  "flex h-8 items-center gap-2 rounded-full px-2.5 text-[12.5px] font-medium transition-colors duration-200 ease-lf",
+                  isView ? "bg-ink text-canvas" : done ? "text-ink-2 hover:bg-surface" : locked ? "text-ink-3" : "text-ink hover:bg-surface",
+                )}
+              >
+                <span className={cn("num flex size-5 items-center justify-center rounded-full text-[10.5px] [&_svg]:size-3", isView ? "bg-canvas/20" : done ? "bg-mastered-wash text-mastered-ink" : "bg-surface")}>
+                  {done ? <Check aria-label="completed" /> : locked ? <Lock aria-label="locked" /> : i + 1}
+                </span>
+                <span className={cn(!isView && "hidden sm:inline")}>{s.label}</span>
+              </button>
+            </li>
+          );
+        })}
+      </ol>
+    </nav>
   );
 }
 
-function ErrorList({ errors }: { errors: EvalError[] }) {
-  if (errors.length === 0) return <p className="text-sm text-muted-foreground">No errors logged.</p>;
+function LessonSkeleton() {
   return (
-    <ul className="space-y-2 text-sm">
-      {errors.map((e, i) => (
-        <li key={i} className="rounded border p-2">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <Badge variant={sevVariant(e.severity)}>{e.severity}</Badge>
-            <span className="font-mono text-xs">{e.category} · {e.subtype}</span>
-          </div>
-          <p className="mt-1">
-            <span className="text-destructive line-through">{e.original}</span> → <span className="font-semibold">{e.correction}</span>
-          </p>
-          <p className="text-xs text-muted-foreground">{e.ruleEn}</p>
-          <p className="text-xs text-muted-foreground">{e.ruleVi}</p>
-        </li>
-      ))}
-    </ul>
+    <div className="space-y-6" aria-label="Loading lesson">
+      <Skeleton className="h-10 w-full max-w-xl" />
+      <div className="grid gap-8 lg:grid-cols-[62fr_38fr]">
+        <div className="mx-auto w-full max-w-[65ch] space-y-3">
+          <Skeleton className="h-4 w-40" />
+          <Skeleton className="h-9 w-full" />
+          <Skeleton className="h-9 w-3/4" />
+          {Array.from({ length: 9 }).map((_, i) => (
+            <Skeleton key={i} className={cn("h-4", i % 3 === 2 ? "w-2/3" : "w-full")} />
+          ))}
+        </div>
+        <Skeleton className="hidden h-96 lg:block" />
+      </div>
+    </div>
   );
 }
 
-function InlineDiff({ diff }: { diff: DiffSegment[] }) {
-  return (
-    <p className="reading whitespace-pre-wrap rounded border p-3 text-sm">
-      {diff.map((d, i) =>
-        d.type === "same" ? (
-          <span key={i}>{d.text}</span>
-        ) : (
-          <span key={i}>
-            <span className="bg-destructive/15 text-destructive line-through">{d.text}</span>
-            <span className="bg-success/15 text-success"> {d.correction} </span>
-          </span>
-        ),
-      )}
-    </p>
-  );
+function latestAttempt(l: Lesson): Attempt | null {
+  const last = l.production[l.production.length - 1];
+  if (!last) return null;
+  return { text: last.text, blocked: !last.passedGate, reasons: last.reasons, errors: last.errors as Attempt["errors"], chunks: last.chunks, gai: last.gai, lri: last.lri, verdictEn: last.verdictEn, verdictVi: last.verdictVi, nativeUpgrade: last.nativeUpgrade, session: null };
 }
 
 export default function LessonPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  const { pick } = usePrefs();
+  const { refresh: refreshShell } = useShell();
   const [lesson, setLesson] = useState<Lesson | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [viewing, setViewing] = useState<StageKey | null>(null);
+  const [holdProduction, setHoldProduction] = useState(false);
+  const [version, setVersion] = useState<"guided" | "original" | "both">("guided");
   const [rate, setRate] = useState(1);
-  const [showAuthentic, setShowAuthentic] = useState(false);
-  const [explain, setExplain] = useState<{ selection: string; data: Explanation | null; loading: boolean; error: string | null } | null>(null);
-  const [shadow, setShadow] = useState("");
-  const [shadowResult, setShadowResult] = useState<string | null>(null);
-  const [answers, setAnswers] = useState<Record<string, string>>({});
-  const [feedback, setFeedback] = useState<Record<string, { passed: boolean; text: string; errors?: EvalError[] }>>({});
-  const [production, setProduction] = useState("");
-  const [result, setResult] = useState<ProductionResult | null>(null);
-  const [rewrite, setRewrite] = useState("");
-  const [exit, setExit] = useState<Record<string, string>>({});
-  const [exitResults, setExitResults] = useState<Array<{ chunkId: string; phrase: string; passed: boolean; reason: string | null }>>([]);
+  const [explain, setExplain] = useState<ExplainState | null>(null);
+  const [tab, setTab] = useState<ExplainTab>("logic");
+  const [selectedSentence, setSelectedSentence] = useState<string | null>(null);
+  const [activeChunk, setActiveChunk] = useState<string | null>(null);
+  const cache = useRef(new Map<string, Explanation>());
   const tts = useTts();
 
   const load = useCallback(async () => {
     try {
-      setLesson(await api<Lesson>(`/api/lessons/${id}`));
+      const l = await api<Lesson>(`/api/lessons/${id}`);
+      setLesson(l);
+      return l;
     } catch (e) {
       setError(errorMessage(e));
+      return null;
     }
   }, [id]);
+
   useEffect(() => {
     void load();
   }, [load]);
 
-  const text = lesson ? (showAuthentic ? lesson.authenticExcerpt : lesson.readingText) : "";
-  const sentences = useMemo(() => splitSentences(text).map((s) => s.text), [text]);
+  const stage = (lesson?.stage ?? "INPUT") as StageKey;
+  const view: StageKey = holdProduction ? "PRODUCTION" : (viewing ?? stage);
+  const text = lesson ? (lesson.isGraded && version === "original" ? lesson.authenticExcerpt : lesson.readingText) : "";
+  const sentences = useMemo(() => sentencesOf(text), [text]);
+  const chunks: ReadingChunk[] = useMemo(() => lesson?.chunks.map((c) => ({ id: c.id, phrase: c.phrase })) ?? [], [lesson]);
 
-  async function run(fn: () => Promise<void>) {
-    setBusy(true);
-    setError(null);
-    try {
-      await fn();
-    } catch (e) {
-      setError(errorMessage(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function openExplainer(selection: string, context: string) {
-    const sel = selection.trim();
+  const openExplain = useCallback(async (selection: string, context: string) => {
+    const sel = selection.trim().slice(0, 500);
     if (!sel) return;
+    const cached = cache.current.get(sel);
+    if (cached) {
+      setExplain({ selection: sel, data: cached, loading: false, error: null });
+      return;
+    }
     setExplain({ selection: sel, data: null, loading: true, error: null });
     try {
-      const data = await api<Explanation>("/api/explain", { selection: sel.slice(0, 500), context });
-      setExplain({ selection: sel, data, loading: false, error: null });
+      const data = await api<Explanation>("/api/explain", { selection: sel, context });
+      cache.current.set(sel, data);
+      setExplain((cur) => (cur?.selection === sel ? { selection: sel, data, loading: false, error: null } : cur));
     } catch (e) {
-      setExplain({ selection: sel, data: null, loading: false, error: errorMessage(e) });
+      setExplain((cur) => (cur?.selection === sel ? { selection: sel, data: null, loading: false, error: errorMessage(e) } : cur));
     }
-  }
+  }, []);
 
-  function onReadingMouseUp(context: string) {
-    const sel = window.getSelection()?.toString() ?? "";
-    if (sel.trim().split(/\s+/).length >= 1 && sel.trim().length >= 2) void openExplainer(sel, context);
-  }
+  const closeInspector = useCallback(() => {
+    setExplain(null);
+    setSelectedSentence(null);
+    setActiveChunk(null);
+  }, []);
 
-  if (error && !lesson) return <p className="text-destructive">{error}</p>;
-  if (!lesson) return <p className="text-sm text-muted-foreground">Loading lesson…</p>;
-  const stageIdx = STAGES.indexOf(lesson.stage as (typeof STAGES)[number]);
-  const prodWords = countWords(result?.blocked ? rewrite : production);
+  const togglePlay = useCallback(() => {
+    if (!tts.supported) return;
+    if (tts.state === "playing") tts.pause();
+    else if (tts.state === "paused") tts.resume();
+    else tts.speak(sentences, rate, 0);
+  }, [tts, sentences, rate]);
+
+  // Keyboard: Space = play/pause, 1–4 = explainer modes, Esc = close inspector.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (isTypingTarget(e.target) || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key === " " && view === "INPUT") {
+        e.preventDefault();
+        togglePlay();
+      } else if (explain && ["1", "2", "3", "4"].includes(e.key)) {
+        const t = EXPLAIN_TABS[Number(e.key) - 1];
+        if (t) setTab(t.key);
+      } else if (e.key === "Escape" && explain) {
+        closeInspector();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [view, explain, togglePlay, closeInspector]);
+
+  useEffect(() => {
+    if (view !== "INPUT") tts.stop();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view]);
+
+  if (error && !lesson) return <EmptyState title="This lesson could not load" body={error} action={<Link href="/" className="text-[13.5px] font-medium text-accent">Back to Today</Link>} />;
+  if (!lesson) return <LessonSkeleton />;
+
+  const after = async () => {
+    await load();
+    await refreshShell();
+  };
+
+  const inspectorIdle = (
+    <div className="space-y-6">
+      {stage === "INPUT" && (
+        <ShadowingCheck
+          lessonId={lesson.id}
+          sentence={lesson.shadowSentence}
+          ttsSupported={tts.supported}
+          onPlay={() => lesson.shadowSentence && tts.speak([lesson.shadowSentence], rate, 0)}
+          onPassed={async () => {
+            await after();
+            setViewing(null);
+          }}
+        />
+      )}
+      {stage !== "INPUT" && (
+        <div className="rounded-lg border border-mastered/30 bg-mastered-wash/50 p-4 text-[13.5px] text-ink-2">
+          Stage 1 passed. You are re-reading; your current stage is <button type="button" className="font-medium text-accent underline-offset-4 hover:underline" onClick={() => setViewing(null)}>{STEPS.find((s) => s.key === stage)?.label ?? "Completed"}</button>.
+        </div>
+      )}
+      <section>
+        <p className="eyebrow mb-2.5">Today&apos;s target chunks</p>
+        <ul className="space-y-1">
+          {lesson.chunks.map((c) => (
+            <li key={c.id}>
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveChunk(c.id);
+                  setSelectedSentence(null);
+                  void openExplain(c.phrase, c.sourceSentence);
+                }}
+                className="group w-full rounded-md px-2 py-1.5 text-left hover:bg-surface"
+              >
+                <span className="flex items-baseline gap-2">
+                  <span className="chunk-mark font-serif text-[16px] text-ink" data-active={activeChunk === c.id}>{c.phrase}</span>
+                  {c.isStretch && <Badge variant="moderate">stretch</Badge>}
+                </span>
+                <span className="mt-0.5 block text-[12.5px] text-ink-3">{pick(c.meaningEn, c.meaningVi)}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      </section>
+      {lesson.grammarInWild.length > 0 && (
+        <section>
+          <p className="eyebrow mb-2.5">Grammar in the wild</p>
+          <div className="space-y-3">
+            {lesson.grammarInWild.map((g) => (
+              <div key={g.pattern} className="rounded-md border-l-2 border-accent/60 bg-card py-2 pl-3 pr-2">
+                <p className="text-[13px] font-semibold text-ink">{g.pattern}</p>
+                <p className="mt-1 font-serif text-[15px] italic leading-relaxed text-ink-2">{g.example}</p>
+                <p className="mt-1 text-[12.5px] leading-relaxed text-ink-3">{pick(g.explanationEn, g.explanationVi)}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+    </div>
+  );
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <Link href="/" className="text-xs text-muted-foreground hover:underline">← Dashboard</Link>
-          <h1 className="text-lg font-semibold leading-snug">{lesson.article.title}</h1>
-          <div className="mt-1 flex flex-wrap gap-1.5 text-xs">
-            <Badge variant="outline">{lesson.article.source}</Badge>
-            <Badge>{lesson.isGraded ? "Graded bridge" : "Authentic text"}</Badge>
-            <Badge variant="minor">D {lesson.difficulty.toFixed(1)}</Badge>
-            <Badge variant="minor">~{Math.round(lesson.comprehensibility * 100)}% familiar words</Badge>
-            <a href={lesson.article.url} target="_blank" rel="noreferrer" className="text-muted-foreground hover:underline">source</a>
-          </div>
-        </div>
-        <ol className="flex flex-wrap gap-1 text-xs">
-          {STAGES.map((s, i) => (
-            <li key={s} className={cn("rounded px-2 py-1", i < stageIdx ? "bg-success/15 text-success" : i === stageIdx ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground")}>{STAGE_LABEL[s]}</li>
-          ))}
-        </ol>
+    <div>
+      <div className="mb-4 flex items-center gap-3">
+        <Link href="/" className="flex items-center gap-1 text-[12.5px] text-ink-3 hover:text-ink"><ArrowLeft className="size-3.5" aria-hidden />Today</Link>
+        <span className="truncate text-[12.5px] text-ink-3">{lesson.article.source} · {lesson.article.title}</span>
       </div>
-      {error && <p className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">{error}</p>}
+      <Stepper stage={stage} viewing={view} onView={(s) => { setHoldProduction(false); setViewing(s === stage ? null : s); }} />
 
-      <div className="grid gap-4 lg:grid-cols-[1.2fr_1fr] [&>*]:min-w-0">
-        {/* Reading pane */}
-        <Card className="lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto">
-          <CardHeader className="flex-row flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              {tts.supported && (
-                <>
-                  <Button size="sm" variant="outline" onClick={() => (tts.speakingIndex === null ? tts.speak(sentences, rate) : tts.stop())}>
-                    {tts.speakingIndex === null ? <Play className="h-4 w-4" aria-hidden /> : <Pause className="h-4 w-4" aria-hidden />}
-                    {tts.speakingIndex === null ? "Listen" : "Stop"}
-                  </Button>
-                  <label className="flex items-center gap-1 text-xs text-muted-foreground">
-                    Speed
-                    <input type="range" min={0.6} max={1.4} step={0.1} value={rate} onChange={(e) => setRate(Number(e.target.value))} aria-label="Speech rate" />
-                    <span className="w-8 tabular-nums">{rate.toFixed(1)}×</span>
-                  </label>
-                </>
+      {view === "INPUT" && (
+        <div className="mt-6 grid gap-8 lg:grid-cols-[62fr_38fr] [&>*]:min-w-0">
+          <article className="relative">
+            <header className="measure mx-auto">
+              <div className="flex flex-wrap items-center gap-2 text-[12.5px] text-ink-3">
+                <span className="font-medium text-ink-2">{lesson.article.source}</span>
+                <span aria-hidden>·</span>
+                <span className="num">{lesson.article.publishedAt ? timeAgo(lesson.article.publishedAt) : "undated"}</span>
+                <a href={lesson.article.url} target="_blank" rel="noreferrer" className="flex items-center gap-1 hover:text-ink">source <ExternalLink className="size-3" aria-hidden /></a>
+              </div>
+              <h1 className="mt-3 font-serif text-[32px] font-medium leading-[1.15] tracking-[-0.015em] text-ink md:text-[38px]">{lesson.article.title}</h1>
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                <Badge variant="accent">{lesson.isGraded ? "Guided i+1 bridge" : `Authentic ${lesson.article.cefrTier}`}</Badge>
+                <Badge variant="outline" className="num">D {lesson.difficulty.toFixed(0)}</Badge>
+                <Badge variant="outline" className="num">~{Math.round(lesson.comprehensibility * 100)}% familiar</Badge>
+              </div>
+              {lesson.isGraded && (
+                <Segmented
+                  className="mt-5"
+                  label="Text version"
+                  value={version}
+                  onChange={(v) => { tts.stop(); setVersion(v); }}
+                  options={[
+                    { value: "guided", label: "Guided i+1 Version" },
+                    { value: "original", label: "Original Live Source" },
+                    { value: "both", label: <span className="hidden xl:inline">Side by side</span>, hint: "Wide screens only" },
+                  ].filter((o) => o.value !== "both" || (typeof window !== "undefined" && window.innerWidth >= 1280)) as Array<{ value: "guided" | "original" | "both"; label: React.ReactNode }>}
+                />
+              )}
+              <p className="mt-5 text-[12.5px] text-ink-3">Click any sentence or underlined chunk — or select any phrase — to dissect it.</p>
+            </header>
+            {version === "both" && lesson.isGraded ? (
+              <div className="mt-6 grid grid-cols-2 gap-6">
+                <div>
+                  <p className="eyebrow mb-2">Guided</p>
+                  <ReadingPane text={lesson.readingText} chunks={chunks} selected={selectedSentence} speakingIndex={null} activeChunk={activeChunk} className="!text-[16.5px]" onSentence={(s, p) => { setSelectedSentence(s); setActiveChunk(null); void openExplain(s, p); }} onChunk={(c, s) => { setActiveChunk(c.id); setSelectedSentence(null); void openExplain(c.phrase, s); }} onSelection={(sel, p) => void openExplain(sel, p)} />
+                </div>
+                <div>
+                  <p className="eyebrow mb-2">Original</p>
+                  <ReadingPane text={lesson.authenticExcerpt} chunks={chunks} selected={selectedSentence} speakingIndex={null} activeChunk={activeChunk} className="!text-[16.5px]" onSentence={(s, p) => { setSelectedSentence(s); setActiveChunk(null); void openExplain(s, p); }} onChunk={(c, s) => { setActiveChunk(c.id); setSelectedSentence(null); void openExplain(c.phrase, s); }} onSelection={(sel, p) => void openExplain(sel, p)} />
+                </div>
+              </div>
+            ) : (
+              <ReadingPane
+                className="mx-auto mt-6"
+                text={text}
+                chunks={chunks}
+                selected={selectedSentence}
+                speakingIndex={tts.speakingIndex}
+                activeChunk={activeChunk}
+                onSentence={(s, p) => { setSelectedSentence(s); setActiveChunk(null); void openExplain(s, p); }}
+                onChunk={(c, s) => { setActiveChunk(c.id); setSelectedSentence(null); void openExplain(c.phrase, s); }}
+                onSelection={(sel, p) => void openExplain(sel, p)}
+              />
+            )}
+            {tts.supported && version !== "both" && (
+              <div className="pointer-events-none sticky bottom-20 z-10 mt-6 flex justify-center md:bottom-6">
+                <AudioShadowingBar
+                  state={tts.state}
+                  rate={rate}
+                  position={tts.speakingIndex}
+                  total={sentences.length}
+                  onToggle={togglePlay}
+                  onStop={tts.stop}
+                  onBack={() => tts.speak(sentences, rate, Math.max(0, (tts.speakingIndex ?? 0) - 1))}
+                  onRate={(r) => {
+                    setRate(r);
+                    if (tts.state === "playing") tts.speak(sentences, r, tts.speakingIndex ?? 0);
+                  }}
+                />
+              </div>
+            )}
+          </article>
+
+          {/* Inspector: sticky panel on desktop; idle content inline + bottom sheet on mobile/tablet */}
+          <aside aria-label="Inspector" className="lg:sticky lg:top-[7.75rem] lg:max-h-[calc(100vh-9rem)] lg:self-start lg:overflow-y-auto">
+            <div className="hidden lg:block">
+              {explain ? (
+                <div className="animate-in rounded-lg border border-line bg-card p-5">
+                  <div className="mb-3 flex items-center justify-between">
+                    <p className="eyebrow">Dissection</p>
+                    <button type="button" onClick={closeInspector} aria-label="Close inspector (Esc)" className="rounded p-1 text-ink-3 hover:bg-surface hover:text-ink"><X className="size-4" /></button>
+                  </div>
+                  <ModeExplainer state={explain} tab={tab} onTab={setTab} />
+                </div>
+              ) : (
+                inspectorIdle
               )}
             </div>
-            {lesson.isGraded && (
-              <Button size="sm" variant="ghost" onClick={() => setShowAuthentic((v) => !v)}>{showAuthentic ? "Show graded bridge" : "Show authentic original"}</Button>
-            )}
-          </CardHeader>
-          <CardContent>
-            <p className="mb-2 text-xs text-muted-foreground">Click any sentence, or select any phrase, for the 4-mode explainer.</p>
-            <div className="reading space-y-3 text-[15px]" onMouseUp={() => onReadingMouseUp(text)}>
-              {text.split(/\n{2,}/).map((para, pi) => (
-                <p key={pi}>
-                  {splitSentences(para).map((s) => {
-                    const idx = sentences.indexOf(s.text);
-                    return (
-                      <span
-                        key={s.start}
-                        className={cn("cursor-pointer rounded-sm hover:bg-muted", tts.speakingIndex === idx && "sentence-active")}
-                        onClick={() => {
-                          if (!window.getSelection()?.toString()) void openExplainer(s.text, para);
-                        }}
-                      >
-                        {s.text}{" "}
-                      </span>
-                    );
-                  })}
-                </p>
-              ))}
-            </div>
-            <div className="mt-4 space-y-2">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Target chunks</h3>
-              <ul className="space-y-1 text-sm">
-                {lesson.chunks.map((c) => (
-                  <li key={c.id} className="flex flex-wrap items-baseline gap-1.5">
-                    <button className="font-semibold hover:underline" onClick={() => void openExplainer(c.phrase, c.sourceSentence)}>{c.phrase}</button>
-                    {c.isStretch && <Badge variant="moderate">stretch</Badge>}
-                    <span className="text-muted-foreground">— {c.meaningVi}</span>
-                  </li>
-                ))}
-              </ul>
-              <h3 className="pt-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Grammar in the wild</h3>
-              <ul className="space-y-2 text-sm">
-                {(lesson.grammarInWild as Array<{ pattern: string; example: string; explanationEn: string; explanationVi: string }>).map((g) => (
-                  <li key={g.pattern}>
-                    <p className="font-semibold">{g.pattern}</p>
-                    <p className="reading italic">{g.example}</p>
-                    <p className="text-xs text-muted-foreground">{g.explanationEn}</p>
-                    <p className="text-xs text-muted-foreground">{g.explanationVi}</p>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Stage pane */}
-        <div className="flex flex-col gap-4">
-          {lesson.stage === "INPUT" && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Shadowing check</CardTitle>
-                <CardDescription>Read and listen first. Then play the hidden sentence and repeat it aloud (or type it). ≥ 80% word accuracy unlocks Stage 2.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                {tts.supported && lesson.shadowSentence && (
-                  <Button size="sm" variant="outline" onClick={() => tts.speak([lesson.shadowSentence as string], rate)}>
-                    <Volume2 className="h-4 w-4" aria-hidden /> Play hidden sentence
-                  </Button>
-                )}
-                {!tts.supported && <p className="text-xs text-warning">Your browser has no speech synthesis; shadow this sentence: “{lesson.shadowSentence}”</p>}
-                <Textarea rows={3} value={shadow} onChange={(e) => setShadow(e.target.value)} onPaste={(e) => e.preventDefault()} placeholder="What you heard…" />
-                <div className="flex gap-2">
-                  <DictateButton onText={(t) => setShadow((s) => `${s} ${t}`.trim())} />
-                  <Button
-                    disabled={busy || countWords(shadow) < 3}
-                    onClick={() =>
-                      run(async () => {
-                        const r = await api<{ passed: boolean; accuracy: number }>("/api/evaluate", { stage: "INPUT", lessonId: lesson.id, transcript: shadow });
-                        setShadowResult(r.passed ? `Accuracy ${r.accuracy}%. Stage 2 unlocked.` : `Accuracy ${r.accuracy}% — below 80%. Listen again.`);
-                        if (r.passed) await load();
-                      })
-                    }
-                  >
-                    Check
-                  </Button>
+            <div className="lg:hidden">{inspectorIdle}</div>
+          </aside>
+          {explain && (
+            <div className="fixed inset-0 z-40 lg:hidden" role="dialog" aria-modal="true" aria-label="Dissection">
+              <button type="button" aria-label="Close" className="absolute inset-0 bg-ink/25" onClick={closeInspector} />
+              <div className="animate-in absolute inset-x-0 bottom-0 max-h-[82vh] overflow-y-auto rounded-t-2xl border-t border-line bg-card p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] shadow-sheet">
+                <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-line-strong" aria-hidden />
+                <div className="mb-2 flex justify-end">
+                  <button type="button" onClick={closeInspector} aria-label="Close" className="rounded p-1 text-ink-3 hover:bg-surface"><X className="size-4" /></button>
                 </div>
-                {shadowResult && <p className="text-sm">{shadowResult}</p>}
-              </CardContent>
-            </Card>
-          )}
-
-          {lesson.stage === "COMPREHENSION" && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Deep comprehension</CardTitle>
-                <CardDescription>Answer in your own words. Copying ≥ 65% of a source passage is rejected automatically and scores 0.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {lesson.questions.map((q) => (
-                  <div key={q.id} className="space-y-1">
-                    <p className="text-sm font-medium">
-                      <Badge variant="outline" className="mr-1">{q.type}</Badge>
-                      {q.prompt}
-                    </p>
-                    {q.passed ? (
-                      <p className="text-sm text-success">Passed.</p>
-                    ) : (
-                      <>
-                        <Textarea rows={3} value={answers[q.id] ?? ""} onChange={(e) => setAnswers((a) => ({ ...a, [q.id]: e.target.value }))} onPaste={(e) => e.preventDefault()} />
-                        <Button
-                          size="sm"
-                          disabled={busy || countWords(answers[q.id] ?? "") < 5}
-                          onClick={() =>
-                            run(async () => {
-                              const r = await api<{ passed: boolean; copyRejected: boolean; message?: string; verdictEn?: string; verdictVi?: string; errors?: EvalError[]; criteriaMet?: number; criteriaTotal?: number; nextStage?: string }>("/api/evaluate", {
-                                stage: "COMPREHENSION",
-                                lessonId: lesson.id,
-                                questionId: q.id,
-                                answer: answers[q.id] ?? "",
-                              });
-                              setFeedback((f) => ({
-                                ...f,
-                                [q.id]: { passed: r.passed, text: r.copyRejected ? (r.message ?? "Rejected.") : `${r.criteriaMet}/${r.criteriaTotal} criteria met. ${r.verdictEn ?? ""} ${r.verdictVi ?? ""}`, errors: r.errors },
-                              }));
-                              if (r.passed) await load();
-                            })
-                          }
-                        >
-                          Submit
-                        </Button>
-                      </>
-                    )}
-                    {feedback[q.id] && (
-                      <div className={cn("rounded border p-2 text-sm", feedback[q.id]?.passed ? "border-success/40" : "border-destructive/40")}>
-                        <p>{feedback[q.id]?.text}</p>
-                        {(feedback[q.id]?.errors?.length ?? 0) > 0 && <ErrorList errors={feedback[q.id]?.errors ?? []} />}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-          )}
-
-          {lesson.stage === "PRODUCTION" && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Active production</CardTitle>
-                <CardDescription>{lesson.productionPrompt}</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <p className="text-xs text-muted-foreground">Use at least 3 of: {lesson.chunks.map((c) => c.phrase).join(" · ")}</p>
-                {!result && lesson.production.length === 0 && (
-                  <>
-                    <Textarea rows={9} value={production} onChange={(e) => setProduction(e.target.value)} onPaste={(e) => e.preventDefault()} spellCheck={false} />
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs tabular-nums text-muted-foreground">{prodWords} words (60–220)</span>
-                      <div className="flex gap-2">
-                        <DictateButton onText={(t) => setProduction((s) => `${s} ${t}`.trim())} />
-                        <Button
-                          disabled={busy || prodWords < 60}
-                          onClick={() =>
-                            run(async () => {
-                              const r = await api<ProductionResult>("/api/evaluate", { stage: "PRODUCTION", lessonId: lesson.id, text: production });
-                              setResult(r);
-                              setRewrite(production);
-                              if (!r.blocked) await load();
-                            })
-                          }
-                        >
-                          {busy ? "Grading…" : "Submit for strict evaluation"}
-                        </Button>
-                      </div>
-                    </div>
-                  </>
-                )}
-                {!result && lesson.production.length > 0 && (
-                  <>
-                    <p className="text-sm text-destructive">Your last submission was blocked by the Error-Repair Gate. Rewrite it yourself.</p>
-                    <Textarea rows={9} value={rewrite || (lesson.production[lesson.production.length - 1]?.text ?? "")} onChange={(e) => setRewrite(e.target.value)} onPaste={(e) => e.preventDefault()} spellCheck={false} />
-                    <Button
-                      disabled={busy}
-                      onClick={() =>
-                        run(async () => {
-                          const r = await api<ProductionResult>("/api/evaluate", { stage: "REWRITE", lessonId: lesson.id, text: rewrite || (lesson.production[lesson.production.length - 1]?.text ?? "") });
-                          setResult(r);
-                          if (!r.blocked) await load();
-                        })
-                      }
-                    >
-                      Submit rewrite
-                    </Button>
-                  </>
-                )}
-                {result && (
-                  <div className="space-y-3">
-                    {result.session && (
-                      <p className="text-xs text-muted-foreground">
-                        Session composite {result.session.composite.toFixed(1)} · {result.session.qualified ? "qualifying session" : "not qualifying"} · level {result.session.levelBefore.toFixed(1)} → {result.session.levelAfter.toFixed(1)}
-                      </p>
-                    )}
-                    <div className={cn("rounded border p-3 text-sm", result.blocked ? "border-destructive/50 bg-destructive/5" : "border-success/50 bg-success/5")}>
-                      <p className="font-semibold">{result.blocked ? "Progression blocked." : "Gate passed."}</p>
-                      <ul className="list-disc pl-5">
-                        {result.reasons.map((r) => (
-                          <li key={r}>{r}</li>
-                        ))}
-                      </ul>
-                      <p className="mt-1">{result.verdictEn}</p>
-                      <p className="text-muted-foreground">{result.verdictVi}</p>
-                      <p className="mt-1 text-xs tabular-nums text-muted-foreground">GAI {result.metrics.gai.gai.toFixed(1)} · {result.metrics.gai.weightedErrorsPer100W} weighted errors/100w · LRI {result.metrics.lri.lri.toFixed(1)}</p>
-                    </div>
-                    <InlineDiff diff={result.diff} />
-                    <div className="flex flex-wrap gap-1.5 text-xs">
-                      {result.chunks.map((c) => (
-                        <Badge key={c.chunk} variant={c.counted ? "success" : c.present ? "moderate" : "minor"} title={c.note}>{c.chunk}{c.counted ? " ✓" : c.present ? " (misused)" : ""}</Badge>
-                      ))}
-                    </div>
-                    <ErrorList errors={result.errors} />
-                    <details className="rounded border p-2 text-sm">
-                      <summary className="cursor-pointer text-xs font-semibold">Native-level upgrade (study only — not copyable)</summary>
-                      <p className="no-select reading mt-2" onCopy={(e) => e.preventDefault()}>{result.nativeUpgrade}</p>
-                    </details>
-                    {result.blocked && (
-                      <div className="space-y-2">
-                        <p className="text-sm font-medium">Rewrite your text yourself. Pasting is disabled; pasting the upgrade is rejected.</p>
-                        <Textarea rows={9} value={rewrite} onChange={(e) => setRewrite(e.target.value)} onPaste={(e) => e.preventDefault()} spellCheck={false} />
-                        <div className="flex justify-end gap-2">
-                          <DictateButton onText={(t) => setRewrite((s) => `${s} ${t}`.trim())} />
-                          <Button
-                            disabled={busy || countWords(rewrite) < 60}
-                            onClick={() =>
-                              run(async () => {
-                                const r = await api<ProductionResult>("/api/evaluate", { stage: "REWRITE", lessonId: lesson.id, text: rewrite });
-                                setResult(r);
-                                if (!r.blocked) await load();
-                              })
-                            }
-                          >
-                            {busy ? "Grading…" : "Submit rewrite"}
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
-
-          {lesson.stage === "EXIT_TICKET" && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Exit ticket & SRS lock-in</CardTitle>
-                <CardDescription>One original, real-world sentence per chunk (about your life, not the article). Passed chunks enter your review deck.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {lesson.chunks
-                  .filter((c) => !c.lockedIn)
-                  .map((c) => {
-                    const res = exitResults.find((r) => r.chunkId === c.id);
-                    return (
-                      <div key={c.id} className="space-y-1">
-                        <label className="text-sm font-semibold" htmlFor={`exit-${c.id}`}>{c.phrase} <span className="font-normal text-muted-foreground">— {c.meaningVi}</span></label>
-                        <input id={`exit-${c.id}`} className="w-full rounded-md border bg-card px-3 py-2 text-sm" value={exit[c.id] ?? ""} onChange={(e) => setExit((x) => ({ ...x, [c.id]: e.target.value }))} onPaste={(e) => e.preventDefault()} />
-                        {res && !res.passed && <p className="text-xs text-destructive">{res.reason}</p>}
-                      </div>
-                    );
-                  })}
-                {lesson.chunks.some((c) => c.lockedIn) && <p className="text-xs text-success">Locked in: {lesson.chunks.filter((c) => c.lockedIn).map((c) => c.phrase).join(", ")}</p>}
-                <Button
-                  disabled={busy}
-                  onClick={() =>
-                    run(async () => {
-                      const pending = lesson.chunks.filter((c) => !c.lockedIn);
-                      const r = await api<{ results: typeof exitResults }>("/api/evaluate", { stage: "EXIT_TICKET", lessonId: lesson.id, sentences: pending.map((c) => ({ chunkId: c.id, text: exit[c.id] ?? "" })) });
-                      setExitResults(r.results);
-                      await load();
-                    })
-                  }
-                >
-                  {busy ? "Grading…" : "Submit exit ticket"}
-                </Button>
-              </CardContent>
-            </Card>
-          )}
-
-          {lesson.stage === "COMPLETED" && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Lesson completed</CardTitle>
-                <CardDescription>All chunks are in your FSRS deck. Reviews are due from tomorrow.</CardDescription>
-              </CardHeader>
-              <CardContent className="flex gap-2">
-                <Link href="/graveyard"><Button variant="outline">Open SRS studio</Button></Link>
-                <Link href="/"><Button>Dashboard</Button></Link>
-              </CardContent>
-            </Card>
+                <ModeExplainer state={explain} tab={tab} onTab={setTab} />
+              </div>
+            </div>
           )}
         </div>
+      )}
+
+      <div className="mt-8">
+        {view === "COMPREHENSION" && <ComprehensionStage lessonId={lesson.id} questions={lesson.questions} source={lesson.readingText} title={lesson.article.title} onChange={after} />}
+        {view === "PRODUCTION" && (
+          <ProductionStage
+            key={lesson.production.length}
+            lessonId={lesson.id}
+            prompt={lesson.productionPrompt}
+            chunks={lesson.chunks.map((c) => c.phrase)}
+            source={lesson.readingText}
+            title={lesson.article.title}
+            initial={holdProduction ? null : latestAttempt(lesson)}
+            onPassed={async () => {
+              setHoldProduction(true);
+              await refreshShell();
+            }}
+            onContinue={() => {
+              setHoldProduction(false);
+              setViewing(null);
+              void load();
+            }}
+          />
+        )}
+        {view === "EXIT_TICKET" && <ExitTicketStage lessonId={lesson.id} chunks={lesson.chunks} onChange={after} />}
+        {view === "COMPLETED" && (lesson.receipt ? <ArsenalReceipt receipt={lesson.receipt} /> : <EmptyState title="Lesson completed" body="All chunks are locked into your review deck." />)}
       </div>
-      {explain && <ExplainerDrawer selection={explain.selection} data={explain.data} loading={explain.loading} error={explain.error} onClose={() => setExplain(null)} />}
     </div>
   );
 }

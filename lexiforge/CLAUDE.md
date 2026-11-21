@@ -210,6 +210,15 @@ Detox clears only after ≥ 300 s server time AND each of the top-3 recurring su
   button) accepts same-origin browser requests only.
 - Every free-text submission passes `guardSubmission` (length, English script, gibberish, repetition) before any LLM call.
 
+## UI system (`src/components/lf`, `src/app/globals.css`)
+- Fonts via `next/font/google` with the `vietnamese` subset: Newsreader (reading), Plus Jakarta Sans (UI), JetBrains Mono
+  (numbers/metrics only — sentences use `tabular-nums` in the sans face).
+- Colors are RGB-channel tokens in `globals.css` (`--canvas`, `--ink*`, `--accent*`, `--critical|moderate|minor|mastered*`),
+  light by default, dark via `data-theme="dark"` or the OS setting. `*-ink` tokens are the AA (≥ 4.5:1) text variants.
+- Severity encoding is never color-only: solid/solid/dashed underlines + labelled badges with distinct glyphs.
+- Charts: one y-axis per chart (E/100W has its own chart), validated categorical palette, table view toggle.
+- The native upgrade is only rendered (and only returned by the API) after the Error-Repair Gate passes; no copy-fix action exists.
+
 ## Conventions
 - TypeScript strict; no `any` in `src/lib`. No TODO/FIXME comments (lint error).
 - Every API route: Zod-parse input, return `{ error: { code, message } }` with a proper status.

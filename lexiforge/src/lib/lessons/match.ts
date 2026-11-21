@@ -42,3 +42,12 @@ export function matchTag(level: number, d: number): "i+1 match" | "stretch" | "c
   if (gap >= STRETCH_OFFSET - 7) return "i+1 match";
   return "comfortable";
 }
+
+/**
+ * Deterministic session-time estimate (minutes): reading at a level-dependent pace (90–200 wpm),
+ * plus fixed active-stage budgets (shadowing 3, comprehension 9, production + repair 15, exit ticket 6).
+ */
+export function estimateSessionMinutes(words: number, level: number): number {
+  const wpm = 90 + Math.min(100, Math.max(0, level)) * 1.1;
+  return Math.round(words / wpm + 3 + 9 + 15 + 6);
+}

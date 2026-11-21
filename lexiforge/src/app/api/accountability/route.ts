@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { handle, parseBody } from "@/lib/http";
-import { accountabilityStatus, completeDetox, detoxExamples, errorGraveyard, startDetox, submitDetoxRewrite } from "@/lib/accountability/service";
+import { accountabilityStatus, completeDetox, detoxExamples, errorGraveyard, repairPattern, startDetox, submitDetoxRewrite } from "@/lib/accountability/service";
 import { getLocalUser } from "@/lib/profile/service";
 
 export const dynamic = "force-dynamic";
@@ -22,6 +22,8 @@ const Body = z.discriminatedUnion("action", [
   z.object({ action: z.literal("start") }),
   z.object({ action: z.literal("rewrite"), subtype: z.string().min(1).max(60), text: z.string().max(3000) }),
   z.object({ action: z.literal("complete") }),
+  z.object({ action: z.literal("drill"), subtype: z.string().min(1).max(60), sentences: z.array(z.string().max(600)).length(3) }),
+  z.object({ action: z.literal("examples"), subtype: z.string().min(1).max(60) }),
 ]);
 
 export async function POST(req: Request) {
@@ -36,6 +38,10 @@ export async function POST(req: Request) {
         return NextResponse.json(await submitDetoxRewrite(user.id, body.subtype, body.text, now));
       case "complete":
         return NextResponse.json(await completeDetox(user.id, now));
+      case "drill":
+        return NextResponse.json(await repairPattern(user.id, body.subtype, body.sentences.map((x) => x.trim()).join("\n"), now));
+      case "examples":
+        return NextResponse.json({ examples: await detoxExamples(user.id, body.subtype) });
     }
   });
 }

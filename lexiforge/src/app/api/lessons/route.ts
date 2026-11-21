@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { handle } from "@/lib/http";
-import { deliveryMode, matchTag, rankArticles, targetDifficulty } from "@/lib/lessons/match";
+import { deliveryMode, estimateSessionMinutes, matchTag, rankArticles, targetDifficulty } from "@/lib/lessons/match";
+import { excerptByWords } from "@/lib/metrics/text";
 import { getLocalUser, requireProfile } from "@/lib/profile/service";
 
 export const dynamic = "force-dynamic";
@@ -15,9 +16,14 @@ export async function GET() {
     const [articles, lessons] = await Promise.all([
       prisma.dailyArticle.findMany({
         where: { ingestedAt: { gte: new Date(now.getTime() - 3 * 86_400_000) } },
-        include: { feed: { select: { name: true } } },
+        include: { feed: { select: { name: true, topic: true } } },
       }),
-      prisma.lessonUnit.findMany({ where: { userId: user.id }, orderBy: { createdAt: "desc" }, take: 10, include: { article: { select: { title: true, url: true } } } }),
+      prisma.lessonUnit.findMany({
+        where: { userId: user.id },
+        orderBy: { createdAt: "desc" },
+        take: 12,
+        include: { article: { select: { title: true, url: true, publishedAt: true, feed: { select: { name: true } } } }, _count: { select: { chunks: true } } },
+      }),
     ]);
     const used = new Set(lessons.map((l) => l.articleId));
     const ranked = rankArticles(articles, profile.abilityLevel, used).slice(0, 8);
@@ -28,6 +34,9 @@ export async function GET() {
         id: a.id,
         title: a.title,
         source: a.feed.name,
+        topic: a.feed.topic,
+        preview: a.excerpt?.trim() || excerptByWords(a.content, 35),
+        estMinutes: estimateSessionMinutes(Math.min(a.wordCount, 420), profile.abilityLevel),
         url: a.url,
         publishedAt: a.publishedAt,
         cefrTier: a.cefrTier,
@@ -37,7 +46,18 @@ export async function GET() {
         match: matchTag(profile.abilityLevel, a.difficultyScore),
         delivery: deliveryMode(profile.abilityLevel, a.difficultyScore),
       })),
-      lessons: lessons.map((l) => ({ id: l.id, title: l.article.title, stage: l.stage, createdAt: l.createdAt, isGraded: l.isGraded })),
+      lessons: lessons.map((l) => ({
+        id: l.id,
+        title: l.article.title,
+        source: l.article.feed.name,
+        url: l.article.url,
+        publishedAt: l.article.publishedAt,
+        stage: l.stage,
+        createdAt: l.createdAt,
+        isGraded: l.isGraded,
+        chunkCount: l._count.chunks,
+        difficulty: l.difficultyScore,
+      })),
     });
   });
 }
