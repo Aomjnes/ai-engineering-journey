@@ -10,7 +10,7 @@ const EnvSchema = z.object({
   GEMINI_API_KEY: optionalString,
   ANTHROPIC_MODEL: z.preprocess(emptyToUndefined, z.string().default("claude-opus-5-5")),
   OPENAI_MODEL: z.preprocess(emptyToUndefined, z.string().default("gpt-5")),
-  GEMINI_MODEL: z.preprocess(emptyToUndefined, z.string().default("gemini-2.5-pro")),
+  GEMINI_MODEL: z.preprocess(emptyToUndefined, z.string().default("gemini-3.5-flash")),
   CRON_SECRET: z.preprocess(emptyToUndefined, z.string().min(16, "CRON_SECRET must be at least 16 characters").optional()),
   ENABLE_INTERNAL_CRON: z.preprocess(emptyToUndefined, z.enum(["true", "false"]).default("false")),
 });

@@ -31,7 +31,7 @@ After it, press **Sync Live Content Now** on the dashboard to pull today's artic
 | `DATABASE_URL` | yes | `file:./lexiforge.db` (relative to `prisma/`). For PostgreSQL change `provider` in `schema.prisma` and use a `postgresql://` URL. |
 | `ANTHROPIC_API_KEY` | one of three | Auto-detected first. Default model `claude-opus-5-5` (override with `ANTHROPIC_MODEL`). |
 | `OPENAI_API_KEY` | one of three | Used when no Anthropic key. `OPENAI_MODEL` (default `gpt-5`). |
-| `GEMINI_API_KEY` | one of three | Used when neither of the above. `GEMINI_MODEL` (default `gemini-2.5-pro`). |
+| `GEMINI_API_KEY` | one of three | Used when neither of the above. `GEMINI_MODEL` (default `gemini-3.5-flash`, works on the free tier; Pro models need billing). |
 | `CRON_SECRET` | for `/api/cron/ingest` | ≥ 16 chars. Generate with `openssl rand -hex 32`. Without it the cron endpoint returns 503. |
 | `ENABLE_INTERNAL_CRON` | no | `true` schedules ingestion in-process every day at 05:30 server time (`node-cron`). |
 
