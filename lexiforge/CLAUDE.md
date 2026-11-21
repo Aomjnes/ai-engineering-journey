@@ -181,10 +181,26 @@ Exit-ticket cards are created only for chunks whose exit sentence passed the eva
 Review rating is deterministic from typed recall: exact = Good (3), Levenshtein ≤ 2 = Hard (2),
 otherwise Again (1); Easy (4) only if exact and answered in < 6 s.
 
+## Lesson stages (`lessons/flow.ts`)
+- **Stage 1 INPUT:** read + TTS + 4-mode explainer; advances only after a shadowing transcript (typed or STT) of a
+  deterministically chosen sentence reaches word-level accuracy ≥ 80% (`dictationAccuracy`).
+- **Stage 2 COMPREHENSION:** 3 open questions with fixed rubrics (never sent to the client). Copy-paste is rejected
+  before any LLM call and still counts as that question's first attempt (score 0). A question passes at
+  ≥ 50% rubric criteria without a critical misreading; CPR uses first attempts only.
+- **Stage 3 PRODUCTION:** 60–220 words, must use ≥ 3 lesson chunks correctly (LLM says correct AND chunk is
+  deterministically present). LRI's CDR uses a requirement of 3. Blocked if repair gate fails, < 3 chunks, or off-prompt.
+  The session is scored once, on the first attempt (`recordSession`); rewrites never change the score.
+  A rewrite is rejected as a pasted upgrade when its trigram Jaccard to the native upgrade is ≥ 0.9 and exceeds its
+  Jaccard to the learner's own first draft by > 0.1.
+- **Stage 4 EXIT_TICKET:** one original sentence per chunk; a sentence passes when the chunk is present, used correctly,
+  not copied (Jaccard ≤ 0.65 vs source), and has no MODERATE/CRITICAL error. Passed chunks become FSRS cards
+  ("Today's Acquired Arsenal"); failed ones must be resubmitted. All passed → COMPLETED.
+
 ## Accountability (`accountability/`)
 Detox lock iff `overdue cards ≥ 15` OR `error debt ≥ 12` OR (`last review > 7 days ago` AND overdue > 0).
 Error debt = Σ severity weights of unresolved errors from the last 30 days whose subtype occurred ≥ 3 times.
-Detox clears only after ≥ 300 s server time AND each of the top-3 recurring subtypes was rewritten clean.
+Detox clears only after ≥ 300 s server time AND each of the top-3 recurring subtypes was rewritten clean
+(a clean rewrite marks that subtype's earlier errors resolved). A completed detox keeps lessons unlocked for 20 h.
 
 ## Conventions
 - TypeScript strict; no `any` in `src/lib`. No TODO/FIXME comments (lint error).

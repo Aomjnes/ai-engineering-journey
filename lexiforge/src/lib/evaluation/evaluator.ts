@@ -16,6 +16,8 @@ export interface WritingTask {
   prompt: string;
   sourceText?: string;
   requiredChunks: string[];
+  /** How many chunks must be used correctly (defaults to all listed). Production lessons require 3. */
+  chunkRequirement?: number;
   /** "production" | "rewrite" | "diagnostic" | "exit" — changes only the instructions, never the math. */
   mode: "production" | "rewrite" | "diagnostic" | "exit" | "detox";
   focusSubtype?: string;
@@ -114,8 +116,8 @@ export async function evaluateWriting(task: WritingTask, client?: LlmClient): Pr
   const lri = computeLri({
     text: task.text,
     errors: scored,
-    chunksRequired: task.requiredChunks.length,
-    chunksUsedCorrectly: chunks.filter((c) => c.counted).length,
+    chunksRequired: Math.min(task.chunkRequirement ?? task.requiredChunks.length, task.requiredChunks.length),
+    chunksUsedCorrectly: Math.min(chunks.filter((c) => c.counted).length, task.chunkRequirement ?? task.requiredChunks.length),
   });
   return {
     errors,

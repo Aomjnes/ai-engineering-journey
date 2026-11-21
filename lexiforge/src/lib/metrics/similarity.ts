@@ -66,3 +66,20 @@ export function levenshtein(a: string, b: string): number {
   }
   return prev[b.length] ?? 0;
 }
+
+/** Word-level accuracy of a dictation/shadowing transcript: 1 − wordEditDistance / expectedWords (≥ 0). */
+export function dictationAccuracy(expected: string, typed: string): number {
+  const e = tokenize(expected);
+  const t = tokenize(typed);
+  if (e.length === 0) return 0;
+  let prev = Array.from({ length: t.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= e.length; i++) {
+    const cur = [i];
+    for (let j = 1; j <= t.length; j++) {
+      const cost = e[i - 1] === t[j - 1] ? 0 : 1;
+      cur[j] = Math.min((prev[j] ?? 0) + 1, (cur[j - 1] ?? 0) + 1, (prev[j - 1] ?? 0) + cost);
+    }
+    prev = cur;
+  }
+  return Math.max(0, 1 - (prev[t.length] ?? 0) / e.length);
+}
