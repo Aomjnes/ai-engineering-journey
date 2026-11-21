@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { handle, parseBody } from "@/lib/http";
-import { submitComprehension, submitExitTicket, submitProduction, submitRewrite, submitShadowing } from "@/lib/lessons/flow";
+import { submitComprehension, submitExitTicket, submitProduction, submitRewrite, submitShadowing, withLessonLock } from "@/lib/lessons/flow";
 import { getLocalUser, requireProfile } from "@/lib/profile/service";
 
 export const dynamic = "force-dynamic";
@@ -26,17 +26,19 @@ export async function POST(req: Request) {
     const user = await getLocalUser();
     await requireProfile(user.id);
     const now = new Date();
-    switch (body.stage) {
-      case "INPUT":
-        return NextResponse.json(await submitShadowing(user.id, body.lessonId, body.transcript));
-      case "COMPREHENSION":
-        return NextResponse.json(await submitComprehension(user.id, body.lessonId, body.questionId, body.answer));
-      case "PRODUCTION":
-        return NextResponse.json(await submitProduction(user.id, body.lessonId, body.text, now));
-      case "REWRITE":
-        return NextResponse.json(await submitRewrite(user.id, body.lessonId, body.text));
-      case "EXIT_TICKET":
-        return NextResponse.json(await submitExitTicket(user.id, body.lessonId, body.sentences, now));
-    }
+    return withLessonLock(body.lessonId, async () => {
+      switch (body.stage) {
+        case "INPUT":
+          return NextResponse.json(await submitShadowing(user.id, body.lessonId, body.transcript));
+        case "COMPREHENSION":
+          return NextResponse.json(await submitComprehension(user.id, body.lessonId, body.questionId, body.answer));
+        case "PRODUCTION":
+          return NextResponse.json(await submitProduction(user.id, body.lessonId, body.text, now));
+        case "REWRITE":
+          return NextResponse.json(await submitRewrite(user.id, body.lessonId, body.text));
+        case "EXIT_TICKET":
+          return NextResponse.json(await submitExitTicket(user.id, body.lessonId, body.sentences, now));
+      }
+    });
   });
 }

@@ -27,6 +27,22 @@ const PRODUCTION_WORDS = { minWords: 60, maxWords: 220 };
 
 type LessonFull = LessonUnit & { chunks: LexicalChunk[] };
 
+const inFlight = new Set<string>();
+
+/**
+ * One graded submission per lesson at a time: a double-click or a second tab cannot create two
+ * "first attempts" while the first is still waiting on the LLM.
+ */
+export async function withLessonLock<T>(lessonId: string, fn: () => Promise<T>): Promise<T> {
+  if (inFlight.has(lessonId)) throw new AppError(409, "SUBMISSION_IN_PROGRESS", "A submission for this lesson is already being graded. Wait for the result.");
+  inFlight.add(lessonId);
+  try {
+    return await fn();
+  } finally {
+    inFlight.delete(lessonId);
+  }
+}
+
 async function loadLesson(userId: string, lessonId: string): Promise<LessonFull> {
   const lesson = await prisma.lessonUnit.findUnique({ where: { id: lessonId }, include: { chunks: true } });
   if (!lesson || lesson.userId !== userId) throw new AppError(404, "LESSON_NOT_FOUND", "Lesson not found.");
@@ -225,6 +241,10 @@ export async function submitExitTicket(userId: string, lessonId: string, sentenc
   const items = pending.map((chunk) => ({ chunk, text: sentences.find((s) => s.chunkId === chunk.id)?.text.trim() ?? "" }));
   const missing = items.filter((i) => countWords(i.text) < 5);
   if (missing.length) throw new AppError(422, "INCOMPLETE", `Write one original sentence (≥ 5 words) for each chunk: ${missing.map((m) => `"${m.chunk.phrase}"`).join(", ")}.`);
+  for (const it of items) {
+    const g = guardSubmission(it.text, { minWords: 5, maxWords: 60 });
+    if (!g.ok) throw new AppError(422, g.code ?? "REJECTED", `"${it.chunk.phrase}": ${g.message}`);
+  }
 
   const results: Array<{ chunkId: string; phrase: string; passed: boolean; reason: string | null }> = [];
   const toGrade: typeof items = [];

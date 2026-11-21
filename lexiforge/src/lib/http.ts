@@ -44,6 +44,10 @@ export async function handle(fn: () => Promise<Response>): Promise<Response> {
     if (error instanceof LlmNotConfiguredError) return jsonError(503, error.code, error.message);
     if (error instanceof StructuredOutputError) return jsonError(502, error.code, "The language model returned malformed evidence repeatedly. Nothing was graded; submit again.");
     if (error instanceof LlmRequestError) return jsonError(error.code === "LLM_RATE_LIMIT" ? 429 : 502, error.code, error.message);
+    if (error instanceof z.ZodError) {
+      console.error("[api] stored data failed validation", error.issues);
+      return jsonError(500, "DATA_CORRUPT", "Stored data failed validation. Nothing was changed.");
+    }
     console.error("[api] unhandled error", error);
     return jsonError(500, "INTERNAL", "Unexpected server error.");
   }

@@ -202,6 +202,14 @@ Error debt = Σ severity weights of unresolved errors from the last 30 days whos
 Detox clears only after ≥ 300 s server time AND each of the top-3 recurring subtypes was rewritten clean
 (a clean rewrite marks that subtype's earlier errors resolved). A completed detox keeps lessons unlocked for 20 h.
 
+## Hardening rules
+- `/api/evaluate` holds an in-process per-lesson lock: a second submission while one is being graded gets 409
+  `SUBMISSION_IN_PROGRESS` (prevents two "first attempts").
+- Stored JSON that fails its Zod schema returns 500 `DATA_CORRUPT`; unknown errors return a generic 500 without details.
+- `/api/cron/ingest` needs `Authorization: Bearer $CRON_SECRET` (constant-time compare); `/api/ingest` (manual
+  button) accepts same-origin browser requests only.
+- Every free-text submission passes `guardSubmission` (length, English script, gibberish, repetition) before any LLM call.
+
 ## Conventions
 - TypeScript strict; no `any` in `src/lib`. No TODO/FIXME comments (lint error).
 - Every API route: Zod-parse input, return `{ error: { code, message } }` with a proper status.
