@@ -309,6 +309,7 @@ model ProficiencyProfile {
   evidenceWords         Int         @default(0) // total words graded (drives CI width)
   evidenceItems         Int         @default(0) // total objective items graded
   consecutiveQualifying Int         @default(0)
+  decayedDays           Int         @default(0) // inactivity-decay days already applied since lastActivityAt
   promotionAuditUnlocked Boolean    @default(false)
   lastActivityAt        DateTime    @default(now())
   calibratedAt          DateTime    @default(now())
