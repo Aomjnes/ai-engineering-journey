@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --max-warnings=0",
     "test": "vitest run",
-    "test:live": "LIVE_NETWORK=1 vitest run tests/integration",
+    "test:live": "LIVE_NETWORK=1 vitest run",
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
     "postinstall": "prisma generate"

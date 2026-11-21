@@ -141,3 +141,21 @@ export function round(x: number, digits = 2): number {
   const f = 10 ** digits;
   return Math.round(x * f) / f;
 }
+
+/** Leading whole sentences totalling at least `minWords` words (or the whole text), paragraph breaks kept. */
+export function excerptByWords(text: string, minWords: number): string {
+  const paragraphs = text.split(/\n{2,}/);
+  const out: string[] = [];
+  let words = 0;
+  for (const para of paragraphs) {
+    const kept: string[] = [];
+    for (const s of splitSentences(para)) {
+      kept.push(s.text);
+      words += countWords(s.text);
+      if (words >= minWords) break;
+    }
+    if (kept.length) out.push(kept.join(" "));
+    if (words >= minWords) break;
+  }
+  return out.join("\n\n");
+}

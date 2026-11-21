@@ -8,7 +8,7 @@ import { saveSubmission } from "@/lib/evaluation/persist";
 import { generateQuestionSet, QuestionSchema } from "@/lib/lessons/questions";
 import { bandLabel, bandLowerBound, BAND_WIDTH, compositeScore, computeCpr, nextBand, promotionAuditPasses, QUALIFYING_THRESHOLD, SUB_BANDS, type SubBand } from "@/lib/metrics/scoring";
 import { detectCopy } from "@/lib/metrics/similarity";
-import { countWords, splitSentences } from "@/lib/metrics/text";
+import { countWords, excerptByWords } from "@/lib/metrics/text";
 import { applyPromotionAudit, createProfileFromPlacement, requireProfile } from "@/lib/profile/service";
 import { WRITING_MAX_WORDS, WRITING_MIN_WORDS } from "./item-bank";
 import { answerErrorItem, answerReading, computePlacementResult, initPlacement, PlacementFlowError, PlacementStateSchema, publicItem, type PlacementState } from "./placement";
@@ -137,17 +137,6 @@ const PromotionStateSchema = z.object({
 
 const MIN_AUDIT_WORDS = 250;
 
-function excerptOf(text: string, minWords: number): string {
-  const out: string[] = [];
-  let words = 0;
-  for (const s of splitSentences(text)) {
-    out.push(s.text);
-    words += countWords(s.text);
-    if (words >= minWords) break;
-  }
-  return out.join(" ");
-}
-
 export async function startPromotionAudit(userId: string, now: Date) {
   const profile = await requireProfile(userId);
   const active = await prisma.diagnosticAssessment.findFirst({ where: { userId, kind: "PROMOTION", status: "IN_PROGRESS" } });
@@ -166,7 +155,7 @@ export async function startPromotionAudit(userId: string, now: Date) {
   });
   const article = candidates.filter((c) => c.wordCount >= MIN_AUDIT_WORDS).sort((a, b) => Math.abs(a.difficultyScore - (lo + 6.25)) - Math.abs(b.difficultyScore - (lo + 6.25)))[0];
   if (!article) throw new AppError(409, "NO_AUDIT_CONTENT", `No ingested article at ${bandLabel(target)} difficulty in the last 14 days. Run "Sync Live Content Now" and retry.`);
-  const excerpt = excerptOf(article.content, 320);
+  const excerpt = excerptByWords(article.content, 320);
   const set = await generateQuestionSet({ text: excerpt, count: 3, levelLabel: bandLabel(target), chunks: [] });
   const state = { version: 1 as const, targetBand: target, articleId: article.id, difficulty: article.difficultyScore, excerpt, questions: set.questions, writingPrompt: set.productionPrompt };
   const a = await prisma.diagnosticAssessment.create({ data: { userId, kind: "PROMOTION", targetBand: target as CefrSubBand, itemsJson: state, startedAt: now } });
