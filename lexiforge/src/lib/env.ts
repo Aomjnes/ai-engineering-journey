@@ -5,7 +5,8 @@ const optionalString = z.preprocess(emptyToUndefined, z.string().min(1).optional
 
 const EnvSchema = z.object({
   DATABASE_URL: z.string().regex(/^postgres(ql)?:\/\//, "DATABASE_URL must be a PostgreSQL connection string"),
-  DIRECT_URL: z.string().regex(/^postgres(ql)?:\/\//, "DIRECT_URL must be a PostgreSQL connection string"),
+  /** Only needed for schema pushes (`prisma db push`); the runtime uses DATABASE_URL. */
+  DIRECT_URL: z.preprocess(emptyToUndefined, z.string().regex(/^postgres(ql)?:\/\//, "DIRECT_URL must be a PostgreSQL connection string").optional()),
   /** Signs stream session cookies. Optional at boot so non-auth tooling runs; auth routes refuse to work without it. */
   SESSION_SECRET: z.preprocess(emptyToUndefined, z.string().min(32, "SESSION_SECRET must be at least 32 characters").optional()),
   ALLOWED_STREAM_CODES: z.preprocess(

@@ -55,7 +55,8 @@ objective parts of the placement audit work; grading, lesson synthesis and the e
 1. Create a Postgres database (Neon or Supabase) and copy the pooled and direct URLs.
 2. Import the GitHub repo in Vercel with **Root Directory = `lexiforge`** (that folder holds `vercel.json`).
 3. Add the environment variables above (Production), then deploy.
-4. Push the schema once from your machine: `DATABASE_URL=… DIRECT_URL=… npm run db:push && npm run db:seed`.
+4. The Vercel build (`npm run vercel-build`) pushes the schema additively and seeds the feeds, so no manual
+   migration step is needed. With Neon's Vercel integration, `DATABASE_URL_UNPOOLED` is used as `DIRECT_URL`.
 5. Vercel Cron calls `GET /api/cron/ingest` daily at 22:00 UTC (05:00 Hanoi). Manual sync stays in the app.
 
 Timeouts: `/api/explain` and `/api/cron/ingest` 60 s; `/api/evaluate`, `/api/diagnostic`,
