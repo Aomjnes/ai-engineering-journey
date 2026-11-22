@@ -410,6 +410,24 @@ model ExplanationCache {
   lastHitAt DateTime @default(now())
 }
 
+/// Shared cache of validated practice item sets (generated from public headlines; no learner data).
+/// key = sha256(mode | sub-band | topic hash | variant); reused by every stream at that level.
+model PracticePromptCache {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  mode      String
+  level     String
+  topicHash String
+  variant   Int      @default(0)
+  payload   Json
+  provider  String
+  model     String
+  hits      Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([mode, level, topicHash])
+}
+
 /// Failed access-code attempts, used for IP rate limiting on /api/stream/enter (serverless-safe).
 model AccessFailure {
   id        String   @id @default(cuid())

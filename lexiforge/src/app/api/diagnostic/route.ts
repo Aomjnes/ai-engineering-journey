@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { handle, parseBody } from "@/lib/http";
+import { prisma } from "@/lib/db";
 import { AnswerSchema, answerPlacement, placementStatus, SetupSchema, setupAndStartPlacement, skipPlacementWriting, startPromotionAudit, submitPlacementWriting, submitPromotionAudit } from "@/lib/diagnostic/service";
 import { getProfile } from "@/lib/profile/service";
 import { getGoal } from "@/lib/roadmap/service";
@@ -28,7 +29,13 @@ export async function GET(req: Request) {
   return handle(async () => {
     const stream = await requireStream(req);
     const [profile, placement, goal] = await Promise.all([getProfile(stream.id), placementStatus(stream.id), getGoal(stream.id)]);
-    return NextResponse.json({ calibrated: profile !== null, placement, goal: goal ? { targetSubBand: goal.targetSubBand, dailyMinutes: goal.dailyMinutes, startComfort: goal.startComfort } : null });
+    const milestones = await prisma.roadmapMilestone.count({ where: { streamId: stream.id } });
+    return NextResponse.json({
+      calibrated: profile !== null,
+      placement,
+      goal: goal ? { targetSubBand: goal.targetSubBand, dailyMinutes: goal.dailyMinutes, startComfort: goal.startComfort } : null,
+      hasRoadmap: goal !== null && milestones > 0,
+    });
   });
 }
 

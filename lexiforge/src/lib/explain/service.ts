@@ -2,7 +2,8 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { generateStructured } from "@/lib/llm/structured";
-import { getLlmClient, type LlmClient } from "@/lib/llm/client";
+import type { LlmClient } from "@/lib/llm/client";
+import { getLlmClient } from "@/lib/llm/router";
 import { JSON_ONLY, findBannedPraise } from "@/lib/llm/prompts";
 
 export const ExplanationSchema = z.object({

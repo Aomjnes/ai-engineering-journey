@@ -7,6 +7,7 @@ import { BarChart3, ChevronsLeft, ChevronsRight, Dumbbell, Keyboard, Map as MapI
 import { cn } from "@/lib/utils";
 import { fmt, timeAgoIn, type Dict } from "@/lib/i18n";
 import { LangSwitch } from "./lang-switch";
+import { RateLimitBanner } from "./rate-limit-banner";
 import { Kbd } from "@/components/ui/kbd";
 import { usePrefs } from "./prefs";
 import { useShell } from "./shell-data";
@@ -130,7 +131,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   };
 
   // The calibration audit is a distraction-free studio: no navigation chrome.
-  if (pathname.startsWith("/onboarding") || pathname.startsWith("/access")) return <>{children}</>;
+  if (pathname.startsWith("/onboarding") || pathname.startsWith("/access"))
+    return (
+      <>
+        <RateLimitBanner />
+        {children}
+      </>
+    );
 
   const due = status?.dueCards ?? 0;
 
@@ -221,6 +228,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           );
         })}
       </nav>
+      <RateLimitBanner />
       <ShortcutLegend open={legend} onClose={() => setLegend(false)} />
     </div>
   );

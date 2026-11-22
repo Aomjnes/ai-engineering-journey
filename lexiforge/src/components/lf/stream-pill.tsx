@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowLeftRight, Check, ChevronDown, RefreshCw } from "lucide-react";
+import { ArrowLeftRight, Check, ChevronDown, RefreshCw, RotateCcw } from "lucide-react";
 import { fmt, timeAgoIn } from "@/lib/i18n";
 import { usePrefs } from "./prefs";
 import { cn } from "@/lib/utils";
@@ -68,6 +68,9 @@ export function StreamPill() {
           <button type="button" role="menuitem" onClick={() => void switchStream()} className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-[13px] text-ink-2 hover:bg-surface hover:text-ink">
             <ArrowLeftRight className="size-3.5" aria-hidden /> {t.shell.switchStream}
           </button>
+          <Link role="menuitem" href="/settings#reset" onClick={() => setOpen(false)} className="flex items-center gap-2 rounded-md border-t border-line px-2.5 py-2 text-[12.5px] text-ink-3 hover:bg-surface hover:text-critical-ink">
+            <RotateCcw className="size-3.5" aria-hidden /> {t.reset.menu}
+          </Link>
         </div>
       )}
     </div>

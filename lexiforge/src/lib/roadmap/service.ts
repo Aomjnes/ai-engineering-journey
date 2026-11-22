@@ -6,7 +6,7 @@ import { AppError } from "@/lib/http";
 import { bandIndex, bandLabel, bandLowerBound, isSubBand, REQUIRED_CONSECUTIVE, type SubBand } from "@/lib/metrics/scoring";
 import { clamp, round } from "@/lib/metrics/text";
 import { accountabilityStatus } from "@/lib/accountability/service";
-import { computeRetention, getProfile } from "@/lib/profile/service";
+import { computeRetention, getProfile, requireProfile } from "@/lib/profile/service";
 import { CURRICULUM, type CoreTopics } from "./curriculum";
 import { effectiveTarget, estimateWeeks, milestoneStatuses, nextAction, planMilestones, remainingHours, velocityFactor, type MilestoneStatus } from "./generator";
 
@@ -101,7 +101,7 @@ export async function syncRoadmap(streamId: string, now: Date): Promise<RoadmapM
 export async function roadmapView(streamId: string, now: Date) {
   const profile = await getProfile(streamId);
   const goal = await getGoal(streamId);
-  if (!profile || !goal) return { ready: false as const, hasGoal: !!goal };
+  if (!profile || !goal) return { ready: false as const, hasGoal: !!goal, calibrated: !!profile, currentSubBand: (profile?.subBand as SubBand | undefined) ?? null };
   const milestones = await syncRoadmap(streamId, now);
   const freshGoal = (await getGoal(streamId)) ?? goal;
   const [retention, acc, snapshots, dueCards, activeLesson] = await Promise.all([
@@ -159,6 +159,18 @@ export async function roadmapView(streamId: string, now: Date) {
           : null,
     })),
   };
+}
+
+/**
+ * Builds a goal + milestones from the learner's CURRENT level (no placement retake, zero LLM calls).
+ * Used by streams calibrated before roadmaps existed.
+ */
+export async function initializeRoadmap(streamId: string, input: { targetSubBand: SubBand; dailyMinutes: number }, now: Date) {
+  const profile = await requireProfile(streamId);
+  const current = profile.subBand as SubBand;
+  await setGoal(streamId, { startSubBand: current, targetSubBand: input.targetSubBand, dailyMinutes: input.dailyMinutes, targetLabel: bandLabel(effectiveTarget(current, input.targetSubBand)) }, now);
+  await syncRoadmap(streamId, now);
+  return roadmapView(streamId, now);
 }
 
 export function parseTarget(v: string): SubBand {

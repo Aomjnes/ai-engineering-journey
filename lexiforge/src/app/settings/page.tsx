@@ -10,6 +10,7 @@ import { api } from "@/lib/client/api";
 import { fmt, timeAgoIn } from "@/lib/i18n";
 import { buttonVariants } from "@/components/ui/button";
 import { LangSwitch } from "@/components/lf/lang-switch";
+import { ResetStreamSection } from "@/components/lf/reset-stream";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -19,7 +20,15 @@ import { Segmented } from "@/components/ui/segmented";
 
 interface SettingsData {
   llm: { provider: string; model: string } | null;
-  keys: { anthropic: boolean; openai: boolean; gemini: boolean };
+  keys: { anthropic: boolean; openai: boolean; gemini: boolean; groq: boolean };
+  quota: {
+    geminiKeyCount: number;
+    geminiModels: string[];
+    groqModel: string | null;
+    maxConcurrency: number;
+    inFlight: number;
+    chain: Array<{ id: string; provider: string; model: string; keyLabel: string; order: number; cooldownSeconds: number; reason: string | null }>;
+  };
   cron: { secretConfigured: boolean; internalScheduler: boolean };
   feeds: Array<{ name: string; url: string; status: string; lastFetchedAt: string | null; lastError: string | null; consecutiveFailures: number }>;
 }
@@ -137,11 +146,37 @@ export default function SettingsPage() {
               <ul className="divide-y divide-line">
                 <Flag on={data.keys.anthropic} label="ANTHROPIC_API_KEY" />
                 <Flag on={data.keys.openai} label="OPENAI_API_KEY" />
-                <Flag on={data.keys.gemini} label="GEMINI_API_KEY" />
+                <Flag on={data.keys.gemini} label={`GEMINI_API_KEY(S) · ${fmt(t.quota.keys, { n: data.quota.geminiKeyCount })}`} />
+                <Flag on={data.keys.groq} label="GROQ_API_KEY" />
               </ul>
-              {!data.llm && (
-                <pre className="mt-3 overflow-x-auto rounded-md bg-surface p-3 font-mono text-[12px] text-ink-2">{`# lexiforge/.env\nANTHROPIC_API_KEY="..."   # or OPENAI_API_KEY / GEMINI_API_KEY`}</pre>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>{t.quota.title}</CardTitle>
+              <CardDescription>{t.quota.desc}</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {data.quota.chain.length === 0 ? (
+                <p className="text-[13.5px] text-ink-3">{t.quota.none}</p>
+              ) : (
+                <ol className="divide-y divide-line" aria-label={t.quota.order}>
+                  {data.quota.chain.map((c) => (
+                    <li key={c.id} className="flex flex-wrap items-center gap-3 py-2 text-[13px]">
+                      <span className="num w-5 text-ink-3">{c.order}</span>
+                      <span className={c.cooldownSeconds > 0 ? "size-2 rounded-full bg-moderate" : "size-2 rounded-full bg-mastered"} aria-hidden />
+                      <span className="font-medium text-ink">{c.provider}</span>
+                      <span className="font-mono text-[12px] text-ink-2">{c.model}</span>
+                      <span className="text-[12px] text-ink-3">{c.keyLabel}</span>
+                      <span className={c.cooldownSeconds > 0 ? "num ml-auto text-[12px] text-moderate-ink" : "num ml-auto text-[12px] text-mastered-ink"}>
+                        {c.cooldownSeconds > 0 ? fmt(t.quota.cooling, { n: c.cooldownSeconds }) : t.quota.healthy}
+                      </span>
+                    </li>
+                  ))}
+                </ol>
               )}
+              <p className="num text-[12px] text-ink-3">{fmt(t.quota.concurrency, { n: data.quota.maxConcurrency, m: data.quota.inFlight })} · {t.quota.instanceNote}</p>
+              <p className="text-[12px] text-ink-3">{t.quota.hint}</p>
             </CardContent>
           </Card>
           <Card>
@@ -174,6 +209,7 @@ export default function SettingsPage() {
           </Card>
         </>
       )}
+      <ResetStreamSection />
     </div>
   );
 }

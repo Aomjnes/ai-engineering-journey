@@ -1,5 +1,6 @@
 import type { z } from "zod";
-import { getLlmClient, LlmRequestError, type LlmClient, type ThinkingTier } from "./client";
+import { LlmRequestError, type LlmClient, type ThinkingTier } from "./client";
+import { getLlmClient } from "./router";
 
 export class StructuredOutputError extends Error {
   readonly code = "LLM_MALFORMED_OUTPUT";

@@ -16,7 +16,9 @@ import { newCard, ratingFromRecall } from "@/lib/metrics/srs";
 import { countWords, round } from "@/lib/metrics/text";
 import { recordPracticeEvidence, requireProfile } from "@/lib/profile/service";
 import { toScored } from "@/lib/evaluation/evaluator";
-import { chipsFor, generateDictation, generateSentences, generateSpeaking, levelGroup, normSentence, type DictationSet, type SentenceSet, type SpeakingSet, type Topic } from "./content";
+import { chipsFor, DictationSetSchema, generateDictation, generateSentences, generateSpeaking, levelGroup, normSentence, SentenceSetSchema, SpeakingSetSchema, type DictationSet, type SentenceSet, type SpeakingSet, type Topic } from "./content";
+import { cachedPracticeSet } from "./cache";
+import { BEGINNER_DICTATION, BEGINNER_SPEAKING, rotatingSet } from "./static-bank";
 import { FOUNDATION_DECKS, findDeck, MASTERY_STREAK } from "./foundation-decks";
 import { coachTurn, MAX_USER_TURNS, SCENARIOS, scenariosFor, type TranscriptLine } from "./roleplay";
 
@@ -98,16 +100,25 @@ export async function startSession(streamId: string, mode: PracticeMode, scenari
   const topicLabel = topic.headline ?? topic.milestone ?? "Everyday life";
   let itemsJson: object;
   let stateJson: object;
+  // Variant = how many sessions of this mode the learner already did at this level and topic: a new start gets
+  // a fresh set, while other streams at the same level reuse the same cached sets (no extra LLM calls).
+  const variant = await prisma.practiceSession.count({ where: { streamId, mode, level: band as CefrSubBand, topic: topicLabel.slice(0, 300) } });
+  const beginner = isBeginnerBand(band);
+  const cacheOpts = { level: band, topic: topicLabel, variant };
   if (mode === "DICTATION") {
-    const set = await generateDictation(band, level, topic);
+    const set: DictationSet = beginner
+      ? { items: rotatingSet(BEGINNER_DICTATION, variant) }
+      : (await cachedPracticeSet({ ...cacheOpts, mode, schema: DictationSetSchema, generate: () => generateDictation(band, level, topic) })).set;
     itemsJson = set;
     stateJson = { items: set.items.map(() => ({ attempts: 0, firstAccuracy: null, checked: false, locked: false })) };
   } else if (mode === "SPEAKING") {
-    const set = await generateSpeaking(band, topic);
+    const set: SpeakingSet = beginner
+      ? { items: rotatingSet(BEGINNER_SPEAKING, variant) }
+      : (await cachedPracticeSet({ ...cacheOpts, mode, schema: SpeakingSetSchema, generate: () => generateSpeaking(band, topic) })).set;
     itemsJson = set;
     stateJson = { items: set.items.map(() => ({ attempts: 0, best: 0, passed: false })) };
   } else if (mode === "SENTENCE") {
-    const set = await generateSentences(band, topic);
+    const set: SentenceSet = (await cachedPracticeSet({ ...cacheOpts, mode, schema: SentenceSetSchema, generate: () => generateSentences(band, topic) })).set;
     itemsJson = set;
     stateJson = { items: set.items.map(() => ({ attempts: 0, passed: false, firstTryPassed: null, chipFailures: 0, gai: null, lri: null })) };
   } else {

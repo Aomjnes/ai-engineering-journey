@@ -6,6 +6,7 @@ import { ArrowRight, Check, Lock, MapPin } from "lucide-react";
 import type { roadmapView } from "@/lib/roadmap/service";
 import { api } from "@/lib/client/api";
 import { bandName, bandShort, fmt } from "@/lib/i18n";
+import { bandIndex, isSubBand } from "@/lib/metrics/scoring";
 import { cn } from "@/lib/utils";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -156,9 +157,70 @@ function GoalEditor({ r, onSaved }: { r: Roadmap; onSaved: (r: Roadmap) => void 
         <div className="flex items-center gap-3">
           <Button onClick={() => void save()} disabled={busy}>{t.roadmap.saveGoal}</Button>
           {msg && <span role="status" className="text-[12.5px] text-ink-3">{msg}</span>}
+          <Link href="/onboarding?retake=1" className="ml-auto text-[12.5px] text-ink-3 underline-offset-4 hover:text-ink hover:underline">{t.roadmapInit.retake}</Link>
         </div>
       </div>
     </details>
+  );
+}
+
+/** Calibrated stream without a goal (placed before roadmaps existed): build one now, or retake placement. */
+function InitRoadmap({ current, onReady }: { current: string; onReady: (r: RoadmapResponse) => void }) {
+  const { t, err } = usePrefs();
+  const [open, setOpen] = useState(false);
+  const [target, setTarget] = useState<string>(GOALS.find((g) => isSubBand(current) && bandIndex(g.value) > bandIndex(current))?.value ?? "C1_1");
+  const [minutes, setMinutes] = useState(30);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const band = bandShort(current);
+  const create = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      onReady(await api<RoadmapResponse>("/api/roadmap/initialize", { targetSubBand: target, dailyMinutes: minutes }));
+    } catch (e) {
+      setError(err(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="mx-auto max-w-2xl space-y-5">
+      <header>
+        <p className="eyebrow">{t.roadmap.eyebrow}</p>
+        <h1 className="mt-1 font-serif text-[28px] font-medium leading-tight tracking-[-0.015em]">{fmt(t.roadmapInit.title, { band })}</h1>
+        <p className="mt-2 text-[14px] leading-relaxed text-ink-2">{t.roadmapInit.body}</p>
+      </header>
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <Button size="lg" className="h-auto min-h-11 whitespace-normal py-2.5" onClick={() => setOpen(true)} aria-expanded={open}>{fmt(t.roadmapInit.create, { band })}</Button>
+        <Link href="/onboarding?retake=1" className={cn(buttonVariants({ variant: "outline", size: "lg" }), "h-auto min-h-11 whitespace-normal py-2.5")}>{t.roadmapInit.retake}</Link>
+      </div>
+      {open && (
+        <div className="animate-in space-y-4 rounded-lg border border-line bg-card p-5">
+          <fieldset>
+            <legend className="text-[13px] font-semibold">{t.roadmap.targetLabel}</legend>
+            <div className="mt-2 grid gap-2">
+              {GOALS.map((g) => (
+                <label key={g.value} className={cn("flex cursor-pointer items-center gap-3 rounded-md border px-3 py-2 text-[13.5px]", target === g.value ? "border-ink/40" : "border-line")}>
+                  <input type="radio" name="init-goal" checked={target === g.value} onChange={() => setTarget(g.value)} className="accent-[rgb(var(--accent))]" />
+                  {t.onboarding[g.key]}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+          <fieldset>
+            <legend className="text-[13px] font-semibold">{t.roadmap.minutesLabel}</legend>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {MINUTES.map((m) => (
+                <button key={m} type="button" aria-pressed={minutes === m} onClick={() => setMinutes(m)} className={cn("num rounded-md border px-3 py-1.5 text-[13px]", minutes === m ? "border-ink/40 font-semibold" : "border-line text-ink-2")}>{fmt(t.onboarding.minutesOpt, { n: m })}</button>
+              ))}
+            </div>
+          </fieldset>
+          <Button onClick={() => void create()} disabled={busy}>{busy ? t.roadmapInit.creating : t.roadmapInit.confirm}</Button>
+          {error && <p role="alert" className="text-[13px] text-critical-ink">{error}</p>}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -180,7 +242,10 @@ export default function RoadmapPage() {
 
   if (error && !data) return <EmptyState title={t.roadmap.title} body={error} action={<Button onClick={() => void load()}>{t.common.retry}</Button>} />;
   if (!data) return <div className="space-y-4"><Skeleton className="h-8 w-48" /><Skeleton className="h-32" /><Skeleton className="h-64" /></div>;
-  if (!data.ready) return <EmptyState title={t.roadmap.title} body={t.roadmap.notReady} action={<Link href="/onboarding" className={buttonVariants({ variant: "primary" })}>{t.roadmap.goToTest}</Link>} />;
+  if (!data.ready) {
+    if (data.calibrated && data.currentSubBand) return <InitRoadmap current={data.currentSubBand} onReady={setData} />;
+    return <EmptyState title={t.roadmap.title} body={t.roadmap.notReady} action={<Link href="/onboarding" className={buttonVariants({ variant: "primary" })}>{t.roadmap.goToTest}</Link>} />;
+  }
 
   const r = data;
   const cta = r.next.href;

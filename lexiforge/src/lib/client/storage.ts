@@ -37,3 +37,23 @@ export function setActiveStream(streamId: string | null): void {
     /* ignore */
   }
 }
+
+/** Removes every localStorage entry of one stream (`lexiforge:${streamId}:*`). Other streams are untouched. */
+export function clearStreamStorage(streamId: string, keep: readonly string[] = []): number {
+  const prefix = `lexiforge:${streamId}:`;
+  let removed = 0;
+  try {
+    const keys: string[] = [];
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const k = window.localStorage.key(i);
+      if (k && k.startsWith(prefix) && !keep.includes(k.slice(prefix.length))) keys.push(k);
+    }
+    for (const k of keys) {
+      window.localStorage.removeItem(k);
+      removed++;
+    }
+  } catch {
+    /* storage unavailable */
+  }
+  return removed;
+}

@@ -27,7 +27,8 @@ src/
     env.ts                Zod-validated env; LLM provider auto-detect
     db.ts                 Prisma singleton
     http.ts               API route helpers (Zod body parsing, typed JSON errors)
-    llm/                  Provider-agnostic client (Anthropic SDK / OpenAI SDK / Google GenAI SDK)
+    llm/                  Provider clients (Anthropic SDK / OpenAI SDK / Google GenAI SDK / Groq fetch), `router.ts`
+                          (key rotation, model waterfall, provider fallback, cooldowns, concurrency cap)
                           + `generateStructured()` = JSON → Zod validate → retry with error feedback
     metrics/              PURE deterministic math. No I/O, no LLM, no Date.now() (time is a parameter).
       text.ts             tokenizer, sentence splitter, syllable counter, n-grams
@@ -57,7 +58,7 @@ tests/                    vitest (unit) and tests/integration (live network)
   `prisma db push`. No SQLite anywhere. Tests use a dedicated `lexiforge_test` database (dropped/recreated per run).
 - **Streams:** up to `MAX_STREAMS = 5` `StreamAccount` rows, one per private access code in `ALLOWED_STREAM_CODES`
   (default `000,001,002,003,004`, max 5 entries). Codes are never listed; only the label is editable.
-- **Shared tables** (no learner data): `SourceFeed`, `DailyArticle`, `ExplanationCache`, `AccessFailure`.
+- **Shared tables** (no learner data): `SourceFeed`, `DailyArticle`, `ExplanationCache`, `PracticePromptCache`, `AccessFailure`.
 - **Isolated tables** (every row has `streamId` → `StreamAccount`, `onDelete: Cascade`, indexed): `ProficiencyProfile`,
   `ProficiencySnapshot`, `DiagnosticAssessment`, `LessonUnit` (`@@unique([streamId, articleId])`), `LexicalChunk`,
   `UserProgress`, `SubmissionAttempt`, `ErrorLog`, `SrsCard`, `SrsReview`, `UserSettings`, `LearningGoal`
@@ -88,6 +89,48 @@ tests/                    vitest (unit) and tests/integration (live network)
   (`X-Explain-Cache: HIT`). The lesson workspace also keeps an in-memory Map per page.
 - Measured on gemini-3.5-flash (free tier): explainer 1–2 min before → ~8 s uncached, ~4 ms cached;
   thorough evaluation 40–64 s (hence 300 s `maxDuration` on grading routes).
+
+## LLM router & free-tier quota (`llm/router.ts`)
+- Chain (in order): `ANTHROPIC_API_KEY` → `OPENAI_API_KEY` → Gemini model waterfall × keys → `GROQ_API_KEY`.
+  Gemini keys = `GEMINI_API_KEYS` (comma-separated) + `GEMINI_API_KEY`; models = `GEMINI_MODEL` (default
+  `gemini-2.5-flash`) then `GEMINI_FALLBACK_MODELS` (default `gemini-2.5-flash-lite,gemini-2.0-flash`); within a model
+  every key is tried before the next model. Groq uses `GROQ_MODEL` (default `llama-3.3-70b-versatile`) via the
+  OpenAI-compatible endpoint with `response_format: json_object`; output still goes through Zod validation.
+- Cooldown map (per server instance): 429 / 503 / 529 → the (provider, model, key) rests for `Retry-After`
+  (or Gemini `retryDelay`, else 60 s) and the same request moves to the next healthy entry immediately; 404 model /
+  bad key → parked 1 h; transient 5xx → next entry without parking; refusals / truncation / bad requests are not
+  re-routed. Only when every entry is cooling down does the API answer 429 `LLM_RATE_LIMIT` with
+  `details.retryAfterSeconds` (exact time until the first entry recovers) and a `Retry-After` header; the client shows a
+  live countdown banner. SDK retries are 1 so a limited endpoint is never hammered.
+- `LLM_MAX_CONCURRENCY` (default 2) caps concurrent LLM calls per instance. There is no background or parallel LLM
+  work: Today and the cron never call the LLM; a lesson is synthesized only when the learner opens an article and is
+  reused for that (stream, article) forever.
+- Zero-LLM content: Tier 0 placement items, foundation decks and Pre-A1 … A1.2 dictation / speaking sets come from
+  static banks (`practice/static-bank.ts`). Other practice sets are cached in the shared `PracticePromptCache`
+  (key = sha256(mode | sub-band | topic hash | variant); variant = this stream's prior sessions for that mode/level/topic,
+  so other streams at the same level reuse sets while a learner who starts again gets a fresh one).
+- `/settings` shows the configured keys (never values), the fallback order and live cooldowns.
+
+## Onboarding retake & roadmap initialization
+- `/onboarding` is reachable when the stream is not calibrated, has no goal/roadmap yet (streams placed before roadmaps
+  existed), has a placement in progress, or the URL has `?retake=1` (`diagnostic/access.ts`); otherwise it sends the
+  learner to Today. A retake records a new `DiagnosticAssessment`, upserts the profile and regenerates the goal +
+  milestones from the new baseline and the chosen target.
+- `/roadmap` for a calibrated stream without a goal offers "Tạo lộ trình ngay từ trình độ hiện tại" (inline target +
+  minutes → `POST /api/roadmap/initialize`, deterministic, zero LLM calls) and "Làm lại bài kiểm tra xếp lớp"
+  (`/onboarding?retake=1`).
+
+## Per-stream reset (`POST /api/stream/reset`, `lib/stream/reset.ts`)
+- Body `{ confirmCode, preserveLanguage? }`; `confirmCode` must equal the authenticated stream's code (else 400
+  `RESET_CONFIRM_MISMATCH`, nothing deleted).
+- One `prisma.$transaction` deletes every isolated row of that stream only (SrsReview, FoundationProgress, SrsCard,
+  ErrorLog, SubmissionAttempt, LexicalChunk, LessonUnit, PracticeSession, DiagnosticAssessment, ProficiencySnapshot,
+  ProficiencyProfile, RoadmapMilestone, LearningGoal, UserProgress, UserSettings) and recreates UserSettings with the
+  same `uiLocale` when `preserveLanguage` is true. `StreamAccount`, the session cookie, shared tables and other
+  streams are never touched.
+- UI: Settings → "Vùng nguy hiểm / Học lại từ đầu" (also linked from the stream pill). The modal enables the crimson
+  button only after the exact code is typed; on success the client clears `lexiforge:${streamId}:*` localStorage
+  (keeping the theme when the language is kept) and goes to `/onboarding`.
 
 ## Deployment (Vercel)
 

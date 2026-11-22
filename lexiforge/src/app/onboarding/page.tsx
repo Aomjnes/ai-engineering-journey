@@ -19,6 +19,7 @@ import { LangSwitch } from "@/components/lf/lang-switch";
 import { MetricInfo } from "@/components/lf/metric-tooltip";
 import { ModEnterHint, submitOnModEnter } from "@/components/lesson/common";
 import { speakOnce } from "@/components/lesson/speech";
+import { isRetake, onboardingAccess } from "@/lib/diagnostic/access";
 
 interface Progress {
   tier: number;
@@ -409,12 +410,15 @@ export default function OnboardingPage() {
   const [report, setReport] = useState<Report | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [retaking, setRetaking] = useState(false);
 
   useEffect(() => {
-    api<{ calibrated: boolean; placement: Step | null }>("/api/diagnostic")
+    const retake = isRetake(window.location.search);
+    setRetaking(retake);
+    api<{ calibrated: boolean; placement: Step | null; hasRoadmap: boolean }>("/api/diagnostic")
       .then((s) => {
         if (s.placement) setStep(s.placement);
-        else if (s.calibrated) router.replace("/");
+        else if (onboardingAccess({ calibrated: s.calibrated, hasRoadmap: s.hasRoadmap, retake, inProgress: false }) === "REDIRECT_HOME") router.replace("/");
       })
       .catch((e) => setError(err(e)))
       .finally(() => setLoaded(true));
@@ -463,7 +467,10 @@ export default function OnboardingPage() {
         ) : !loaded ? (
           <div className="mx-auto max-w-2xl space-y-3"><Skeleton className="h-8 w-2/3" /><Skeleton className="h-40" /></div>
         ) : !step ? (
-          <Setup busy={busy} onBegin={begin} />
+          <>
+            {retaking && <p className="mx-auto mb-6 max-w-2xl rounded-md border border-line bg-card p-3 text-[13.5px] text-ink-2">{t.onboarding.retakeNote}</p>}
+            <Setup busy={busy} onBegin={begin} />
+          </>
         ) : item?.part === "WRITING" ? (
           <Writing key={item.id} item={item} busy={busy} onSubmit={write} onSkip={skipWriting} />
         ) : item ? (

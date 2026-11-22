@@ -96,7 +96,14 @@ export function PrefsProvider({ children, initialLocale }: { children: React.Rea
       pick: (en: string, vi: string) => (lang === "vi" && vi ? vi : en),
       t,
       fmt,
-      err: (e: unknown) => (e instanceof ApiError ? errorText(t, e.code, e.message) : e instanceof Error ? e.message : String(e)),
+      err: (e: unknown) => {
+        if (e instanceof ApiError) {
+          const wait = (e.details as { retryAfterSeconds?: number } | undefined)?.retryAfterSeconds;
+          if (e.code === "LLM_RATE_LIMIT" && typeof wait === "number") return fmt(t.errors.LLM_RATE_LIMIT_WAIT, { n: wait });
+          return errorText(t, e.code, e.message);
+        }
+        return e instanceof Error ? e.message : String(e);
+      },
     };
   }, [lang, setLang, theme, setTheme]);
 
