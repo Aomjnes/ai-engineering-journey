@@ -6,7 +6,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-const ISOLATED = ["lessonUnit", "lexicalChunk", "userSettings", "userProgress", "submissionAttempt", "errorLog", "srsCard", "srsReview", "proficiencyProfile", "proficiencySnapshot", "diagnosticAssessment"];
+const ISOLATED = ["learningGoal", "roadmapMilestone", "practiceSession", "foundationProgress", "lessonUnit", "lexicalChunk", "userSettings", "userProgress", "submissionAttempt", "errorLog", "srsCard", "srsReview", "proficiencyProfile", "proficiencySnapshot", "diagnosticAssessment"];
 const CALL = new RegExp(`\\b(?:prisma|tx)\\.(${ISOLATED.join("|")})\\.(\\w+)\\(`, "g");
 
 function files(dir: string): string[] {

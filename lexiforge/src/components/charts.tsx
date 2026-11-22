@@ -1,5 +1,8 @@
 "use client";
 
+import { usePrefs } from "@/components/lf/prefs";
+import { subtypeLabel } from "@/lib/i18n";
+
 import { useState } from "react";
 import { CartesianGrid, Line, LineChart, PolarAngleAxis, PolarGrid, PolarRadiusAxis, Radar, RadarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { cn } from "@/lib/utils";
@@ -35,9 +38,10 @@ function ChartTooltip({ active, payload, label, labelFormat, unit }: { active?: 
 }
 
 function TableToggle({ show, onToggle }: { show: boolean; onToggle: () => void }) {
+  const { t } = usePrefs();
   return (
     <button type="button" onClick={onToggle} className="text-[12px] text-ink-3 underline-offset-4 hover:text-ink hover:underline">
-      {show ? "Chart" : "Table"}
+      {show ? t.charts.chart : t.charts.table}
     </button>
   );
 }
@@ -50,6 +54,7 @@ export interface RadarPoint {
 
 /** 5-axis radar (single series, no legend) with an optional dashed benchmark ring for the next band. */
 export function SkillRadar({ data, benchmark, height = 260 }: { data: RadarPoint[]; benchmark?: number | null; height?: number }) {
+  const { t: tr } = usePrefs();
   const [table, setTable] = useState(false);
   const rows = data.map((d) => ({ ...d, label: d.hasEvidence ? d.metric : `${d.metric} ·  n/a`, plotted: d.hasEvidence ? d.value : 0, bench: benchmark ?? 0 }));
   return (
@@ -82,8 +87,8 @@ export function SkillRadar({ data, benchmark, height = 260 }: { data: RadarPoint
             <PolarGrid stroke="var(--viz-grid)" strokeDasharray="3 3" />
             <PolarAngleAxis dataKey="label" tick={{ ...axisTick, fontFamily: "var(--font-sans)", fontWeight: 600 }} />
             <PolarRadiusAxis domain={[0, 100]} tick={false} axisLine={false} />
-            {benchmark ? <Radar dataKey="bench" name="Next-band threshold" stroke="var(--viz-text-2)" strokeDasharray="4 4" strokeWidth={1.25} fill="none" isAnimationActive={false} /> : null}
-            <Radar dataKey="plotted" name="Score" stroke="var(--series-1)" strokeWidth={2} fill="var(--series-1)" fillOpacity={0.12} dot={{ r: 3.5, fill: "var(--series-1)", stroke: "var(--viz-surface)", strokeWidth: 2 }} isAnimationActive={false} />
+            {benchmark ? <Radar dataKey="bench" name={tr.charts.bench} stroke="var(--viz-text-2)" strokeDasharray="4 4" strokeWidth={1.25} fill="none" isAnimationActive={false} /> : null}
+            <Radar dataKey="plotted" name={tr.charts.score} stroke="var(--series-1)" strokeWidth={2} fill="var(--series-1)" fillOpacity={0.12} dot={{ r: 3.5, fill: "var(--series-1)", stroke: "var(--viz-surface)", strokeWidth: 2 }} isAnimationActive={false} />
             <Tooltip content={<ChartTooltip />} />
           </RadarChart>
         </ResponsiveContainer>
@@ -113,6 +118,7 @@ type SeriesKey = (typeof SERIES)[number]["key"];
 
 /** 30-day trajectory on a single 0–100 axis; series are toggleable (the legend is the toggle). */
 export function TrajectoryChart({ data, initial = ["gai", "lri"] }: { data: TrendPoint[]; initial?: SeriesKey[] }) {
+  const { t: tr } = usePrefs();
   const [on, setOn] = useState<Set<SeriesKey>>(new Set(initial));
   const [table, setTable] = useState(false);
   if (data.length < 2) return <p className="py-12 text-center text-[13px] text-ink-3">The trajectory appears after two recorded sessions.</p>;
@@ -147,7 +153,7 @@ export function TrajectoryChart({ data, initial = ["gai", "lri"] }: { data: Tren
           <table className="w-full text-[12px]">
             <thead>
               <tr className="text-left text-ink-3">
-                <th className="py-1 font-medium">Date</th>
+                <th className="py-1 font-medium">{tr.charts.date}</th>
                 {SERIES.map((s) => (
                   <th key={s.key} className="py-1 text-right font-medium">{s.name}</th>
                 ))}
@@ -184,7 +190,8 @@ export function TrajectoryChart({ data, initial = ["gai", "lri"] }: { data: Tren
 
 /** Errors per 100 words — its own scale, so its own chart (never a second y-axis). */
 export function ErrorDecayChart({ data, height = 200 }: { data: Array<{ t: string; e100: number }>; height?: number }) {
-  if (data.length < 2) return <p className="py-12 text-center text-[13px] text-ink-3">The decay curve appears after two graded writing sessions.</p>;
+  const { t: tr } = usePrefs();
+  if (data.length < 2) return <p className="py-12 text-center text-[13px] text-ink-3">{tr.charts.decaySoon}</p>;
   return (
     <ResponsiveContainer width="100%" height={height}>
       <LineChart data={data} margin={{ top: 8, right: 20, bottom: 0, left: -18 }}>
@@ -200,7 +207,8 @@ export function ErrorDecayChart({ data, height = 200 }: { data: Array<{ t: strin
 
 /** Recurring-error heatmap: pattern × ISO week, single-hue sequential ramp, per-cell tooltip. */
 export function ErrorHeatmap({ weeks, rows }: { weeks: string[]; rows: Array<{ subtype: string; total: number; cells: number[] }> }) {
-  if (rows.length === 0) return <p className="py-12 text-center text-[13px] text-ink-3">No logged errors yet.</p>;
+  const { t: tr } = usePrefs();
+  if (rows.length === 0) return <p className="py-12 text-center text-[13px] text-ink-3">{tr.charts.noErrors}</p>;
   const max = Math.max(1, ...rows.flatMap((r) => r.cells));
   const step = (v: number) => (v === 0 ? 0 : Math.min(6, 1 + Math.floor(((v - 1) / max) * 6)));
   return (
@@ -208,7 +216,7 @@ export function ErrorHeatmap({ weeks, rows }: { weeks: string[]; rows: Array<{ s
       <table className="w-full border-separate text-[11.5px]" style={{ borderSpacing: 2 }}>
         <thead>
           <tr>
-            <th className="text-left font-medium text-ink-3">Pattern</th>
+            <th className="text-left font-medium text-ink-3">{tr.charts.pattern}</th>
             {weeks.map((w) => (
               <th key={w} className="num font-normal text-ink-3">{w.slice(5)}</th>
             ))}
@@ -217,9 +225,9 @@ export function ErrorHeatmap({ weeks, rows }: { weeks: string[]; rows: Array<{ s
         <tbody>
           {rows.map((r) => (
             <tr key={r.subtype}>
-              <td className="whitespace-nowrap pr-3 font-mono text-[11px] text-ink-2">{r.subtype}</td>
+              <td className="whitespace-nowrap pr-3 text-[11.5px] text-ink-2">{subtypeLabel(tr, r.subtype)}</td>
               {r.cells.map((v, i) => (
-                <td key={weeks[i]} title={`${r.subtype} · ${weeks[i]}: ${v}`} className="num h-6 min-w-7 rounded-[3px] text-center" style={{ background: `var(--seq-${step(v)})`, color: step(v) >= 4 ? "#fff" : "var(--viz-text-2)" }}>
+                <td key={weeks[i]} title={`${subtypeLabel(tr, r.subtype)} · ${weeks[i]}: ${v}`} className="num h-6 min-w-7 rounded-[3px] text-center" style={{ background: `var(--seq-${step(v)})`, color: step(v) >= 4 ? "#fff" : "var(--viz-text-2)" }}>
                   {v > 0 ? v : ""}
                 </td>
               ))}

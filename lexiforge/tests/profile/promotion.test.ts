@@ -6,7 +6,7 @@ import { resetDb, testStream } from "../helpers/db";
 const T0 = new Date("2026-08-01T09:00:00Z");
 const day = (n: number) => new Date(T0.getTime() + n * 86_400_000);
 
-async function setup(level = 40) {
+async function setup(level = 64) {
   const user = await testStream();
   await prisma.proficiencyProfile.create({
     data: { streamId: user.id, subBand: "B1_2", ieltsEstimate: 5, ieltsLow: 4.5, ieltsHigh: 5.5, gai: 80, lri: 75, cpr: 80, rss: 0, eri: 100, composite: 78, abilityLevel: level, lastActivityAt: T0 },
@@ -16,13 +16,13 @@ async function setup(level = 40) {
 
 /** Stores a first-attempt production submission (ERI input) with optional critical subtype. */
 async function production(streamId: string, at: Date, criticalSubtype?: string) {
-  const sub = await prisma.submissionAttempt.create({ data: { streamId, kind: "PRODUCTION", text: "text", wordCount: 120, taskDifficulty: 45, createdAt: at } });
+  const sub = await prisma.submissionAttempt.create({ data: { streamId, kind: "PRODUCTION", text: "text", wordCount: 120, taskDifficulty: 66, createdAt: at } });
   if (criticalSubtype) {
     await prisma.errorLog.create({ data: { streamId, submissionId: sub.id, category: "GRAMMAR", subtype: criticalSubtype, severity: "CRITICAL", spanStart: 0, spanEnd: 1, original: "t", correction: "T", ruleEn: "r", ruleVi: "q", createdAt: at } });
   }
 }
 
-const strong = { taskDifficulty: 45, gai: 92, lri: 85, cpr: 90, passedGateFirstTry: true, words: 120, items: 3, errorsPer100W: 0.8 };
+const strong = { taskDifficulty: 66, gai: 92, lri: 85, cpr: 90, passedGateFirstTry: true, words: 120, items: 3, errorsPer100W: 0.8 };
 
 describe("strict promotion lock", () => {
   beforeEach(resetDb);
@@ -66,26 +66,26 @@ describe("strict promotion lock", () => {
   });
 
   it("too-easy material never qualifies and failing easy work drops the level sharply", async () => {
-    const user = await setup(45);
+    const user = await setup(66);
     await production(user.id, day(0));
-    const easy = await recordSession(user.id, { ...strong, taskDifficulty: 20 }, day(0));
+    const easy = await recordSession(user.id, { ...strong, taskDifficulty: 45 }, day(0));
     expect(easy.qualified).toBe(false);
     await production(user.id, day(1));
-    const fail = await recordSession(user.id, { ...strong, taskDifficulty: 10, gai: 20, lri: 20, cpr: 20 }, day(1));
+    const fail = await recordSession(user.id, { ...strong, taskDifficulty: 35, gai: 20, lri: 20, cpr: 20 }, day(1));
     expect(fail.levelAfter).toBeLessThan(fail.levelBefore - 10);
   });
 
   it("passing the audit promotes; inactivity decays honestly and can demote", async () => {
-    const user = await setup(48);
+    const user = await setup(66);
     const promoted = await applyPromotionAudit(user.id, true, "B2_1", T0);
     expect(promoted.subBand).toBe("B2_1");
-    expect(promoted.abilityLevel).toBe(50);
-    // 40 days idle → 33 decay days → level 50 − 16.5 = 33.5 < 50 − 6.25 → demoted to B1.2
+    expect(promoted.abilityLevel).toBe(69);
+    // 40 days idle → 33 decay days → level 69 − 16.5 = 52.5 < 69 − width(B1.2)/2 = 65 → demoted to B1.2
     const decayed = await applyDecay(user.id, day(40));
-    expect(decayed?.abilityLevel).toBe(33.5);
+    expect(decayed?.abilityLevel).toBe(52.5);
     expect(decayed?.subBand).toBe("B1_2");
     // Idempotent on the same day.
-    expect((await applyDecay(user.id, day(40)))?.abilityLevel).toBe(33.5);
+    expect((await applyDecay(user.id, day(40)))?.abilityLevel).toBe(52.5);
     expect(await prisma.proficiencySnapshot.count({ where: { streamId: user.id, trigger: "DEMOTION" } })).toBe(1);
   });
 });

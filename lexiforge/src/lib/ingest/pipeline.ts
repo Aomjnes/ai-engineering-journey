@@ -11,7 +11,7 @@ export const INGEST_LIMITS = {
   maxItemAgeHours: 72,
   minWords: 250,
   maxWords: 6000,
-  minDifficulty: 20,
+  minDifficulty: 45, // level scale: below ≈ A2.2 a news page is too thin to teach from
   timeoutMs: 15000,
   failuresBeforeFailing: 3,
 } as const;
@@ -129,7 +129,7 @@ async function ingestFeed(feed: SourceFeed, fetchImpl: FetchLike, now: Date): Pr
           avgSentenceLength: profile.avgSentenceLength,
           avgSyllablesPerWord: profile.avgSyllablesPerWord,
           lexicalSophistication: profile.lexicalSophistication,
-          cefrTier: profile.cefrTier === "A2" ? "B1" : profile.cefrTier,
+          cefrTier: profile.cefrTier,
           difficultyScore: profile.difficultyScore,
         },
       });

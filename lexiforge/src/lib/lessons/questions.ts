@@ -7,7 +7,8 @@ import { detectCopy } from "@/lib/metrics/similarity";
 export const QuestionSchema = z.object({
   id: z.string().regex(/^q[1-9]$/),
   type: z.enum(["inference", "nuance", "paraphrase"]),
-  prompt: z.string().min(10).max(400),
+  prompt: z.string().min(5).max(400),
+  promptVi: z.string().max(400).optional(),
   rubric: z.array(z.string().min(5).max(240)).min(2).max(4),
 });
 export type ComprehensionQuestion = z.infer<typeof QuestionSchema>;
@@ -15,6 +16,7 @@ export type ComprehensionQuestion = z.infer<typeof QuestionSchema>;
 export const QuestionSetSchema = z.object({
   questions: z.array(QuestionSchema).min(2).max(5),
   productionPrompt: z.string().min(20).max(800),
+  productionPromptVi: z.string().min(10).max(800),
 });
 export type QuestionSet = z.infer<typeof QuestionSetSchema>;
 
@@ -27,9 +29,16 @@ export async function generateQuestionSet(opts: {
   count: number;
   levelLabel: string;
   chunks: string[];
+  beginner?: boolean;
   client?: LlmClient;
 }): Promise<QuestionSet> {
-  const user = `Write ${opts.count} open-ended comprehension questions about the text for a learner at CEFR ${opts.levelLabel}.
+  const beginnerRules = opts.beginner
+    ? `
+BEGINNER MODE (Pre-A1/A1): questions use ≤ 10 very common English words and can be answered in 3–10 words; rubric = 2 tiny concrete facts.
+The production prompt asks for 2–3 short sentences (8–40 words) about the learner's own life using the chunks.`
+    : "";
+  const user = `Write ${opts.count} open-ended comprehension questions about the text for a learner at CEFR ${opts.levelLabel}.${beginnerRules}
+Give every question a natural Vietnamese translation in "promptVi", and the production prompt in Vietnamese as "productionPromptVi".
 Rules:
 - Use only types "inference", "nuance", "paraphrase". At least one inference question.
 - No question may be answerable by copying a single sentence from the text; require restating or reasoning.
@@ -40,7 +49,7 @@ Also write ONE production prompt (60–120 word task) that requires the learner 
 TEXT:
 ${opts.text.slice(0, 7000)}
 
-OUTPUT SCHEMA: {"questions":[{"id":"q1","type":"inference"|"nuance"|"paraphrase","prompt":string,"rubric":[string,...]}],"productionPrompt":string}
+OUTPUT SCHEMA: {"questions":[{"id":"q1","type":"inference"|"nuance"|"paraphrase","prompt":string,"promptVi":string,"rubric":[string,...]}],"productionPrompt":string,"productionPromptVi":string}
 ${JSON_ONLY}`;
   return generateStructured({
     schema: QuestionSetSchema,

@@ -34,17 +34,38 @@ export function lexicalSophistication(tokens: readonly string[]): number {
   return rare / candidates.length;
 }
 
-/** Difficulty D on the 0–100 level scale (12.5 per CEFR sub-band). */
-export function difficultyFrom(fkGrade: number, sophistication: number): number {
+/** Raw text complexity R ∈ [0, 100] from Flesch-Kincaid grade and lexical sophistication. */
+export function rawComplexity(fkGrade: number, sophistication: number): number {
   const fk = clamp((fkGrade - 4) / 12, 0, 1);
   const ls = clamp((sophistication - 0.05) / 0.3, 0, 1);
   return clamp(60 * fk + 40 * ls, 0, 100);
 }
 
+/** Piecewise-linear map from raw complexity to the shared level scale (anchors raw → level). */
+const LEVEL_ANCHORS: ReadonlyArray<readonly [number, number]> = [
+  [0, 15], [12.5, 34], [25, 53], [50, 69], [75, 83], [100, 100],
+];
+
+export function levelFromRaw(raw: number): number {
+  const r = clamp(raw, 0, 100);
+  for (let i = 1; i < LEVEL_ANCHORS.length; i++) {
+    const [x0, y0] = LEVEL_ANCHORS[i - 1] as readonly [number, number];
+    const [x1, y1] = LEVEL_ANCHORS[i] as readonly [number, number];
+    if (r <= x1) return y0 + ((r - x0) / (x1 - x0)) * (y1 - y0);
+  }
+  return 100;
+}
+
+/** Difficulty D on the shared 0–100 level scale (Pre-A1 0 … C1.2 90+). */
+export function difficultyFrom(fkGrade: number, sophistication: number): number {
+  return levelFromRaw(rawComplexity(fkGrade, sophistication));
+}
+
+/** Article tier: A2 (D < 53) · B1 (< 69) · B2 (< 83) · C1. */
 export function tierFromDifficulty(d: number): CefrTier {
-  if (d < 25) return "A2";
-  if (d < 50) return "B1";
-  if (d < 75) return "B2";
+  if (d < 53) return "A2";
+  if (d < 69) return "B1";
+  if (d < 83) return "B2";
   return "C1";
 }
 

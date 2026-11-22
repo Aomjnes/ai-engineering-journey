@@ -22,11 +22,17 @@ export function rankArticles<T extends Candidate>(articles: readonly T[], level:
     .sort((a, b) => Math.abs(a.difficultyScore - t) - Math.abs(b.difficultyScore - t) || b.ingestedAt.getTime() - a.ingestedAt.getTime());
 }
 
-export type DeliveryMode = "GRADED_BRIDGE" | "AUTHENTIC";
+export type DeliveryMode = "MICRO_STORY" | "GRADED_BRIDGE" | "AUTHENTIC";
 
+/**
+ * Pre-A1 … A1.2 (L < 34): micro real-world story (4–6 short sentences) on today's real topic.
+ * A2.1 … B1.1 (L < 61): graded bridge + original excerpt. B1.2 (L < 69): authentic if D ≤ T + 12, else bridge.
+ * B2.1+: authentic text.
+ */
 export function deliveryMode(level: number, articleDifficulty: number): DeliveryMode {
-  if (level < 37.5) return "GRADED_BRIDGE";
-  if (level < 50) return articleDifficulty <= targetDifficulty(level) + B12_AUTHENTIC_TOLERANCE ? "AUTHENTIC" : "GRADED_BRIDGE";
+  if (level < 34) return "MICRO_STORY";
+  if (level < 61) return "GRADED_BRIDGE";
+  if (level < 69) return articleDifficulty <= targetDifficulty(level) + B12_AUTHENTIC_TOLERANCE ? "AUTHENTIC" : "GRADED_BRIDGE";
   return "AUTHENTIC";
 }
 

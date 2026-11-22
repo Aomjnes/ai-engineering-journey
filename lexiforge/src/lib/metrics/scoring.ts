@@ -32,6 +32,11 @@ const weightOf = (errors: readonly ScoredError[]) => errors.reduce((acc, e) => a
 
 // ───────────────────────────── GAI ─────────────────────────────
 
+/** Minimum word count used as the denominator for error density (protects 3–20 word beginner answers). */
+export const SHORT_TEXT_FLOOR = 20;
+/** Below this many tokens, lexical diversity blends from TTR toward Guiraud (R is unstable on tiny samples). */
+export const GUIRAUD_MIN_TOKENS = 30;
+
 export interface GaiResult {
   gai: number;
   words: number;
@@ -46,7 +51,8 @@ export function computeGai(text: string, errors: readonly ScoredError[]): GaiRes
   const words = tokenize(text).length;
   const sentences = splitSentences(text);
   const counted = errors.filter((e) => GRAMMAR_CATEGORIES.has(e.category));
-  const e100 = (100 * weightOf(counted)) / Math.max(words, 1);
+  // Short beginner answers: density uses at least SHORT_TEXT_FLOOR words so one slip in 5 words isn't "20 errors/100w".
+  const e100 = (100 * weightOf(counted)) / Math.max(words, SHORT_TEXT_FLOOR);
   const raw100 = (100 * counted.length) / Math.max(words, 1);
   const erroneous = sentences.filter((s) => counted.some((e) => e.start < s.end && e.end > s.start)).length;
   const total = sentences.length;
@@ -74,6 +80,22 @@ export function guiraudIndex(text: string): number {
   return new Set(tokens).size / Math.sqrt(tokens.length);
 }
 
+/**
+ * Lexical diversity 0–100. Guiraud's R normalized as clamp((R − 3)/6); for short texts (n < 30 tokens)
+ * blended with TTR, w = n/30: G = w·G_R + (1 − w)·100·clamp((TTR − 0.6)/0.4) — a 5-word answer can't reach R ≥ 3.
+ */
+export function diversityScore(text: string): number {
+  const tokens = tokenize(text).filter((t) => /^[a-z]/.test(t));
+  const n = tokens.length;
+  if (n === 0) return 0;
+  const gR = 100 * clamp((new Set(tokens).size / Math.sqrt(n) - 3) / 6, 0, 1);
+  if (n >= GUIRAUD_MIN_TOKENS) return gR;
+  const ttr = new Set(tokens).size / n;
+  const gT = 100 * clamp((ttr - 0.6) / 0.4, 0, 1);
+  const w = n / GUIRAUD_MIN_TOKENS;
+  return w * gR + (1 - w) * gT;
+}
+
 export interface LriInput {
   text: string;
   errors: readonly ScoredError[];
@@ -92,7 +114,7 @@ export interface LriResult {
 export function computeLri({ text, errors, chunksRequired, chunksUsedCorrectly }: LriInput): LriResult {
   const words = tokenize(text).length;
   const r = guiraudIndex(text);
-  const g = 100 * clamp((r - 3) / 6, 0, 1);
+  const g = diversityScore(text);
   const lexWeight = weightOf(errors.filter((e) => LEXICAL_CATEGORIES.has(e.category)));
   const cnr = words === 0 ? 0 : 100 * clamp(1 - lexWeight / Math.max(words / 10, 1), 0, 1);
   let lri: number;
@@ -292,16 +314,28 @@ export function compositeScore(m: MetricVector): number | null {
 
 // ───────────────────────────── Bands & IELTS ─────────────────────────────
 
-export const SUB_BANDS = ["A2_1", "A2_2", "B1_1", "B1_2", "B2_1", "B2_2", "C1_1", "C1_2"] as const;
+/**
+ * Level scale L ∈ [0, 100] with 11 sub-bands from absolute beginner to near-native.
+ * Lower bounds (inclusive): Pre-A1 0 · A1.1 15 · A1.2 25 · A2.1 34 · A2.2 44 · B1.1 53 · B1.2 61 ·
+ * B2.1 69 · B2.2 76 · C1.1 83 · C1.2 90. Task/article difficulty D uses the same scale.
+ */
+export const SUB_BANDS = ["PRE_A1", "A1_1", "A1_2", "A2_1", "A2_2", "B1_1", "B1_2", "B2_1", "B2_2", "C1_1", "C1_2"] as const;
 export type SubBand = (typeof SUB_BANDS)[number];
-export const BAND_WIDTH = 12.5;
+
+export const BAND_LOWER: Record<SubBand, number> = {
+  PRE_A1: 0, A1_1: 15, A1_2: 25, A2_1: 34, A2_2: 44, B1_1: 53, B1_2: 61, B2_1: 69, B2_2: 76, C1_1: 83, C1_2: 90,
+};
 
 export const QUALIFYING_THRESHOLD: Record<SubBand, number> = {
-  A2_1: 60, A2_2: 63, B1_1: 66, B1_2: 69, B2_1: 72, B2_2: 75, C1_1: 78, C1_2: 81,
+  PRE_A1: 54, A1_1: 56, A1_2: 58, A2_1: 60, A2_2: 63, B1_1: 66, B1_2: 69, B2_1: 72, B2_2: 75, C1_1: 78, C1_2: 81,
 };
 
 export function bandLabel(b: SubBand): string {
-  return b.replace("_", ".");
+  return b === "PRE_A1" ? "Pre-A1" : b.replace("_", ".");
+}
+
+export function isSubBand(v: string): v is SubBand {
+  return (SUB_BANDS as readonly string[]).includes(v);
 }
 
 export function bandIndex(b: SubBand): number {
@@ -309,12 +343,28 @@ export function bandIndex(b: SubBand): number {
 }
 
 export function bandFromLevel(level: number): SubBand {
-  const idx = clamp(Math.floor(clamp(level, 0, 100) / BAND_WIDTH), 0, SUB_BANDS.length - 1);
-  return SUB_BANDS[idx] as SubBand;
+  const l = clamp(level, 0, 100);
+  let found: SubBand = "PRE_A1";
+  for (const b of SUB_BANDS) if (l >= BAND_LOWER[b]) found = b;
+  return found;
 }
 
 export function bandLowerBound(b: SubBand): number {
-  return bandIndex(b) * BAND_WIDTH;
+  return BAND_LOWER[b];
+}
+
+/** Exclusive upper bound (100 for the top band). */
+export function bandUpperBound(b: SubBand): number {
+  const next = SUB_BANDS[bandIndex(b) + 1];
+  return next ? BAND_LOWER[next] : 100;
+}
+
+export function bandWidth(b: SubBand): number {
+  return bandUpperBound(b) - bandLowerBound(b);
+}
+
+export function bandMidpoint(b: SubBand): number {
+  return (bandLowerBound(b) + bandUpperBound(b)) / 2;
 }
 
 export function nextBand(b: SubBand): SubBand | null {
@@ -326,22 +376,26 @@ export function previousBand(b: SubBand): SubBand | null {
   return i <= 0 ? null : (SUB_BANDS[i - 1] as SubBand);
 }
 
-const IELTS_ANCHORS: ReadonlyArray<readonly [number, number]> = [
-  [0, 4.0], [25, 4.5], [50, 5.5], [75, 7.0], [100, 8.5],
-];
+/** True for Pre-A1, A1.1, A1.2 — the beginner track (micro stories, word banks, simplified feedback). */
+export function isBeginnerBand(b: SubBand): boolean {
+  return bandIndex(b) <= bandIndex("A1_2");
+}
 
 export function roundHalf(x: number): number {
   return Math.round(x * 2) / 2;
 }
 
+export const IELTS_FLOOR = 2.5; // displayed as "< 3.0"
+const IELTS_BY_BAND: Record<SubBand, number | [number, number]> = {
+  PRE_A1: IELTS_FLOOR, A1_1: 3, A1_2: 3.5, A2_1: 4, A2_2: 4.5, B1_1: 5, B1_2: 5.5, B2_1: 6, B2_2: 6.5, C1_1: [7, 7.5], C1_2: [8, 8.5],
+};
+
+/** Stepwise band → IELTS mapping; C1 sub-bands split their range at the band midpoint. */
 export function ieltsFromLevel(level: number): number {
-  const l = clamp(level, 0, 100);
-  for (let i = 1; i < IELTS_ANCHORS.length; i++) {
-    const [x1, y1] = IELTS_ANCHORS[i] as readonly [number, number];
-    const [x0, y0] = IELTS_ANCHORS[i - 1] as readonly [number, number];
-    if (l <= x1) return clamp(roundHalf(y0 + ((l - x0) / (x1 - x0)) * (y1 - y0)), 4, 8.5);
-  }
-  return 8.5;
+  const b = bandFromLevel(level);
+  const v = IELTS_BY_BAND[b];
+  if (typeof v === "number") return v;
+  return clamp(level, 0, 100) < bandMidpoint(b) ? v[0] : v[1];
 }
 
 export interface IeltsEstimate {
@@ -355,7 +409,7 @@ export function ieltsEstimate(level: number, evidenceWords: number, evidenceItem
   const band = ieltsFromLevel(level);
   const se = 1 / Math.sqrt(1 + evidenceWords / 150 + evidenceItems / 10);
   const half = Math.max(0.5, roundHalf(1.96 * se));
-  return { band, low: clamp(band - half, 4, 8.5), high: clamp(band + half, 4, 8.5), halfWidth: half };
+  return { band, low: clamp(band - half, IELTS_FLOOR, 8.5), high: clamp(band + half, IELTS_FLOOR, 8.5), halfWidth: half };
 }
 
 // ───────────────────────────── Difficulty-adjusted EWMA ─────────────────────────────
@@ -443,7 +497,7 @@ export function inactivityDecay(level: number, lastActivity: Date, now: Date, da
 
 export function demotionCheck(band: SubBand, level: number): SubBand {
   const prev = previousBand(band);
-  if (prev && level < bandLowerBound(band) - BAND_WIDTH / 2) return prev;
+  if (prev && level < bandLowerBound(band) - bandWidth(prev) / 2) return prev;
   return band;
 }
 

@@ -2,7 +2,9 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, Check, Lock, ShieldCheck } from "lucide-react";
-import { api, errorMessage } from "@/lib/client/api";
+import { api } from "@/lib/client/api";
+import { fmt, type Dict } from "@/lib/i18n";
+import { useShell } from "@/components/lf/shell-data";
 import { countWords } from "@/lib/metrics/text";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -42,20 +44,30 @@ interface ApiResult {
 }
 
 const REQUIRED = 3;
-const MIN_WORDS = 60;
-const MAX_WORDS = 220;
+
+/** Server gate reasons are English; map the known ones to the active language. */
+export function gateReasonText(t: Dict, r: string): string {
+  const m = /Only (\d+) target chunk\(s\) used correctly; at least (\d+)/.exec(r);
+  if (m) return fmt(t.production.reasonChunks, { n: m[1] ?? "0", req: m[2] ?? "3" });
+  if (r.includes("does not answer the task prompt")) return t.production.reasonOffPrompt;
+  return t.production.reasonGate;
+}
 
 function toAttempt(text: string, r: ApiResult): Attempt {
   return { text, blocked: r.blocked, reasons: r.reasons, errors: r.errors, chunks: r.chunks, gai: r.metrics.gai.gai, lri: r.metrics.lri.lri, verdictEn: r.verdictEn, verdictVi: r.verdictVi, nativeUpgrade: r.nativeUpgrade, session: r.session ?? null };
 }
 
-function WordCount({ n }: { n: number }) {
-  return <span className={cn("num text-[12.5px]", n < MIN_WORDS || n > MAX_WORDS ? "text-moderate-ink" : "text-ink-3")}>{n} / {MIN_WORDS}–{MAX_WORDS} words</span>;
+function WordCount({ n, min, max }: { n: number; min: number; max: number }) {
+  const { t } = usePrefs();
+  return <span className={cn("num text-[12.5px]", n < min || n > max ? "text-moderate-ink" : "text-ink-3")}>{fmt(t.common.wordsRange, { n, min, max })}</span>;
 }
 
 /** Stage 3: active production, strict evaluation, mandatory self-repair, native comparison after passing. */
-export function ProductionStage({ lessonId, prompt, chunks, source, title, initial, onPassed, onContinue }: { lessonId: string; prompt: string; chunks: string[]; source: string; title: string; initial: Attempt | null; onPassed: () => Promise<void>; onContinue: () => void }) {
-  const { pick } = usePrefs();
+export function ProductionStage({ lessonId, prompt, promptVi, chunks, source, title, initial, onPassed, onContinue, words, wordBank }: { lessonId: string; prompt: string; promptVi?: string; chunks: string[]; source: string; title: string; initial: Attempt | null; onPassed: () => Promise<void>; onContinue: () => void; words: { minWords: number; maxWords: number }; wordBank?: string[] }) {
+  const { pick, t, err, lang } = usePrefs();
+  const beginner = useShell().status?.beginner ?? false;
+  const MIN_WORDS = words.minWords;
+  const MAX_WORDS = words.maxWords;
   const [attempt, setAttempt] = useState<Attempt | null>(initial);
   const [draft, setDraft] = useState("");
   const [revision, setRevision] = useState(initial?.text ?? "");
@@ -85,7 +97,7 @@ export function ProductionStage({ lessonId, prompt, chunks, source, title, initi
       setActive(null);
       if (!r.blocked) await onPassed();
     } catch (e) {
-      setError(errorMessage(e));
+      setError(err(e));
     } finally {
       setBusy(false);
     }
@@ -102,7 +114,7 @@ export function ProductionStage({ lessonId, prompt, chunks, source, title, initi
       setActive(null);
       if (!r.blocked) await onPassed();
     } catch (e) {
-      setError(errorMessage(e));
+      setError(err(e));
     } finally {
       setBusy(false);
     }
@@ -114,9 +126,22 @@ export function ProductionStage({ lessonId, prompt, chunks, source, title, initi
     return (
       <div className="mx-auto max-w-3xl space-y-4">
         <div>
-          <p className="eyebrow">Stage 3 · Produce &amp; repair</p>
-          <h2 className="mt-1 font-serif text-[26px] font-medium tracking-[-0.01em]">Write it yourself.</h2>
-          <p className="mt-2 rounded-md border border-line bg-surface p-3.5 text-[14.5px] leading-relaxed text-ink">{prompt}</p>
+          <p className="eyebrow">{t.production.eyebrow}</p>
+          <h2 className="mt-1 font-serif text-[26px] font-medium tracking-[-0.01em]">{t.production.title}</h2>
+          <div className="mt-2 rounded-md border border-line bg-surface p-3.5 text-[14.5px] leading-relaxed text-ink">
+            <p>{prompt}</p>
+            {lang === "vi" && promptVi && <p className="mt-1.5 text-[14px] text-ink-2">{promptVi}</p>}
+          </div>
+          {beginner && wordBank && wordBank.length > 0 && (
+            <div className="mt-3">
+              <p className="text-[12.5px] font-medium text-ink-3">{t.production.wordBank}</p>
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                {wordBank.map((w) => (
+                  <button key={w} type="button" onClick={() => setDraft((s) => `${s}${s && !s.endsWith(" ") ? " " : ""}${w}`)} className="rounded-full border border-line bg-card px-2.5 py-1 font-serif text-[14px] text-ink hover:border-line-strong">{w}</button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
         <ReferenceDrawer text={source} title={title} />
         <div className="rounded-lg border border-line bg-card">
@@ -128,26 +153,26 @@ export function ProductionStage({ lessonId, prompt, chunks, source, title, initi
             onChange={(e) => setDraft(e.target.value)}
             onPaste={(e) => e.preventDefault()}
             onKeyDown={submitOnModEnter(() => void submitFirst())}
-            rows={12}
+            rows={MAX_WORDS <= 60 ? 6 : 12}
             spellCheck={false}
             autoCorrect="off"
             disabled={busy}
-            aria-label="Your production draft"
-            placeholder="Start writing. Pasting is disabled; spell-check is off on purpose."
+            aria-label={t.production.draftAria}
+            placeholder={t.production.placeholder}
             className="rounded-none border-0 px-5 py-4 font-serif text-[17.5px] leading-[1.8] focus:ring-0"
           />
           <div className="flex flex-wrap items-center gap-3 border-t border-line px-4 py-3">
-            <WordCount n={n} />
-            <DictateButton onText={(t) => setDraft((s) => `${s} ${t}`.trim())} />
+            <WordCount n={n} min={MIN_WORDS} max={MAX_WORDS} />
+            <DictateButton onText={(x) => setDraft((s) => `${s} ${x}`.trim())} />
             <span className="ml-auto flex items-center gap-2">
               <ModEnterHint />
-              <Button onClick={() => void submitFirst()} disabled={busy || n < MIN_WORDS || n > MAX_WORDS}>{busy ? "Evaluating…" : "Submit for strict evaluation"}</Button>
+              <Button onClick={() => void submitFirst()} disabled={busy || n < MIN_WORDS || n > MAX_WORDS}>{busy ? t.production.evaluating : t.production.submit}</Button>
             </span>
           </div>
         </div>
         <PhasedStatus phases={EVAL_PHASES} active={busy} />
         {error && <p className="rounded-md bg-critical-wash p-3 text-[13px] text-critical-ink">{error}</p>}
-        <p className="text-[12.5px] text-ink-3">Your first draft is the one that is scored. Rewrites unblock progress but never change the score.</p>
+        <p className="text-[12.5px] text-ink-3">{t.production.firstScored}</p>
       </div>
     );
   }
@@ -158,28 +183,28 @@ export function ProductionStage({ lessonId, prompt, chunks, source, title, initi
       <div className="mx-auto max-w-5xl space-y-5">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <p className="eyebrow">Stage 3 · Verified</p>
-            <h2 className="mt-1 flex items-center gap-2 font-serif text-[26px] font-medium tracking-[-0.01em]"><ShieldCheck className="size-6 text-mastered" aria-hidden />Gate passed.</h2>
-            <p className="mt-1 text-[13px] tabular-nums text-ink-2">GAI {attempt.gai?.toFixed(1)} · LRI {attempt.lri?.toFixed(1)} · {attempt.errors.length} remaining minor note{attempt.errors.length === 1 ? "" : "s"}</p>
+            <p className="eyebrow">{t.production.verified}</p>
+            <h2 className="mt-1 flex items-center gap-2 font-serif text-[26px] font-medium tracking-[-0.01em]"><ShieldCheck className="size-6 text-mastered" aria-hidden />{t.production.gatePassed}</h2>
+            <p className="mt-1 text-[13px] tabular-nums text-ink-2">GAI {attempt.gai?.toFixed(1)} · LRI {attempt.lri?.toFixed(1)} · {fmt(t.production.minorNotes, { n: attempt.errors.length })}</p>
           </div>
-          <Button onClick={onContinue}>Continue to Exit Ticket <ArrowRight aria-hidden /></Button>
+          <Button onClick={onContinue}>{t.production.toExit} <ArrowRight aria-hidden /></Button>
         </div>
         {attempt.session && (
           <p className="rounded-md border border-line bg-card px-4 py-2.5 text-[13px] tabular-nums text-ink-2">
-            Session composite {attempt.session.composite.toFixed(1)} · {attempt.session.qualified ? <span className="text-mastered-ink">qualifying session</span> : "not qualifying"} · level {attempt.session.levelBefore.toFixed(1)} → {attempt.session.levelAfter.toFixed(1)}
+            {fmt(t.production.sessionLine, { c: attempt.session.composite.toFixed(1), q: attempt.session.qualified ? t.production.qualifying : t.production.notQualifying, a: attempt.session.levelBefore.toFixed(1), b: attempt.session.levelAfter.toFixed(1) })}
           </p>
         )}
         <div className="grid gap-4 lg:grid-cols-2 [&>*]:min-w-0">
           <section className="rounded-lg border border-line bg-card p-5">
-            <p className="eyebrow mb-3">Your verified draft</p>
+            <p className="eyebrow mb-3">{t.production.yourDraft}</p>
             <ErrorSpanAnnotator text={attempt.text} errors={attempt.errors} active={active} onSelect={setActive} />
           </section>
           <section className="rounded-lg border border-mastered/30 bg-mastered-wash/40 p-5">
-            <p className="eyebrow mb-3 !text-mastered-ink">Native C1 upgrade · study, don&apos;t copy</p>
+            <p className="eyebrow mb-3 !text-mastered-ink">{t.production.upgrade}</p>
             {attempt.nativeUpgrade ? (
               <p className="no-select whitespace-pre-wrap font-serif text-[17px] leading-[1.85] text-ink" onCopy={(e) => e.preventDefault()}>{attempt.nativeUpgrade}</p>
             ) : (
-              <p className="text-[13px] text-ink-3">No upgrade was returned for this draft.</p>
+              <p className="text-[13px] text-ink-3">{t.production.noUpgrade}</p>
             )}
           </section>
         </div>
@@ -190,24 +215,24 @@ export function ProductionStage({ lessonId, prompt, chunks, source, title, initi
 
   // ── Blocked: surgical repair view + rewrite gate ─────────────
   const n = countWords(revision);
-  const remaining = [counts.critical ? `${counts.critical} Critical` : null, counts.moderate ? `${counts.moderate} Moderate` : null].filter(Boolean).join(", ");
+  const remaining = counts.critical + counts.moderate > 0 ? fmt(t.production.remaining, { c: counts.critical, m: counts.moderate }) : "";
   const chunkReason = attempt.reasons.find((r) => r.includes("chunk"));
   const offPrompt = attempt.reasons.find((r) => r.includes("prompt"));
   return (
     <div className="mx-auto max-w-6xl space-y-5 pb-24">
       <div>
-        <p className="eyebrow">Stage 3 · Repair required</p>
-        <h2 className="mt-1 font-serif text-[26px] font-medium tracking-[-0.01em]">Your draft is blocked. Repair it yourself.</h2>
+        <p className="eyebrow">{t.production.repairEyebrow}</p>
+        <h2 className="mt-1 font-serif text-[26px] font-medium tracking-[-0.01em]">{t.production.repairTitle}</h2>
         <p className="mt-1 text-[14px] text-ink-2">{pick(attempt.verdictEn, attempt.verdictVi)}</p>
       </div>
 
       <div className="grid items-start gap-4 lg:grid-cols-[1.15fr_1fr] [&>*]:min-w-0">
-        <section aria-label="Annotated submission" className="rounded-lg border border-line bg-card p-5">
+        <section aria-label={t.production.annotated} className="rounded-lg border border-line bg-card p-5">
           <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11.5px] text-ink-3">
-            <span className="eyebrow mr-auto">Annotated submission</span>
-            <span className="flex items-center gap-1.5"><span className="w-4 border-b-2 border-critical" aria-hidden />Critical</span>
-            <span className="flex items-center gap-1.5"><span className="w-4 border-b-2 border-moderate" aria-hidden />Moderate</span>
-            <span className="flex items-center gap-1.5"><span className="w-4 border-b border-dashed border-minor" aria-hidden />Minor</span>
+            <span className="eyebrow mr-auto">{t.production.annotated}</span>
+            <span className="flex items-center gap-1.5"><span className="w-4 border-b-2 border-critical" aria-hidden />{t.severity.CRITICAL}</span>
+            <span className="flex items-center gap-1.5"><span className="w-4 border-b-2 border-moderate" aria-hidden />{t.severity.MODERATE}</span>
+            <span className="flex items-center gap-1.5"><span className="w-4 border-b border-dashed border-minor" aria-hidden />{t.severity.MINOR}</span>
           </div>
           <ErrorSpanAnnotator text={attempt.text} errors={attempt.errors} active={active} onSelect={setActive} />
           <div className="mt-4 flex flex-wrap gap-1.5 border-t border-line pt-3">
@@ -215,26 +240,26 @@ export function ProductionStage({ lessonId, prompt, chunks, source, title, initi
               <Badge key={c.chunk} variant={c.counted ? "mastered" : c.present ? "moderate" : "neutral"} title={c.note}>
                 {c.counted && <Check aria-hidden />}
                 {c.chunk}
-                {!c.counted && c.present && " · misused"}
+                {!c.counted && c.present && t.production.misused}
               </Badge>
             ))}
           </div>
         </section>
-        <section aria-label="Diagnostic cards" className="min-h-0 lg:max-h-[70vh] lg:overflow-y-auto lg:pr-1">
-          {attempt.errors.length ? <ErrorCards errors={attempt.errors} active={active} onSelect={setActive} /> : <p className="rounded-lg border border-line bg-card p-4 text-[13.5px] text-ink-2">No language errors. The gate is blocked for the reasons below.</p>}
+        <section aria-label={t.production.diagnostics} className="min-h-0 lg:max-h-[70vh] lg:overflow-y-auto lg:pr-1">
+          {attempt.errors.length ? <ErrorCards errors={attempt.errors} active={active} onSelect={setActive} /> : <p className="rounded-lg border border-line bg-card p-4 text-[13.5px] text-ink-2">{t.production.noLangErrors}</p>}
           {(chunkReason || offPrompt) && (
             <ul className="mt-2 space-y-2">
               {[chunkReason, offPrompt].filter(Boolean).map((r) => (
-                <li key={r} className="rounded-md border border-moderate/30 bg-moderate-wash p-3 text-[13px] text-moderate-ink">{r}</li>
+                <li key={r} className="rounded-md border border-moderate/30 bg-moderate-wash p-3 text-[13px] text-moderate-ink">{gateReasonText(t, r as string)}</li>
               ))}
             </ul>
           )}
         </section>
       </div>
 
-      <section aria-label="Revision" className="rounded-lg border border-line bg-card">
+      <section aria-label={t.production.revision} className="rounded-lg border border-line bg-card">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-3">
-          <span className="eyebrow">Your revision</span>
+          <span className="eyebrow">{t.production.revision}</span>
           <ChunkTrackerBar chunks={chunks} text={revision} required={REQUIRED} />
         </div>
         <Textarea
@@ -243,16 +268,16 @@ export function ProductionStage({ lessonId, prompt, chunks, source, title, initi
           onChange={(e) => setRevision(e.target.value)}
           onPaste={(e) => e.preventDefault()}
           onKeyDown={submitOnModEnter(() => void reverify())}
-          rows={10}
+          rows={MAX_WORDS <= 60 ? 5 : 10}
           spellCheck={false}
           autoCorrect="off"
           disabled={busy}
-          aria-label="Revise your draft"
+          aria-label={t.production.revisionAria}
           className="rounded-none border-0 px-5 py-4 font-serif text-[17.5px] leading-[1.8] focus:ring-0"
         />
         <div className="flex flex-wrap items-center gap-3 border-t border-line px-4 py-3">
-          <WordCount n={n} />
-          <DictateButton onText={(t) => setRevision((s) => `${s} ${t}`.trim())} />
+          <WordCount n={n} min={MIN_WORDS} max={MAX_WORDS} />
+          <DictateButton onText={(x) => setRevision((s) => `${s} ${x}`.trim())} />
           <PhasedStatus className="flex-1" phases={EVAL_PHASES} active={busy} />
         </div>
       </section>
@@ -263,10 +288,10 @@ export function ProductionStage({ lessonId, prompt, chunks, source, title, initi
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-3 px-4 py-3 md:px-8">
           <Lock className="size-4 text-critical" aria-hidden />
           <p className="flex-1 text-[13.5px] tabular-nums text-ink">
-            <span className="font-semibold text-critical-ink">Blocked:</span> {remaining ? `${remaining} error${counts.critical + counts.moderate === 1 ? "" : "s"} remaining` : attempt.reasons[0]} — rewrite your draft above to pass.
+            <span className="font-semibold text-critical-ink">{t.production.blocked}</span> {remaining || (attempt.reasons[0] ? gateReasonText(t, attempt.reasons[0]) : "")} — {t.production.rewriteToPass}
           </p>
           <ModEnterHint />
-          <Button onClick={() => void reverify()} disabled={busy || n < MIN_WORDS || n > MAX_WORDS}>{busy ? "Verifying…" : "Re-Verify Draft"}</Button>
+          <Button onClick={() => void reverify()} disabled={busy || n < MIN_WORDS || n > MAX_WORDS}>{busy ? t.production.verifying : t.production.reverify}</Button>
         </div>
       </div>
     </div>

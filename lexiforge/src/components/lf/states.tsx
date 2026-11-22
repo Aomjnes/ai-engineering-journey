@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
+import { usePrefs } from "./prefs";
 
 export function EmptyState({ icon, title, body, action, className }: { icon?: React.ReactNode; title: string; body?: React.ReactNode; action?: React.ReactNode; className?: string }) {
   return (
@@ -18,7 +19,8 @@ export function EmptyState({ icon, title, body, action, className }: { icon?: Re
  * Progress text shown while an evaluation runs. The phases describe the real pipeline order
  * (evidence extraction → span verification → deterministic metric update); timing is approximate.
  */
-export function PhasedStatus({ phases, active, className }: { phases: string[]; active: boolean; className?: string }) {
+export function PhasedStatus({ phases, active, className }: { phases: readonly string[]; active: boolean; className?: string }) {
+  const { t } = usePrefs();
   const [i, setI] = useState(0);
   useEffect(() => {
     if (!active) {
@@ -32,11 +34,13 @@ export function PhasedStatus({ phases, active, className }: { phases: string[]; 
   return (
     <div role="status" aria-live="polite" className={cn("flex items-center gap-2.5 text-[13px] text-ink-2", className)}>
       <span className="pulse-dot size-1.5 rounded-full bg-accent" aria-hidden />
-      <span key={i} className="animate-in">{phases[i]}</span>
+      <span key={i} className="animate-in">{(t.phases as Record<string, string>)[phases[i] ?? ""] ?? phases[i]}</span>
       <span className="num ml-auto text-[11px] text-ink-3">{i + 1}/{phases.length}</span>
     </div>
   );
 }
 
-export const EVAL_PHASES = ["Parsing syntax…", "Checking collocations and Vietlish calques…", "Verifying error spans against your text…", "Updating GAI / LRI metrics…"];
-export const COMPREHENSION_PHASES = ["Reading your answer against the source…", "Checking each rubric criterion…", "Logging language errors…"];
+/** Phase keys into the `phases` dictionary section. */
+export const EVAL_PHASES = ["eval1", "eval2", "eval3", "eval4"];
+export const COMPREHENSION_PHASES = ["comp1", "comp2", "comp3"];
+export const GENERATE_PHASES = ["gen1", "gen2", "gen3"];

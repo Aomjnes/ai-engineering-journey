@@ -115,3 +115,16 @@ export function useTts() {
 
   return { supported, speakingIndex, state, speak, stop, pause, resume };
 }
+
+/** One-shot TTS of a short phrase (placement audio items, practice). Returns false when unsupported. */
+export function speakOnce(text: string, rate = 0.85): boolean {
+  if (typeof window === "undefined" || !("speechSynthesis" in window)) return false;
+  window.speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = "en-US";
+  u.rate = rate;
+  const voice = window.speechSynthesis.getVoices().find((v) => v.lang.startsWith("en"));
+  if (voice) u.voice = voice;
+  window.speechSynthesis.speak(u);
+  return true;
+}

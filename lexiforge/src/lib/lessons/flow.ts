@@ -17,6 +17,8 @@ import { detectCopy, dictationAccuracy, textJaccard } from "@/lib/metrics/simila
 import { newCard } from "@/lib/metrics/srs";
 import { countWords, pickShadowSentence } from "@/lib/metrics/text";
 import { recordSession, requireProfile, type SessionOutcome } from "@/lib/profile/service";
+import { streamAudience } from "@/lib/i18n/server";
+import { syncRoadmap } from "@/lib/roadmap/service";
 import { QuestionSchema } from "./questions";
 
 export const SHADOW_MIN_ACCURACY = 0.8;
@@ -24,6 +26,10 @@ export const COMPREHENSION_PASS = 0.5;
 export const PRODUCTION_CHUNKS_REQUIRED = 3;
 export const UPGRADE_COPY_LIMIT = 0.9;
 const PRODUCTION_WORDS = { minWords: 60, maxWords: 220 };
+/** Micro-story lessons (Pre-A1 … A1.2): 2–3 short sentences instead of a paragraph. */
+const MICRO_PRODUCTION_WORDS = { minWords: 8, maxWords: 60 };
+const isMicro = (lesson: Pick<LessonUnit, "deliveryMode">) => lesson.deliveryMode === "MICRO_STORY";
+export const productionWordsFor = (lesson: Pick<LessonUnit, "deliveryMode">) => (isMicro(lesson) ? MICRO_PRODUCTION_WORDS : PRODUCTION_WORDS);
 
 type LessonFull = LessonUnit & { chunks: LexicalChunk[] };
 
@@ -57,8 +63,8 @@ function requireStage(lesson: LessonUnit, stage: LessonStage) {
 
 const questionsOf = (lesson: LessonUnit) => z.array(QuestionSchema).parse(lesson.questions);
 
-export function shadowSentenceFor(lesson: Pick<LessonUnit, "id" | "readingText">) {
-  return pickShadowSentence(lesson.readingText, lesson.id);
+export function shadowSentenceFor(lesson: Pick<LessonUnit, "id" | "readingText" | "deliveryMode">) {
+  return pickShadowSentence(lesson.readingText, lesson.id, lesson.deliveryMode === "MICRO_STORY" ? 4 : 8);
 }
 
 // ───────────────────────────── Stage 1 — Input & shadowing ─────────────────────────────
@@ -92,7 +98,7 @@ export async function submitComprehension(streamId: string, lessonId: string, qu
   if (!question) throw new AppError(404, "QUESTION_NOT_FOUND", "Unknown question.");
   const already = await prisma.submissionAttempt.findFirst({ where: { streamId, lessonId, kind: "COMPREHENSION", questionId, passedGate: true } });
   if (already) throw new AppError(409, "ALREADY_PASSED", "This question is already answered correctly.");
-  const guard = guardSubmission(answer, { minWords: 5, maxWords: 150 });
+  const guard = guardSubmission(answer, { minWords: isMicro(lesson) ? 3 : 5, maxWords: 150 });
   if (!guard.ok) throw new AppError(422, guard.code ?? "REJECTED", guard.message ?? "Rejected.");
   const attemptNumber = (await prisma.submissionAttempt.count({ where: { streamId, lessonId, kind: "COMPREHENSION", questionId } })) + 1;
   const copy = detectCopy(answer, lesson.readingText);
@@ -168,12 +174,12 @@ export async function submitProduction(streamId: string, lessonId: string, text:
   requireStage(lesson, "PRODUCTION");
   const firstCount = await attemptCount({ streamId, lessonId, kind: "PRODUCTION" });
   if (firstCount > 0) throw new AppError(409, "REWRITE_REQUIRED", "Your production was blocked by the Error-Repair Gate. Submit a rewrite instead.");
-  const guard = guardSubmission(text, PRODUCTION_WORDS);
+  const guard = guardSubmission(text, productionWordsFor(lesson));
   if (!guard.ok) throw new AppError(422, guard.code ?? "REJECTED", guard.message ?? "Rejected.");
   const copy = detectCopy(text, lesson.readingText);
   if (copy.isCopy) throw new AppError(422, "COPY_PASTE", `Rejected: ${Math.round(copy.maxJaccard * 100)}% overlap with the article (limit 65%). Write your own text.`);
   const ev = await evaluateWriting({
-    text, prompt: lesson.productionPrompt, sourceText: lesson.readingText, requiredChunks: lesson.chunks.map((c) => c.phrase), chunkRequirement: PRODUCTION_CHUNKS_REQUIRED, mode: "production",
+    text, prompt: lesson.productionPrompt, sourceText: lesson.readingText, requiredChunks: lesson.chunks.map((c) => c.phrase), chunkRequirement: PRODUCTION_CHUNKS_REQUIRED, mode: "production", audience: await streamAudience(streamId),
   });
   const block = productionBlocked(ev);
   await saveSubmission({
@@ -188,6 +194,7 @@ export async function submitProduction(streamId: string, lessonId: string, text:
     { taskDifficulty: lesson.difficultyScore, gai: ev.gai.gai, lri: ev.lri.lri, cpr: comp.cpr, passedGateFirstTry: !block.blocked, words: ev.gai.words, items: comp.items, errorsPer100W: ev.gai.rawErrorsPer100W },
     now,
   );
+  await syncRoadmap(streamId, now);
   if (!block.blocked) await prisma.lessonUnit.update({ where: { id: lesson.id, streamId }, data: { stage: "EXIT_TICKET" } });
   return {
     ...publicEvaluation(text, ev, block),
@@ -212,14 +219,14 @@ export async function submitRewrite(streamId: string, lessonId: string, text: st
   if (!first) throw new AppError(409, "PRODUCTION_FIRST", "Submit your production text first.");
   const lastUpgrade = await prisma.submissionAttempt.findFirst({ where: { streamId, lessonId, kind: { in: ["PRODUCTION", "REWRITE"] }, rejected: false }, orderBy: { createdAt: "desc" } });
   const upgrade = z.object({ nativeUpgrade: z.string() }).safeParse(lastUpgrade?.evidence);
-  const guard = guardSubmission(text, PRODUCTION_WORDS);
+  const guard = guardSubmission(text, productionWordsFor(lesson));
   if (!guard.ok) throw new AppError(422, guard.code ?? "REJECTED", guard.message ?? "Rejected.");
   if (upgrade.success && isPastedUpgrade(text, upgrade.data.nativeUpgrade, first.text)) {
     throw new AppError(422, "UPGRADE_COPIED", "This is the model's native upgrade, not your rewrite. Fix your own text sentence by sentence.");
   }
   const attemptNumber = (await prisma.submissionAttempt.count({ where: { streamId, lessonId, kind: "REWRITE" } })) + 2;
   const ev = await evaluateWriting({
-    text, prompt: lesson.productionPrompt, sourceText: lesson.readingText, requiredChunks: lesson.chunks.map((c) => c.phrase), chunkRequirement: PRODUCTION_CHUNKS_REQUIRED, mode: "rewrite",
+    text, prompt: lesson.productionPrompt, sourceText: lesson.readingText, requiredChunks: lesson.chunks.map((c) => c.phrase), chunkRequirement: PRODUCTION_CHUNKS_REQUIRED, mode: "rewrite", audience: await streamAudience(streamId),
   });
   const block = productionBlocked(ev);
   await saveSubmission({
@@ -239,18 +246,19 @@ export async function submitExitTicket(streamId: string, lessonId: string, sente
   const lockedIn = new Set((await prisma.srsCard.findMany({ where: { streamId, chunk: { lessonId } }, select: { chunkId: true } })).map((c) => c.chunkId));
   const pending = lesson.chunks.filter((c) => !lockedIn.has(c.id));
   const items = pending.map((chunk) => ({ chunk, text: sentences.find((s) => s.chunkId === chunk.id)?.text.trim() ?? "" }));
-  const missing = items.filter((i) => countWords(i.text) < 5);
-  if (missing.length) throw new AppError(422, "INCOMPLETE", `Write one original sentence (≥ 5 words) for each chunk: ${missing.map((m) => `"${m.chunk.phrase}"`).join(", ")}.`);
+  const minExit = isMicro(lesson) ? 3 : 5;
+  const missing = items.filter((i) => countWords(i.text) < minExit);
+  if (missing.length) throw new AppError(422, "INCOMPLETE", `Write one original sentence (≥ ${minExit} words) for each chunk: ${missing.map((m) => `"${m.chunk.phrase}"`).join(", ")}.`);
   for (const it of items) {
-    const g = guardSubmission(it.text, { minWords: 5, maxWords: 60 });
+    const g = guardSubmission(it.text, { minWords: minExit, maxWords: 60 });
     if (!g.ok) throw new AppError(422, g.code ?? "REJECTED", `"${it.chunk.phrase}": ${g.message}`);
   }
 
-  const results: Array<{ chunkId: string; phrase: string; passed: boolean; reason: string | null }> = [];
+  const results: Array<{ chunkId: string; phrase: string; passed: boolean; reason: string | null; reasonCode: "COPIED" | "MISSING" | "MISUSED" | "FIX" | null; detail: string | null }> = [];
   const toGrade: typeof items = [];
   for (const it of items) {
     const copy = Math.max(detectCopy(it.text, it.chunk.sourceSentence).maxJaccard, detectCopy(it.text, lesson.readingText).maxJaccard);
-    if (copy > 0.65) results.push({ chunkId: it.chunk.id, phrase: it.chunk.phrase, passed: false, reason: "Copied from the article. Write an original real-world sentence." });
+    if (copy > 0.65) results.push({ chunkId: it.chunk.id, phrase: it.chunk.phrase, passed: false, reason: "Copied from the article. Write an original real-world sentence.", reasonCode: "COPIED", detail: null });
     else toGrade.push(it);
   }
   let errorsOut: WritingEvaluation["errors"] = [];
@@ -258,7 +266,7 @@ export async function submitExitTicket(streamId: string, lessonId: string, sente
     // One evaluation call for all sentences; spans are mapped back per line deterministically.
     const lines = toGrade.map((t) => t.text.replace(/\s+/g, " "));
     const joined = lines.join("\n");
-    const ev = await evaluateWriting({ text: joined, prompt: "Write one original, real-world sentence for each target chunk (one per line).", requiredChunks: toGrade.map((t) => t.chunk.phrase), mode: "exit" });
+    const ev = await evaluateWriting({ text: joined, prompt: "Write one original, real-world sentence for each target chunk (one per line).", requiredChunks: toGrade.map((t) => t.chunk.phrase), mode: "exit", audience: await streamAudience(streamId) });
     errorsOut = ev.errors;
     let offset = 0;
     toGrade.forEach((t, idx) => {
@@ -276,7 +284,9 @@ export async function submitExitTicket(streamId: string, lessonId: string, sente
           : blocking.length
             ? `Fix: ${blocking.map((e) => `"${e.original}" → "${e.correction}"`).join("; ")}`
             : null;
-      results.push({ chunkId: t.chunk.id, phrase: t.chunk.phrase, passed: reason === null, reason });
+      const reasonCode = !usage?.present ? "MISSING" : !usage.llmUsedCorrectly ? "MISUSED" : blocking.length ? "FIX" : null;
+      const detail = reasonCode === "MISUSED" ? (usage?.note ?? null) : reasonCode === "FIX" ? blocking.map((e) => `"${e.original}" → "${e.correction}"`).join("; ") : null;
+      results.push({ chunkId: t.chunk.id, phrase: t.chunk.phrase, passed: reason === null, reason, reasonCode, detail });
     });
     await saveSubmission({ streamId, kind: "EXIT_TICKET", lessonId, text: joined, wordCount: countWords(joined), taskDifficulty: lesson.difficultyScore, gai: ev.gai.gai, lri: ev.lri.lri, passedGate: results.every((r) => r.passed), errors: ev.errors });
   }
@@ -364,6 +374,9 @@ export async function lessonView(streamId: string, lessonId: string) {
     id: lesson.id,
     stage: lesson.stage,
     isGraded: lesson.isGraded,
+    deliveryMode: lesson.deliveryMode as "MICRO_STORY" | "GRADED_BRIDGE" | "AUTHENTIC",
+    glosses: z.array(z.object({ text: z.string(), vi: z.string() })).catch([]).parse(lesson.glossJson ?? []),
+    productionWords: productionWordsFor(lesson),
     difficulty: lesson.difficultyScore,
     comprehensibility: lesson.comprehensibility,
     readingText: lesson.readingText,
@@ -371,8 +384,9 @@ export async function lessonView(streamId: string, lessonId: string) {
     article: { title: lesson.article.title, url: lesson.article.url, source: lesson.article.feed.name, topic: lesson.article.feed.topic, publishedAt: lesson.article.publishedAt, cefrTier: lesson.article.cefrTier, difficulty: lesson.article.difficultyScore },
     chunks: lesson.chunks.map((c) => ({ id: c.id, phrase: c.phrase, sourceSentence: c.sourceSentence, meaningEn: c.meaningEn, meaningVi: c.meaningVi, cefrTier: c.cefrTier, isStretch: c.isStretch, lockedIn: cards.some((k) => k.chunkId === c.id) })),
     grammarInWild: z.array(z.object({ pattern: z.string(), example: z.string(), explanationEn: z.string(), explanationVi: z.string() })).catch([]).parse(lesson.grammarInWild),
-    questions: questionsOf(lesson).map((q) => ({ id: q.id, type: q.type, prompt: q.prompt, passed: subs.some((s) => s.kind === "COMPREHENSION" && s.questionId === q.id && s.passedGate) })),
+    questions: questionsOf(lesson).map((q) => ({ id: q.id, type: q.type, prompt: q.prompt, promptVi: q.promptVi ?? null, passed: subs.some((s) => s.kind === "COMPREHENSION" && s.questionId === q.id && s.passedGate) })),
     productionPrompt: lesson.productionPrompt,
+    productionPromptVi: lesson.productionPromptVi,
     shadowSentence: shadow?.text ?? null,
     production,
     receipt,

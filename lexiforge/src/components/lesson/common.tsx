@@ -3,17 +3,19 @@
 import { Mic } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSpeechToText } from "./speech";
+import { usePrefs } from "@/components/lf/prefs";
 
 /** Voice dictation (Web Speech STT) with an audio-pulse indicator while listening. */
 export function DictateButton({ onText, className }: { onText: (t: string) => void; className?: string }) {
   const stt = useSpeechToText(onText);
+  const { t } = usePrefs();
   if (!stt.supported) return null;
   return (
     <button
       type="button"
       onClick={stt.listening ? stt.stop : stt.start}
       aria-pressed={stt.listening}
-      aria-label={stt.listening ? "Stop dictation" : "Dictate with your voice"}
+      aria-label={stt.listening ? t.common.stopDictation : t.common.dictateAria}
       className={cn(
         "inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-[12.5px] font-medium transition-colors",
         stt.listening ? "border-critical/40 bg-critical-wash text-critical-ink" : "border-line bg-card text-ink-2 hover:text-ink",
@@ -21,7 +23,7 @@ export function DictateButton({ onText, className }: { onText: (t: string) => vo
       )}
     >
       {stt.listening ? <span className="pulse-dot size-2 rounded-full bg-critical" aria-hidden /> : <Mic className="size-3.5" aria-hidden />}
-      {stt.listening ? "Listening…" : "Dictate"}
+      {stt.listening ? t.common.listening : t.common.dictate}
     </button>
   );
 }

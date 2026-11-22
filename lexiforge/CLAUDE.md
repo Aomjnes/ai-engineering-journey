@@ -40,7 +40,10 @@ src/
     ingest/               RSS fetch → Readability extraction → URL-hash dedupe → complexity tagging
     lessons/              i+1 article matching + lesson synthesis (LLM supplies text/chunks; math verifies)
     evaluation/           Strict evaluator: LLM evidence → span repair → deterministic metrics → gates
-    diagnostic/           3-part adaptive placement audit + band promotion audit (item bank + IRT)
+    diagnostic/           staircase placement (Tier 0–3, early exit) + band promotion audit (item bank + IRT)
+    roadmap/              fixed curriculum per sub-band + deterministic milestone generator + roadmap service
+    practice/             Practice Studio: dictation, speaking/IPA, sentence builder, roleplay coach, foundation decks
+    i18n/                 vi/en dictionaries (generated), getDictionary, fmt, error/subtype labels, locale cookie
     accountability/       Error Graveyard aggregation, half-life, Error Detox lock
     profile/              Applies session results to ProficiencyProfile + snapshots (EWMA, decay, gates)
   components/             UI (shadcn-style primitives in components/ui)
@@ -57,7 +60,9 @@ tests/                    vitest (unit) and tests/integration (live network)
 - **Shared tables** (no learner data): `SourceFeed`, `DailyArticle`, `ExplanationCache`, `AccessFailure`.
 - **Isolated tables** (every row has `streamId` → `StreamAccount`, `onDelete: Cascade`, indexed): `ProficiencyProfile`,
   `ProficiencySnapshot`, `DiagnosticAssessment`, `LessonUnit` (`@@unique([streamId, articleId])`), `LexicalChunk`,
-  `UserProgress`, `SubmissionAttempt`, `ErrorLog`, `SrsCard`, `SrsReview`, `UserSettings`.
+  `UserProgress`, `SubmissionAttempt`, `ErrorLog`, `SrsCard`, `SrsReview`, `UserSettings`, `LearningGoal`
+  (`streamId @unique`), `RoadmapMilestone` (`@@unique([streamId, orderIndex])`), `PracticeSession`,
+  `FoundationProgress` (`@@unique([streamId, deckId, itemKey])`).
 - **Isolation invariant:** every Prisma call on an isolated model includes `streamId` in its `where`/`data`
   (single-row reads use `findFirst({ where: { id, streamId } })`, updates use `where: { id, streamId }`).
   `tests/security/scope-audit.test.ts` statically fails the suite if any call omits it.
@@ -90,7 +95,7 @@ tests/                    vitest (unit) and tests/integration (live network)
 - Functions run in `sin1` (Singapore), co-located with the Neon database, so each query is a few ms instead of a trans-Pacific round trip.
 - Vercel Cron: `GET /api/cron/ingest` daily at `0 22 * * *` (05:00 Hanoi), `Authorization: Bearer $CRON_SECRET`.
   `node-cron` never starts when `VERCEL=1`.
-- `maxDuration`: explain & cron 60 s; evaluate, diagnostic, lessons/synthesize 300 s.
+- `maxDuration`: explain & cron 60 s; evaluate, diagnostic, lessons/synthesize, practice 300 s.
 
 ## Pedagogical invariants (never violate)
 
@@ -119,7 +124,8 @@ Severity weights: `CRITICAL = 3`, `MODERATE = 1.5`, `MINOR = 0.5`. `W` = word co
 
 ### GAI — Grammatical Accuracy Index (0–100)
 Counts errors in `GRAMMAR` and `SPELLING_PUNCTUATION`.
-- Weighted errors per 100 words: `E100 = 100 · Σ wᵢ / max(W, 1)`
+- Weighted errors per 100 words: `E100 = 100 · Σ wᵢ / max(W, 20)` (`SHORT_TEXT_FLOOR = 20`, so one slip in a
+  5-word beginner answer is not "20 errors / 100 words"; the raw E/100W chart still uses `max(W, 1)`)
 - Density component: `Dens = 100 · exp(−E100 / 10)`
 - Error-free sentence ratio: `EFSR = error-free sentences / sentences`
   (a sentence is erroneous if any counted error span overlaps it)
@@ -129,7 +135,8 @@ Counts errors in `GRAMMAR` and `SPELLING_PUNCTUATION`.
 - Chunk deployment rate: `CDR = 100 · chunks used correctly / chunks required`
   (a chunk counts only if the LLM marks it correct AND it is deterministically found in the text)
 - Guiraud's Index `R = types / √tokens` (content-insensitive, lowercased word tokens);
-  `G = 100 · clamp((R − 3) / 6, 0, 1)`
+  `G_R = 100 · clamp((R − 3) / 6, 0, 1)`. Below `GUIRAUD_MIN_TOKENS = 30` tokens R is unstable, so
+  `G = w · G_R + (1 − w) · G_T` with `w = n / 30` and `G_T = 100 · clamp((TTR − 0.6) / 0.4, 0, 1)`; empty text → 0.
 - Collocation naturalness: `Σw_lex` = weighted `COLLOCATION_NATURALNESS` + `WORD_CHOICE_REGISTER` errors;
   `CNR = 100 · clamp(1 − Σw_lex / max(W / 10, 1), 0, 1)`
 - `LRI = 0.35 · CDR + 0.30 · G + 0.35 · CNR`; with no required chunks the weights renormalize to
@@ -164,8 +171,9 @@ From `SrsReview` history and current FSRS state at time `now`:
 dimensions that have evidence.
 
 ### Ability level, CEFR sub-band, IELTS estimate
-Level scale `L ∈ [0, 100]`, 12.5 per sub-band:
-`A2.1 [0,12.5) · A2.2 [12.5,25) · B1.1 [25,37.5) · B1.2 [37.5,50) · B2.1 [50,62.5) · B2.2 [62.5,75) · C1.1 [75,87.5) · C1.2 [87.5,100]`.
+Level scale `L ∈ [0, 100]`, 11 sub-bands (Zero-to-Hero):
+`Pre-A1 [0,15) · A1.1 [15,25) · A1.2 [25,34) · A2.1 [34,44) · A2.2 [44,53) · B1.1 [53,61) · B1.2 [61,69) · B2.1 [69,76) · B2.2 [76,83) · C1.1 [83,90) · C1.2 [90,100]`.
+Pre-A1 … A1.2 are *beginner bands* (`isBeginnerBand`): micro-story lessons, Vietnamese-first coaching, 2 questions.
 Article/task difficulty `D` uses the same scale.
 
 - **Performance-implied level:** `L* = clamp(D + 0.5 · (P − 70), 0, 100)` where `P` is the session
@@ -174,13 +182,14 @@ Article/task difficulty `D` uses the same scale.
   multiplier `m = 1 + min(|D − L| / 25, 1)` when the outcome is *surprising* (passing above level:
   `D > L ∧ P ≥ 70`; failing below level: `D < L ∧ P < 70`), else `m = 1`.
   Live metric scores (GAI/LRI/CPR) use plain EWMA with `α = 0.3`.
-- **IELTS estimate:** piecewise-linear through `(0,4.0) (25,4.5) (50,5.5) (75,7.0) (100,8.5)`, rounded to 0.5.
+- **IELTS estimate:** stepwise per sub-band: `Pre-A1 2.5 (shown "< 3.0") · A1.1 3.0 · A1.2 3.5 · A2.1 4.0 · A2.2 4.5 ·
+  B1.1 5.0 · B1.2 5.5 · B2.1 6.0 · B2.2 6.5 · C1.1 7.0/7.5 · C1.2 8.0/8.5` (C1 sub-bands split at the band midpoint).
   Confidence: `SE = 1 / √(1 + words/150 + items/10)` bands; interval `± max(0.5, round½(1.96·SE))`,
-  clamped to [4.0, 8.5]. Always labeled *estimated diagnostic equivalent*.
+  clamped to [2.5, 8.5]. Always labeled *estimated diagnostic equivalent*.
 
 ### Promotion lock (displayed sub-band only moves through gates)
 Qualifying-session thresholds by current sub-band (composite `C`):
-`A2.1 60 · A2.2 63 · B1.1 66 · B1.2 69 · B2.1 72 · B2.2 75 · C1.1 78 · C1.2 81`.
+`Pre-A1 54 · A1.1 56 · A1.2 58 · A2.1 60 · A2.2 63 · B1.1 66 · B1.2 69 · B2.1 72 · B2.2 75 · C1.1 78 · C1.2 81`.
 A session qualifies iff `C ≥ threshold` AND `D ≥ lower bound of current sub-band` AND it passed the
 Error-Repair Gate on first submission. A non-qualifying session resets the counter to 0.
 The Band Promotion Audit unlocks iff:
@@ -193,21 +202,28 @@ threshold AND zero CRITICAL errors. Pass → sub-band + 1, counter reset. Fail �
 ### Decay & demotion
 - Inactivity: for every full day beyond 7 without a graded session, `L ← L − 0.5`
   (applied lazily on dashboard load, recorded as a DECAY snapshot, at most once per day).
-- Demotion: if `L` < current sub-band lower bound − 6.25, the sub-band drops by one (DEMOTION snapshot).
+- Demotion: if `L` < current sub-band lower bound − (width of the band below) / 2, the sub-band drops by one
+  (DEMOTION snapshot).
 
 ## Readability & article tiering (`readability.ts`)
 - `FKGL = 0.39 · (words / sentences) + 11.8 · (syllables / words) − 15.59`
 - `FRE  = 206.835 − 1.015 · (words / sentences) − 84.6 · (syllables / words)`
 - Lexical sophistication `LS` = share of alphabetic tokens (len ≥ 3) whose lemma is not in the core band.
-- Difficulty `D = clamp(60 · clamp((FKGL − 4) / 12, 0, 1) + 40 · clamp((LS − 0.05) / 0.30, 0, 1), 0, 100)`
-- Tier: `A2 < 25 ≤ B1 < 50 ≤ B2 < 75 ≤ C1`. Ingestion keeps B1/B2/C1 (A2 texts are rare in news and are tagged B1-minimum only if D ≥ 20; below that the article is discarded as too thin).
+- Raw complexity `X = clamp(60 · clamp((FKGL − 4) / 12, 0, 1) + 40 · clamp((LS − 0.05) / 0.30, 0, 1), 0, 100)`
+- Difficulty `D = levelFromRaw(X)`: piecewise-linear through `(0,15) (12.5,34) (25,53) (50,69) (75,83) (100,100)`,
+  i.e. onto the shared level scale (any real text is ≥ A1.1).
+- Tier: `A2 < 53 ≤ B1 < 69 ≤ B2 < 83 ≤ C1`. Ingestion discards articles with `D < 45` (too thin to teach from).
 
 ## i+1 matching (`lessons/match.ts`)
 Target difficulty `T = L + 10`. Pick today's unused article minimizing `|D − T|` (ties: newest).
-- `L < 37.5` (≤ B1.1): synthesize a graded bridge version targeting `T`; it is accepted only if its
-  measured `D ≤ T + 8` (max 3 attempts), and the authentic excerpt is shown alongside.
-- `37.5 ≤ L < 50` (B1.2): authentic text if `D ≤ T + 12`, otherwise bridge.
-- `L ≥ 50` (B2+): authentic text, C1-level lexical targets.
+- `L < 34` (Pre-A1 … A1.2): **micro real-world story** — 4–6 sentences, 50–90 words, on today's real headline
+  (source badge, date and original headline shown), `D ≤ T + 8`, 6–24 verbatim Vietnamese glosses (tap to reveal),
+  exactly 3 survival chunks, 1 sentence pattern, 2 questions; production 8–60 words with Vietnamese cues
+  (`productionPromptVi`) and a word bank for Pre-A1; TTS defaults to 0.8×.
+- `34 ≤ L < 61` (A2.1 … B1.1): graded bridge version targeting `T`, accepted only if `D ≤ T + 8` (max 3 attempts),
+  shown alongside the authentic excerpt.
+- `61 ≤ L < 69` (B1.2): authentic text if `D ≤ T + 12`, otherwise bridge.
+- `L ≥ 69` (B2+): authentic text, C1-level lexical targets.
 - Comprehensibility estimate = share of tokens whose lemma is core-band or in the learner's SRS deck;
   reported on the lesson, target 0.85–0.90.
 
@@ -250,6 +266,58 @@ Detox clears only after ≥ 300 s server time AND each of the top-3 recurring su
 - `/api/cron/ingest` needs `Authorization: Bearer $CRON_SECRET` (constant-time compare); `/api/ingest` (manual
   button) accepts same-origin browser requests only.
 - Every free-text submission passes `guardSubmission` (length, English script, gibberish, repetition) before any LLM call.
+
+## Placement staircase (`diagnostic/placement.ts`, `diagnostic/item-bank.ts`)
+- **Step 0 (setup):** comfort tier 0–3, goal (A2.2 / B1.2 / B2.2 / C1.1) and daily minutes (15/30/45/60) → `LearningGoal`.
+- **Tiers:** 0 Pre-A1 (listen → meaning, survival phrases, word-order chips) · 1 A1–A2 (short passages, basic mistakes)
+  · 2 B1–B2 (authentic passages, Vietlish traps) · 3 C1 (nuance, register). Start = chosen comfort tier.
+- After each tier block: accuracy ≥ 0.7 → climb (if unvisited), < 0.5 → descend (if unvisited), else stop.
+  Tier 0 stops after 4 misses/skips within its first 5 items. If no tier reaches 0.5 and Tier 0 was visited the
+  audit ends **without writing** and the level is capped at 24.9 (Pre-A1 / A1.1).
+- Every item has a guilt-free "Tôi không biết / Bỏ qua câu này" (scores 0, counted as skipped).
+- Writing at `max(1, highest passed tier)`: T1 8–60 words, T2 50–130, T3 80–160; writing may be skipped.
+- `θ` = Rasch MAP with prior N(35, 30²); writing-implied level `Lw` maps `0.55·GAI + 0.45·LRI` from [30, 95] onto the
+  task's level range; final `L = 0.65·θ + 0.35·Lw` (θ alone without writing).
+- Report (Vietnamese UI): level + band name, IELTS range, strengths, top-3 blockers (writing subtypes → missed traps →
+  weak sections), writing feedback, CTA to the roadmap.
+
+## Roadmap (`roadmap/`)
+- `CURRICULUM` holds one fixed step per sub-band (VI/EN title, outcome, pronunciation, chunks, sentence patterns,
+  daily reading, foundation decks, recommended practice modes, unlock thresholds GAI/LRI/RSS, guided hours).
+- `planMilestones(start, target)` = every sub-band step from start to target; statuses COMPLETED (band reached) /
+  ACTIVE (first unreached) / LOCKED. `syncRoadmap` regenerates when start/target change and stamps `completedAt`;
+  it runs after placement, every graded session, promotion and goal edits.
+- Honest ETA: remaining hours (ACTIVE step reduced by progress inside the band) ÷ (`dailyMinutes`/60 · 6 days ·
+  velocity), velocity = observed ÷ expected level gain over 30 days (≥ 3 snapshots over ≥ 7 days, clamped 0.5–1.5).
+- Next action priority: onboarding → detox → due reviews → resume lesson → promotion audit → new lesson.
+- `GET/PUT /api/roadmap` (goal edits keep history). Today shows a "Lộ trình hiện tại" widget.
+
+## Practice Studio (`practice/`, `/practice`, `/api/practice`, `/api/practice/foundation`)
+- Content is LLM-written from today's easiest real headline + the active milestone, then validated in code
+  (word-count windows per level group, difficulty ≤ max(30, L + 15), IPA in slashes, distractors not in the answer).
+- **Dictation:** speeds 0.7/0.85/1.0×, replay, first-letter hints, `wordDiff` (ok / misspelled / wrong / missing /
+  extra); any mistake forces a lock-in retype of the exact sentence. Score = mean first-attempt accuracy → CPR evidence.
+- **Speaking:** IPA + Vietnamese tip, browser STT, pass at ≥ 85% word match; clear notice when STT is unavailable.
+- **Sentence builder (VI → EN):** word chips (with trap distractors) for Pre-A1/A1, typing otherwise; exact match to an
+  accepted translation passes, otherwise the strict evaluator grades it; locked until correct; answer revealed only
+  after 3 chip failures; passed sentences become SRS cards.
+- **Roleplay:** 4–6 learner turns, level-matched scenarios, partner via TTS, input by text or STT; a strict coach logs
+  every error (ErrorLog) with a native version; average GAI/LRI become low-weight evidence.
+- **Foundation decks:** listen-and-type / translate recall; 2 correct recalls → FSRS card.
+- Practice evidence updates GAI/LRI/CPR with `α = 0.1` (`recordPracticeEvidence`) and never moves the level directly.
+
+## i18n (`src/lib/i18n`)
+- Source of truth: `scripts/i18n/part*.py` (key → (English, Vietnamese)); `python3 scripts/i18n/build.py` generates
+  `en.ts` (`as const`) and `vi.ts` (typed `Dict`, so tsc fails on a missing key). `tests/i18n/parity.test.ts` checks
+  key and `{placeholder}` parity.
+- Default locale `vi`. `UserSettings.uiLocale` is the per-stream source of truth; the non-HttpOnly `lexiforge_locale`
+  cookie lets `/access` and `/onboarding` render Vietnamese before login. The VI/EN switch sits in the top strip,
+  on `/access`, `/onboarding` and Settings; `PATCH /api/preferences` saves it.
+- Client: `usePrefs()` / `useI18n()` → `{ t, fmt, err, pick, lang }`. API error codes are localized via `errorText`.
+- LLM feedback: `streamAudience()` passes `{ locale, beginner }` to every evaluator/coach prompt; beginners get short,
+  jargon-free Vietnamese with the 1–2 most foundational fixes first, and the UI shows the 2 most severe errors first.
+  The explainer writes its prose in Vietnamese when `uiLocale = vi` (cache key adds `|vi`).
+- Every metric (GAI, LRI, CPR, RSS, ERI, CEFR, IELTS) has a plain-language tooltip (`MetricInfo`): what it measures + how to improve.
 
 ## UI system (`src/components/lf`, `src/app/globals.css`)
 - Fonts via `next/font/google` with the `vietnamese` subset: Newsreader (reading), Plus Jakarta Sans (UI), JetBrains Mono

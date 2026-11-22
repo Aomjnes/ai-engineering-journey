@@ -141,13 +141,174 @@ export const ERROR_ITEMS: readonly ErrorDetectionItem[] = [
   { id: "e-16", difficulty: 90, segments: ["The committee's decision", "to postpone the vote", "was widely seen as", "a deliberate stalling tactics."], answer: 3, trap: "PLURAL_OMISSION", explanation: "Singular determiner \"a\" + singular noun: \"a deliberate stalling tactic\"." },
 ];
 
-export const WRITING_PROMPTS: readonly string[] = [
-  "Many cities are considering banning cars from their centres. Write 80–120 words explaining whether you would support such a ban in your city and why. Give one concrete example.",
-  "Describe a skill you learned outside school and explain how it changed the way you work or study. Write 80–120 words with at least one specific example.",
-  "Some people believe that working from home is better for productivity; others disagree. Write 80–120 words giving your opinion, with one reason and one example.",
+/**
+ * Legacy difficulties above were authored on the earlier 8-band scale (A2.1 = 0 … C1.2 = 87.5).
+ * Map them onto the current 11-band level scale (A2.1 = 34 … C1.2 = 90) by matching band lower bounds.
+ */
+const LEGACY_ANCHORS: ReadonlyArray<readonly [number, number]> = [
+  [0, 34], [12.5, 44], [25, 53], [37.5, 61], [50, 69], [62.5, 76], [75, 83], [87.5, 90], [100, 100],
 ];
 
-export const READING_PASSAGES_SERVED = 4;
-export const ERROR_ITEMS_SERVED = 8;
-export const WRITING_MIN_WORDS = 80;
-export const WRITING_MAX_WORDS = 140;
+export function legacyToLevel(old: number): number {
+  for (let i = 1; i < LEGACY_ANCHORS.length; i++) {
+    const [x0, y0] = LEGACY_ANCHORS[i - 1] as readonly [number, number];
+    const [x1, y1] = LEGACY_ANCHORS[i] as readonly [number, number];
+    if (old <= x1) return Math.round((y0 + ((old - x0) / (x1 - x0)) * (y1 - y0)) * 10) / 10;
+  }
+  return 100;
+}
+
+// ───────────────────────────── Tier 0 · Pre-A1 (absolute beginners) ─────────────────────────────
+
+export interface AudioMeaningItem {
+  id: string;
+  kind: "AUDIO_MEANING";
+  difficulty: number;
+  /** English stimulus read aloud by the browser (TTS). Not the answer. */
+  say: string;
+  options: [string, string, string, string]; // Vietnamese meanings
+  answer: 0 | 1 | 2 | 3;
+}
+
+export interface PhraseMatchItem {
+  id: string;
+  kind: "PHRASE_MATCH";
+  difficulty: number;
+  situationVi: string;
+  situationEn: string;
+  options: [string, string, string, string]; // English phrases
+  answer: 0 | 1 | 2 | 3;
+}
+
+export interface WordOrderItem {
+  id: string;
+  kind: "WORD_ORDER";
+  difficulty: number;
+  hintVi: string;
+  hintEn: string;
+  /** The correct sentence; chips are its words shown in a fixed scrambled order. */
+  sentence: string;
+  scrambled: string[];
+}
+
+export type Tier0Item = AudioMeaningItem | PhraseMatchItem | WordOrderItem;
+
+export const TIER0_ITEMS: readonly Tier0Item[] = [
+  { id: "t0-a1", kind: "AUDIO_MEANING", difficulty: 2, say: "Hello", options: ["Tạm biệt", "Xin chào", "Cảm ơn", "Xin lỗi"], answer: 1 },
+  { id: "t0-p1", kind: "PHRASE_MATCH", difficulty: 4, situationVi: "Bạn muốn cảm ơn người phục vụ.", situationEn: "You want to thank the waiter.", options: ["Thank you.", "Excuse me.", "Goodbye.", "I'm sorry."], answer: 0 },
+  { id: "t0-a2", kind: "AUDIO_MEANING", difficulty: 6, say: "water", options: ["cơm", "nước", "bánh mì", "cà phê"], answer: 1 },
+  { id: "t0-p2", kind: "PHRASE_MATCH", difficulty: 9, situationVi: "Bạn muốn hỏi tên một người mới gặp.", situationEn: "You want to ask a new person's name.", options: ["How old are you?", "Where are you?", "What is your name?", "How are you?"], answer: 2 },
+  { id: "t0-a3", kind: "AUDIO_MEANING", difficulty: 12, say: "How much is it?", options: ["Mấy giờ rồi?", "Nó ở đâu?", "Cái này bao nhiêu tiền?", "Bạn có khỏe không?"], answer: 2 },
+  { id: "t0-o1", kind: "WORD_ORDER", difficulty: 14, hintVi: "Tôi là sinh viên.", hintEn: "I am a student.", sentence: "I am a student", scrambled: ["student", "am", "I", "a"] },
+  { id: "t0-p3", kind: "PHRASE_MATCH", difficulty: 17, situationVi: "Bạn bị lạc và muốn hỏi đường tới nhà ga.", situationEn: "You are lost and need the train station.", options: ["I like the train station.", "Where is the train station?", "The train station is big.", "I am the train station."], answer: 1 },
+  { id: "t0-o2", kind: "WORD_ORDER", difficulty: 22, hintVi: "Cô ấy không thích cà phê.", hintEn: "She does not like coffee.", sentence: "She does not like coffee", scrambled: ["like", "coffee", "She", "not", "does"] },
+];
+
+export const TIER0_EARLY_STOP_MISSES = 4; // 4 misses/skips among the first 5 items end Tier 0 early
+
+// ───────────────────────────── Tier 1 · A1–A2 short everyday passages ─────────────────────────────
+
+export const TIER1_PASSAGES: readonly ReadingPassage[] = [
+  {
+    id: "t1-r1",
+    band: "A1.2",
+    difficulty: 27,
+    title: "My morning",
+    text: "Every morning, Minh gets up at six o'clock. He drinks a glass of water and eats bread with eggs. Then he takes the bus to work because he does not have a car.",
+    questions: [
+      { id: "t1-r1-q1", type: "detail", prompt: "What does Minh eat for breakfast?", options: ["Rice and fish", "Bread with eggs", "Noodles", "Nothing"], answer: 1, difficulty: 24 },
+      { id: "t1-r1-q2", type: "inference", prompt: "Why does Minh take the bus?", options: ["He likes buses", "His office is far", "He has no car", "The bus is free"], answer: 2, difficulty: 31 },
+    ],
+  },
+  {
+    id: "t1-r2",
+    band: "A2.1",
+    difficulty: 36,
+    title: "A new café",
+    text: "A small café opened on Lan's street last week. The coffee is cheap, but the room is often too noisy to study. Lan still goes there on Sundays because she likes the owner.",
+    questions: [
+      { id: "t1-r2-q1", type: "detail", prompt: "When did the café open?", options: ["Last week", "Last year", "Yesterday", "On Sunday morning"], answer: 0, difficulty: 30 },
+      { id: "t1-r2-q2", type: "nuance", prompt: "What is the problem with the café?", options: ["The coffee is expensive", "It is far from Lan's house", "It is loud inside", "It closes on Sundays"], answer: 2, difficulty: 38 },
+    ],
+  },
+];
+
+export interface TierBlock {
+  tier: 0 | 1 | 2 | 3;
+  passages: readonly ReadingPassage[];
+  passagesServed: number;
+  errors: readonly ErrorDetectionItem[];
+  errorsServed: number;
+}
+
+const mapPassage = (p: ReadingPassage): ReadingPassage => ({
+  ...p,
+  difficulty: legacyToLevel(p.difficulty),
+  questions: p.questions.map((q) => ({ ...q, difficulty: legacyToLevel(q.difficulty) })) as [ReadingQuestion, ReadingQuestion],
+});
+const mapError = (e: ErrorDetectionItem): ErrorDetectionItem => ({ ...e, difficulty: legacyToLevel(e.difficulty) });
+const byId = <T extends { id: string }>(arr: readonly T[], ids: string[]) => ids.map((id) => arr.find((x) => x.id === id) as T);
+
+export const TIER_BLOCKS: Record<1 | 2 | 3, TierBlock> = {
+  1: { tier: 1, passages: [...TIER1_PASSAGES, ...byId(READING_PASSAGES, ["r-a2-1", "r-a2-2"]).map(mapPassage)], passagesServed: 2, errors: byId(ERROR_ITEMS, ["e-01", "e-02", "e-03", "e-04"]).map(mapError), errorsServed: 3 },
+  2: { tier: 2, passages: byId(READING_PASSAGES, ["r-b1-1", "r-b1-2", "r-b2-1", "r-b2-2"]).map(mapPassage), passagesServed: 2, errors: byId(ERROR_ITEMS, ["e-05", "e-06", "e-07", "e-08", "e-09", "e-10", "e-11", "e-12"]).map(mapError), errorsServed: 3 },
+  3: { tier: 3, passages: byId(READING_PASSAGES, ["r-c1-1", "r-c1-2"]).map(mapPassage), passagesServed: 2, errors: byId(ERROR_ITEMS, ["e-13", "e-14", "e-15", "e-16"]).map(mapError), errorsServed: 3 },
+};
+
+// ───────────────────────────── Writing tasks per tier ─────────────────────────────
+
+export interface WritingTask {
+  tier: 1 | 2 | 3;
+  promptEn: string;
+  promptVi: string;
+  hintsVi: string[];
+  minWords: number;
+  maxWords: number;
+  targetLabel: string;
+  /** Level range the writing sample can indicate (writing-implied level is mapped into it). */
+  levelRange: [number, number];
+}
+
+export const WRITING_TASKS: Record<1 | 2 | 3, WritingTask> = {
+  1: {
+    tier: 1,
+    promptEn: "Write 2–3 simple sentences about yourself: your name or job, where you live, and one thing you like.",
+    promptVi: "Viết 2–3 câu đơn giản về bản thân: tên hoặc công việc, nơi bạn sống, và một điều bạn thích.",
+    hintsVi: ["Tên tôi là… = My name is…", "Tôi sống ở… = I live in…", "Tôi thích… = I like…"],
+    minWords: 8,
+    maxWords: 60,
+    targetLabel: "2–3 sentences",
+    levelRange: [10, 50],
+  },
+  2: {
+    tier: 2,
+    promptEn: "Many cities want to ban cars from their centres. Would you support this in your city? Give one reason and one example (60–90 words).",
+    promptVi: "Nhiều thành phố muốn cấm ô tô vào trung tâm. Bạn có ủng hộ điều này ở thành phố của bạn không? Nêu một lý do và một ví dụ (60–90 từ).",
+    hintsVi: [],
+    minWords: 50,
+    maxWords: 130,
+    targetLabel: "60–90 words",
+    levelRange: [35, 85],
+  },
+  3: {
+    tier: 3,
+    promptEn: "“Remote work makes teams less innovative.” Argue for or against this claim, acknowledge the strongest counter-argument, and conclude (90–120 words).",
+    promptVi: "“Làm việc từ xa khiến đội nhóm kém sáng tạo hơn.” Hãy lập luận ủng hộ hoặc phản đối, thừa nhận phản biện mạnh nhất và kết luận (90–120 từ).",
+    hintsVi: [],
+    minWords: 80,
+    maxWords: 160,
+    targetLabel: "90–120 words",
+    levelRange: [60, 100],
+  },
+};
+
+// ───────────────────────────── Goals ─────────────────────────────
+
+export const GOAL_OPTIONS = [
+  { band: "A2_2", key: "goalA2" },
+  { band: "B1_2", key: "goalB1" },
+  { band: "B2_2", key: "goalB2" },
+  { band: "C1_1", key: "goalC1" },
+] as const;
+
+export const DAILY_MINUTES_OPTIONS = [15, 30, 45, 60] as const;

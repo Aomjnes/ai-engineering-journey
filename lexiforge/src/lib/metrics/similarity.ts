@@ -83,3 +83,84 @@ export function dictationAccuracy(expected: string, typed: string): number {
   }
   return Math.max(0, 1 - (prev[t.length] ?? 0) / e.length);
 }
+
+// ───────────────────────────── Word-level diff (dictation & speaking) ─────────────────────────────
+
+const NUMBER_WORDS: Record<string, string> = {
+  "0": "zero", "1": "one", "2": "two", "3": "three", "4": "four", "5": "five", "6": "six", "7": "seven", "8": "eight", "9": "nine", "10": "ten",
+  "11": "eleven", "12": "twelve", "15": "fifteen", "20": "twenty", "30": "thirty", "50": "fifty", "100": "hundred",
+};
+
+/** Lowercased word tokens with curly apostrophes normalized and small numbers spelled out (STT writes "2"). */
+export function diffTokens(text: string): string[] {
+  return tokenize(text).map((t) => NUMBER_WORDS[t] ?? t);
+}
+
+/** A typo of the same word: one edit, one adjacent swap, or ≤ 2 edits in words of 6+ letters. */
+export function isMisspelling(expected: string, typed: string): boolean {
+  const d = levenshtein(expected, typed);
+  if (d <= 1) return true;
+  if (expected.length >= 6 && d <= 2) return true;
+  if (expected.length === typed.length) {
+    const diff = [...expected].map((c, i) => (c === typed[i] ? -1 : i)).filter((i) => i >= 0);
+    if (diff.length === 2 && diff[1] === (diff[0] as number) + 1 && expected[diff[0] as number] === typed[diff[1] as number] && expected[diff[1] as number] === typed[diff[0] as number]) return true;
+  }
+  return false;
+}
+
+export type WordOp =
+  | { type: "ok"; expected: string; typed: string }
+  | { type: "misspelled"; expected: string; typed: string }
+  | { type: "wrong"; expected: string; typed: string }
+  | { type: "missing"; expected: string }
+  | { type: "extra"; typed: string };
+
+export interface WordDiff {
+  ops: WordOp[];
+  correct: number;
+  expectedCount: number;
+  /** correct / expected words (0–1). */
+  accuracy: number;
+  perfect: boolean;
+}
+
+/**
+ * Minimum-edit alignment of typed vs expected words (match 0, substitution/insertion/deletion 1).
+ * Substitutions within a small Levenshtein distance are "misspelled", otherwise "wrong".
+ */
+export function wordDiff(expected: string, typed: string): WordDiff {
+  const e = diffTokens(expected);
+  const t = diffTokens(typed);
+  const n = e.length;
+  const m = t.length;
+  const dp: number[][] = Array.from({ length: n + 1 }, (_, i) => Array.from({ length: m + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0)));
+  for (let i = 1; i <= n; i++) {
+    for (let j = 1; j <= m; j++) {
+      const sub = (dp[i - 1]?.[j - 1] ?? 0) + (e[i - 1] === t[j - 1] ? 0 : 1);
+      (dp[i] as number[])[j] = Math.min(sub, (dp[i - 1]?.[j] ?? 0) + 1, (dp[i]?.[j - 1] ?? 0) + 1);
+    }
+  }
+  const ops: WordOp[] = [];
+  let i = n;
+  let j = m;
+  while (i > 0 || j > 0) {
+    const cur = dp[i]?.[j] ?? 0;
+    if (i > 0 && j > 0 && cur === (dp[i - 1]?.[j - 1] ?? 0) + (e[i - 1] === t[j - 1] ? 0 : 1)) {
+      const ew = e[i - 1] as string;
+      const tw = t[j - 1] as string;
+      if (ew === tw) ops.push({ type: "ok", expected: ew, typed: tw });
+      else ops.push({ type: isMisspelling(ew, tw) ? "misspelled" : "wrong", expected: ew, typed: tw });
+      i--;
+      j--;
+    } else if (i > 0 && cur === (dp[i - 1]?.[j] ?? 0) + 1) {
+      ops.push({ type: "missing", expected: e[i - 1] as string });
+      i--;
+    } else {
+      ops.push({ type: "extra", typed: t[j - 1] as string });
+      j--;
+    }
+  }
+  ops.reverse();
+  const correct = ops.filter((o) => o.type === "ok").length;
+  return { ops, correct, expectedCount: n, accuracy: n === 0 ? 0 : correct / n, perfect: correct === n && m === n };
+}

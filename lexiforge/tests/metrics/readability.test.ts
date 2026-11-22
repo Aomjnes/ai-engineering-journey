@@ -10,13 +10,14 @@ describe("readability", () => {
   });
 
   it("maps difficulty and tiers deterministically", () => {
-    expect(difficultyFrom(4, 0.05)).toBe(0);
+    // raw complexity 0 → level 15 (A1.1 floor for any real text), 100 → 100; raw 50 → 69 (B2.1 floor)
+    expect(difficultyFrom(4, 0.05)).toBe(15);
     expect(difficultyFrom(16, 0.35)).toBe(100);
-    expect(difficultyFrom(10, 0.2)).toBeCloseTo(30 + 20, 10);
-    expect(tierFromDifficulty(24.99)).toBe("A2");
-    expect(tierFromDifficulty(25)).toBe("B1");
-    expect(tierFromDifficulty(50)).toBe("B2");
-    expect(tierFromDifficulty(75)).toBe("C1");
+    expect(difficultyFrom(10, 0.2)).toBeCloseTo(69, 10);
+    expect(tierFromDifficulty(52.99)).toBe("A2");
+    expect(tierFromDifficulty(53)).toBe("B1");
+    expect(tierFromDifficulty(69)).toBe("B2");
+    expect(tierFromDifficulty(83)).toBe("C1");
   });
 
   it("ranks a simple text below an academic one", () => {

@@ -65,9 +65,10 @@ export async function createProfileFromPlacement(streamId: string, r: PlacementR
     ieltsEstimate: r.ielts.band,
     ieltsLow: r.ielts.low,
     ieltsHigh: r.ielts.high,
-    gai: r.gai,
-    lri: r.lri,
-    cpr: r.readingAccuracy,
+    // No writing sample (stopped in Tier 0 or skipped): GAI/LRI start at 0 with evidenceWords = 0 (shown as "no evidence").
+    gai: r.gai ?? 0,
+    lri: r.lri ?? 0,
+    cpr: r.readingAccuracy ?? r.objectiveAccuracy,
     rss: 0,
     eri: 100,
     composite: r.composite,
@@ -234,4 +235,24 @@ export async function applyPromotionAudit(streamId: string, passed: boolean, tar
   }
   await snapshot(updated, passed ? "PROMOTION" : "PROMOTION_FAILED", null, now);
   return updated;
+}
+
+export const PRACTICE_ALPHA = 0.1;
+
+/**
+ * Self-practice evidence: nudges GAI/LRI/CPR with a small EWMA (α = 0.1) and adds evidence counts.
+ * Never changes the ability level, the sub-band or the qualifying-session streak (those move only through
+ * lesson sessions and promotion audits).
+ */
+export async function recordPracticeEvidence(streamId: string, e: { gai?: number | null; lri?: number | null; cpr?: number | null; words: number; items: number }, now: Date) {
+  const p = await getProfile(streamId);
+  if (!p) return null;
+  const gai = ewma(p.gai, e.gai ?? null, PRACTICE_ALPHA) ?? p.gai;
+  const lri = ewma(p.lri, e.lri ?? null, PRACTICE_ALPHA) ?? p.lri;
+  const cpr = ewma(p.cpr, e.cpr ?? null, PRACTICE_ALPHA) ?? p.cpr;
+  const composite = compositeScore({ gai, lri, cpr, rss: p.rssReviews > 0 ? p.rss : null, eri: p.eriSessions >= 2 ? p.eri : null }) ?? p.composite;
+  return prisma.proficiencyProfile.update({
+    where: { streamId },
+    data: { gai, lri, cpr, composite, evidenceWords: p.evidenceWords + e.words, evidenceItems: p.evidenceItems + e.items, lastActivityAt: now, decayedDays: 0 },
+  });
 }

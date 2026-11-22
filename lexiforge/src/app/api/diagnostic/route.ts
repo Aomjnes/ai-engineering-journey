@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { handle, parseBody } from "@/lib/http";
-import { answerPlacement, placementStatus, startPlacement, startPromotionAudit, submitPlacementWriting, submitPromotionAudit } from "@/lib/diagnostic/service";
+import { AnswerSchema, answerPlacement, placementStatus, SetupSchema, setupAndStartPlacement, skipPlacementWriting, startPromotionAudit, submitPlacementWriting, submitPromotionAudit } from "@/lib/diagnostic/service";
 import { getProfile } from "@/lib/profile/service";
+import { getGoal } from "@/lib/roadmap/service";
 import { requireStream } from "@/lib/auth/stream";
 
 export const dynamic = "force-dynamic";
@@ -10,15 +11,11 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 const BodySchema = z.discriminatedUnion("action", [
-  z.object({ action: z.literal("start"), kind: z.enum(["PLACEMENT", "PROMOTION"]) }),
-  z.object({
-    action: z.literal("answer"),
-    assessmentId: z.string().min(1),
-    itemId: z.string().min(1),
-    choices: z.array(z.number().int().min(0).max(3)).max(4).optional(),
-    choice: z.number().int().min(0).max(4).optional(),
-  }),
+  z.object({ action: z.literal("setup"), ...SetupSchema.shape }),
+  z.object({ action: z.literal("start"), kind: z.literal("PROMOTION") }),
+  z.object({ action: z.literal("answer"), assessmentId: z.string().min(1), unitId: z.string().min(1), answer: AnswerSchema }),
   z.object({ action: z.literal("write"), assessmentId: z.string().min(1), text: z.string().max(6000) }),
+  z.object({ action: z.literal("skipWriting"), assessmentId: z.string().min(1) }),
   z.object({
     action: z.literal("submitPromotion"),
     assessmentId: z.string().min(1),
@@ -30,8 +27,8 @@ const BodySchema = z.discriminatedUnion("action", [
 export async function GET(req: Request) {
   return handle(async () => {
     const stream = await requireStream(req);
-    const [profile, placement] = await Promise.all([getProfile(stream.id), placementStatus(stream.id)]);
-    return NextResponse.json({ calibrated: profile !== null, placement });
+    const [profile, placement, goal] = await Promise.all([getProfile(stream.id), placementStatus(stream.id), getGoal(stream.id)]);
+    return NextResponse.json({ calibrated: profile !== null, placement, goal: goal ? { targetSubBand: goal.targetSubBand, dailyMinutes: goal.dailyMinutes, startComfort: goal.startComfort } : null });
   });
 }
 
@@ -41,12 +38,16 @@ export async function POST(req: Request) {
     const body = await parseBody(req, BodySchema);
     const now = new Date();
     switch (body.action) {
+      case "setup":
+        return NextResponse.json(await setupAndStartPlacement(stream.id, body, now));
       case "start":
-        return NextResponse.json(body.kind === "PLACEMENT" ? await startPlacement(stream.id, now) : await startPromotionAudit(stream.id, now));
+        return NextResponse.json(await startPromotionAudit(stream.id, now));
       case "answer":
-        return NextResponse.json(await answerPlacement(stream.id, body.assessmentId, body));
+        return NextResponse.json(await answerPlacement(stream.id, body.assessmentId, body.unitId, body.answer, now));
       case "write":
         return NextResponse.json(await submitPlacementWriting(stream.id, body.assessmentId, body.text, now));
+      case "skipWriting":
+        return NextResponse.json(await skipPlacementWriting(stream.id, body.assessmentId, now));
       case "submitPromotion":
         return NextResponse.json(await submitPromotionAudit(stream.id, body.assessmentId, body.answers, body.writing, now));
     }

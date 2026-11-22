@@ -5,6 +5,7 @@ import { explainSelection } from "@/lib/explain/service";
 import { requireStream } from "@/lib/auth/stream";
 import { getProfile } from "@/lib/profile/service";
 import { bandLabel, type SubBand } from "@/lib/metrics/scoring";
+import { streamLocale } from "@/lib/i18n/server";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -15,9 +16,9 @@ export async function POST(req: Request) {
   return handle(async () => {
     const stream = await requireStream(req);
     const { selection, context } = await parseBody(req, Body);
-    const profile = await getProfile(stream.id);
+    const [profile, locale] = await Promise.all([getProfile(stream.id), streamLocale(stream.id)]);
     const level = profile ? bandLabel(profile.subBand as SubBand) : "B1.1";
-    const r = await explainSelection(selection, context || selection, level);
+    const r = await explainSelection(selection, context || selection, level, undefined, locale);
     return NextResponse.json(r.explanation, {
       headers: { "X-Explain-Cache": r.cached ? "HIT" : "MISS", "Server-Timing": `explain;dur=${r.ms}`, "Cache-Control": "no-store" },
     });

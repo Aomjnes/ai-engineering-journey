@@ -14,6 +14,9 @@ export interface ShellStatus {
   llm: string | null;
   activeLessonId: string | null;
   stream: { id: string; code: string; label: string };
+  /** null until the stream has saved a language (the device cookie is then adopted). */
+  uiLocale: "vi" | "en" | null;
+  beginner: boolean;
   serverTime: string;
 }
 

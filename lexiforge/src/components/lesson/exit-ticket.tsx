@@ -3,7 +3,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import { ArrowRight, Check, Lock } from "lucide-react";
-import { api, errorMessage } from "@/lib/client/api";
+import { api } from "@/lib/client/api";
+import { fmt, type Dict } from "@/lib/i18n";
 import { signed } from "@/lib/client/format";
 import { countWords } from "@/lib/metrics/text";
 import { cn } from "@/lib/utils";
@@ -21,16 +22,21 @@ interface Chunk {
   lockedIn: boolean;
 }
 
-type ResultRow = { chunkId: string; phrase: string; passed: boolean; reason: string | null };
+type ResultRow = { chunkId: string; phrase: string; passed: boolean; reason: string | null; reasonCode?: "COPIED" | "MISSING" | "MISUSED" | "FIX" | null; detail?: string | null };
 
-export function ExitTicketStage({ lessonId, chunks, onChange }: { lessonId: string; chunks: Chunk[]; onChange: () => Promise<void> }) {
-  const { pick } = usePrefs();
+function reasonText(t: Dict, r: ResultRow): string | null {
+  if (!r.reasonCode) return r.reason;
+  return fmt(t.exit[r.reasonCode], { p: r.phrase, d: r.detail ?? "" });
+}
+
+export function ExitTicketStage({ lessonId, chunks, onChange, minWords = 5 }: { lessonId: string; chunks: Chunk[]; onChange: () => Promise<void>; minWords?: number }) {
+  const { pick, t, err } = usePrefs();
   const [values, setValues] = useState<Record<string, string>>({});
   const [results, setResults] = useState<ResultRow[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const pending = chunks.filter((c) => !c.lockedIn);
-  const ready = pending.every((c) => countWords(values[c.id] ?? "") >= 5);
+  const ready = pending.every((c) => countWords(values[c.id] ?? "") >= minWords);
 
   async function submit() {
     if (busy || !ready) return;
@@ -41,7 +47,7 @@ export function ExitTicketStage({ lessonId, chunks, onChange }: { lessonId: stri
       setResults(r.results);
       await onChange();
     } catch (e) {
-      setError(errorMessage(e));
+      setError(err(e));
     } finally {
       setBusy(false);
     }
@@ -50,9 +56,9 @@ export function ExitTicketStage({ lessonId, chunks, onChange }: { lessonId: stri
   return (
     <div className="mx-auto max-w-2xl space-y-4">
       <div>
-        <p className="eyebrow">Stage 4 · Exit ticket</p>
-        <h2 className="mt-1 font-serif text-[26px] font-medium tracking-[-0.01em]">Lock today&apos;s chunks into memory.</h2>
-        <p className="mt-1 text-[13.5px] text-ink-2">One original sentence per chunk about your own life — not the article. Passed chunks enter your FSRS review deck.</p>
+        <p className="eyebrow">{t.exit.eyebrow}</p>
+        <h2 className="mt-1 font-serif text-[26px] font-medium tracking-[-0.01em]">{t.exit.title}</h2>
+        <p className="mt-1 text-[13.5px] text-ink-2">{t.exit.sub}</p>
       </div>
       <ol className="space-y-2.5">
         {chunks.map((c, i) => {
@@ -63,12 +69,12 @@ export function ExitTicketStage({ lessonId, chunks, onChange }: { lessonId: stri
                 <span className="num text-[12px] text-ink-3">{String(i + 1).padStart(2, "0")}</span>
                 <label htmlFor={`exit-${c.id}`} className="font-medium text-ink">{c.phrase}</label>
                 <span className="truncate text-[13px] text-ink-3">— {pick(c.meaningEn, c.meaningVi)}</span>
-                {c.lockedIn && <span className="ml-auto flex shrink-0 items-center gap-1 text-[12px] font-medium text-mastered-ink"><Lock className="size-3" aria-hidden />Locked in</span>}
+                {c.lockedIn && <span className="ml-auto flex shrink-0 items-center gap-1 text-[12px] font-medium text-mastered-ink"><Lock className="size-3" aria-hidden />{t.exit.lockedIn}</span>}
               </div>
               {!c.lockedIn && (
                 <>
                   <Input id={`exit-${c.id}`} className="mt-2.5 font-serif text-[16px]" value={values[c.id] ?? ""} onChange={(e) => setValues((v) => ({ ...v, [c.id]: e.target.value }))} onPaste={(e) => e.preventDefault()} onKeyDown={submitOnModEnter(() => void submit())} disabled={busy} autoComplete="off" />
-                  {res && !res.passed && <p className="mt-1.5 text-[12.5px] text-critical-ink">{res.reason}</p>}
+                  {res && !res.passed && <p className="mt-1.5 text-[12.5px] text-critical-ink">{reasonText(t, res)}</p>}
                 </>
               )}
             </li>
@@ -79,7 +85,7 @@ export function ExitTicketStage({ lessonId, chunks, onChange }: { lessonId: stri
       {error && <p className="rounded-md bg-critical-wash p-3 text-[13px] text-critical-ink">{error}</p>}
       <div className="flex items-center justify-end gap-3">
         <ModEnterHint />
-        <Button onClick={() => void submit()} disabled={busy || !ready}>{busy ? "Checking…" : `Submit ${pending.length} sentence${pending.length === 1 ? "" : "s"}`}</Button>
+        <Button onClick={() => void submit()} disabled={busy || !ready}>{busy ? t.common.checking : fmt(t.exit.submit, { n: pending.length })}</Button>
       </div>
     </div>
   );
@@ -106,46 +112,48 @@ function Delta({ label, value }: { label: string; value: number | null | undefin
 
 /** Final "Today's Acquired Arsenal" receipt. */
 export function ArsenalReceipt({ receipt }: { receipt: Receipt }) {
+  const { t, lang } = usePrefs();
+  const locale = lang === "vi" ? "vi-VN" : "en-GB";
   return (
     <div className="mx-auto max-w-2xl">
       <div className="rounded-lg border border-line bg-card">
         <div className="border-b border-dashed border-line-strong p-6 text-center">
-          <p className="eyebrow">Lesson complete</p>
-          <h2 className="mt-1 font-serif text-[28px] font-medium tracking-[-0.01em]">Today&apos;s Acquired Arsenal</h2>
-          <p className="num mt-1 text-[12.5px] text-ink-3">{new Date().toLocaleString()}</p>
+          <p className="eyebrow">{t.exit.complete}</p>
+          <h2 className="mt-1 font-serif text-[28px] font-medium tracking-[-0.01em]">{t.exit.arsenal}</h2>
+          <p className="num mt-1 text-[12.5px] text-ink-3">{new Date().toLocaleString(locale)}</p>
         </div>
         <div className="p-6">
-          <p className="eyebrow mb-2">Locked into FSRS</p>
+          <p className="eyebrow mb-2">{t.exit.lockedSrs}</p>
           <ul className="divide-y divide-line">
             {receipt.chunks.map((c) => (
               <li key={c.phrase} className="flex items-baseline gap-3 py-2">
                 <Check className="size-3.5 shrink-0 translate-y-0.5 text-mastered" aria-hidden />
                 <span className="font-medium">{c.phrase}</span>
                 <span className="truncate text-[13px] text-ink-3">{c.meaningVi}</span>
-                <span className="num ml-auto shrink-0 text-[12px] text-ink-3">{c.nextReview ? `review ${new Date(c.nextReview).toLocaleDateString(undefined, { month: "short", day: "numeric" })}` : ""}</span>
+                <span className="num ml-auto shrink-0 text-[12px] text-ink-3">{c.nextReview ? fmt(t.exit.review, { d: new Date(c.nextReview).toLocaleDateString(locale, { month: "short", day: "numeric" }) }) : ""}</span>
               </li>
             ))}
           </ul>
           <div className="mt-6 grid gap-6 border-t border-dashed border-line-strong pt-5 sm:grid-cols-2">
             <div>
-              <p className="eyebrow mb-1">Profile change (session)</p>
+              <p className="eyebrow mb-1">{t.exit.delta}</p>
               <Delta label="GAI" value={receipt.profileDelta?.gai} />
               <Delta label="LRI" value={receipt.profileDelta?.lri} />
-              <Delta label="Composite" value={receipt.profileDelta?.composite} />
-              <Delta label="Ability level" value={receipt.profileDelta?.level} />
+              <Delta label={t.exit.composite} value={receipt.profileDelta?.composite} />
+              <Delta label={t.exit.level} value={receipt.profileDelta?.level} />
             </div>
             <div>
-              <p className="eyebrow mb-1">Draft repair</p>
-              <div className="num flex justify-between py-1.5 text-[13px]"><span className="text-ink-2">First draft GAI → final</span><span>{receipt.firstDraft.gai?.toFixed(1) ?? "—"} → {receipt.finalDraft?.gai?.toFixed(1) ?? "—"}</span></div>
-              <div className="num flex justify-between py-1.5 text-[13px]"><span className="text-ink-2">Errors logged</span><span>{receipt.errorsLogged}</span></div>
-              <div className="num flex justify-between py-1.5 text-[13px]"><span className="text-ink-2">Patterns repaired in rewrite</span><span>{receipt.errorsRepaired}</span></div>
-              <div className="num flex justify-between py-1.5 text-[13px]"><span className="text-ink-2">Rewrites needed</span><span>{receipt.rewrites}</span></div>
+              <p className="eyebrow mb-1">{t.exit.repair}</p>
+              <div className="num flex justify-between py-1.5 text-[13px]"><span className="text-ink-2">{t.exit.gaiChange}</span><span>{receipt.firstDraft.gai?.toFixed(1) ?? "—"} → {receipt.finalDraft?.gai?.toFixed(1) ?? "—"}</span></div>
+              <div className="num flex justify-between py-1.5 text-[13px]"><span className="text-ink-2">{t.exit.logged}</span><span>{receipt.errorsLogged}</span></div>
+              <div className="num flex justify-between py-1.5 text-[13px]"><span className="text-ink-2">{t.exit.repaired}</span><span>{receipt.errorsRepaired}</span></div>
+              <div className="num flex justify-between py-1.5 text-[13px]"><span className="text-ink-2">{t.exit.rewrites}</span><span>{receipt.rewrites}</span></div>
             </div>
           </div>
         </div>
         <div className="flex flex-wrap justify-end gap-2 border-t border-line p-4">
-          <Link href="/graveyard" className={buttonVariants({ variant: "outline" })}>Review queue</Link>
-          <Link href="/" className={buttonVariants({ variant: "primary" })}>Back to Today <ArrowRight aria-hidden /></Link>
+          <Link href="/graveyard" className={buttonVariants({ variant: "outline" })}>{t.exit.reviewQueue}</Link>
+          <Link href="/" className={buttonVariants({ variant: "primary" })}>{t.exit.backToday} <ArrowRight aria-hidden /></Link>
         </div>
       </div>
     </div>

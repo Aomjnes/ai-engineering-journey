@@ -161,10 +161,10 @@ export function excerptByWords(text: string, minWords: number): string {
 }
 
 /** Deterministically picks a shadowing sentence (8–28 words) from text using a string seed. */
-export function pickShadowSentence(text: string, seed: string): SentenceSpan | null {
+export function pickShadowSentence(text: string, seed: string, minWords = 8): SentenceSpan | null {
   const candidates = splitSentences(text).filter((s) => {
     const n = countWords(s.text);
-    return n >= 8 && n <= 28;
+    return n >= minWords && n <= 28;
   });
   if (candidates.length === 0) return splitSentences(text)[0] ?? null;
   let h = 0;

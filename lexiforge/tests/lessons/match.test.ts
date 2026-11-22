@@ -11,12 +11,15 @@ describe("i+1 matching", () => {
     expect(rankArticles([art("x", 50)], 40, new Set(["x"]))).toHaveLength(0);
   });
 
-  it("serves graded bridges at ≤ B1.1, authentic text at B2+", () => {
-    expect(deliveryMode(20, 30)).toBe("GRADED_BRIDGE"); // A2.2
-    expect(deliveryMode(30, 40)).toBe("GRADED_BRIDGE"); // B1.1
-    expect(deliveryMode(40, 55)).toBe("AUTHENTIC"); // B1.2, within T+12
-    expect(deliveryMode(40, 70)).toBe("GRADED_BRIDGE"); // B1.2, too far above
-    expect(deliveryMode(55, 95)).toBe("AUTHENTIC"); // B2+
+  it("serves micro stories to Pre-A1/A1, graded bridges to A2–B1.1, authentic text at B2+", () => {
+    expect(deliveryMode(0, 60)).toBe("MICRO_STORY"); // Pre-A1
+    expect(deliveryMode(20, 60)).toBe("MICRO_STORY"); // A1.1
+    expect(deliveryMode(33.9, 60)).toBe("MICRO_STORY"); // A1.2
+    expect(deliveryMode(34, 45)).toBe("GRADED_BRIDGE"); // A2.1
+    expect(deliveryMode(55, 65)).toBe("GRADED_BRIDGE"); // B1.1
+    expect(deliveryMode(62, 80)).toBe("AUTHENTIC"); // B1.2, within T+12 (84)
+    expect(deliveryMode(62, 90)).toBe("GRADED_BRIDGE"); // B1.2, too far above
+    expect(deliveryMode(70, 95)).toBe("AUTHENTIC"); // B2+
   });
 
   it("accepts a bridge only when its measured difficulty is within T + 8", () => {

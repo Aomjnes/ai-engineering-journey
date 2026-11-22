@@ -3,10 +3,10 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, BookOpenText, ChevronsLeft, ChevronsRight, Keyboard, Moon, Settings, Skull, Sun, Sunrise, X } from "lucide-react";
+import { BarChart3, ChevronsLeft, ChevronsRight, Dumbbell, Keyboard, Map as MapIcon, Moon, Settings, Skull, Sun, Sunrise, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { timeAgo } from "@/lib/client/format";
-import { Segmented } from "@/components/ui/segmented";
+import { fmt, timeAgoIn, type Dict } from "@/lib/i18n";
+import { LangSwitch } from "./lang-switch";
 import { Kbd } from "@/components/ui/kbd";
 import { usePrefs } from "./prefs";
 import { useShell } from "./shell-data";
@@ -14,18 +14,20 @@ import { ProficiencyPill } from "./proficiency-pill";
 import { StreamPill } from "./stream-pill";
 import { readStreamValue, writeStreamValue } from "@/lib/client/storage";
 
-function useNav(activeLessonId: string | null) {
+function navItems(t: Dict) {
   return [
-    { href: "/", label: "Today", icon: Sunrise, match: (p: string) => p === "/" },
-    { href: activeLessonId ? `/lesson/${activeLessonId}` : "/workspace", label: "Workspace", icon: BookOpenText, match: (p: string) => p.startsWith("/lesson") || p.startsWith("/workspace") },
-    { href: "/graveyard", label: "Error Graveyard", short: "Graveyard", icon: Skull, match: (p: string) => p.startsWith("/graveyard") },
-    { href: "/metrics", label: "Metrics", icon: BarChart3, match: (p: string) => p.startsWith("/metrics") || p.startsWith("/promotion") },
+    { key: "today", href: "/", label: t.nav.today, short: t.nav.today, icon: Sunrise, match: (p: string) => p === "/" || p.startsWith("/lesson") || p.startsWith("/workspace") },
+    { key: "roadmap", href: "/roadmap", label: t.nav.roadmap, short: t.nav.roadmap, icon: MapIcon, match: (p: string) => p.startsWith("/roadmap") },
+    { key: "practice", href: "/practice", label: t.nav.practice, short: t.nav.practice, icon: Dumbbell, match: (p: string) => p.startsWith("/practice") },
+    { key: "graveyard", href: "/graveyard", label: t.nav.graveyard, short: t.nav.graveyardShort, icon: Skull, match: (p: string) => p.startsWith("/graveyard") },
+    { key: "metrics", href: "/metrics", label: t.nav.metrics, short: t.nav.metrics, icon: BarChart3, match: (p: string) => p.startsWith("/metrics") || p.startsWith("/promotion") },
   ];
 }
 
 
 function SyncDot() {
   const { status, syncing, sync, syncError } = useShell();
+  const { t } = usePrefs();
   const [note, setNote] = useState<string | null>(null);
   const [, tick] = useState(0);
   useEffect(() => {
@@ -35,19 +37,19 @@ function SyncDot() {
   const last = status?.lastSyncedAt ?? null;
   const stale = !last || Date.now() - new Date(last).getTime() > 26 * 3_600_000;
   const color = syncing ? "bg-accent pulse-dot" : syncError || (status?.failingFeeds ?? 0) > 0 ? "bg-moderate" : stale ? "bg-ink-3" : "bg-mastered";
-  const label = syncing ? "Syncing live sources…" : last ? `Synced ${timeAgo(last)}` : "Never synced";
+  const label = syncing ? t.shell.syncing : last ? fmt(t.shell.synced, { ago: timeAgoIn(t, last) }) : t.shell.neverSynced;
   return (
     <span className="relative">
       <button
         type="button"
         onClick={async () => {
           const r = await sync();
-          setNote(r ? `${r.stored} new article${r.stored === 1 ? "" : "s"}${r.failed.length ? ` · ${r.failed.length} source(s) unreachable` : ""}` : null);
+          setNote(r ? `${fmt(t.shell.syncResult, { n: r.stored })}${r.failed.length ? ` · ${fmt(t.shell.syncUnreachable, { n: r.failed.length })}` : ""}` : null);
           setTimeout(() => setNote(null), 6000);
         }}
         disabled={syncing}
-        title={`${label}${(status?.failingFeeds ?? 0) > 0 ? ` · ${status?.failingFeeds} failing source(s)` : ""} — click to sync now`}
-        aria-label={`${label}. Sync live content now.`}
+        title={`${label}${(status?.failingFeeds ?? 0) > 0 ? ` · ${fmt(t.shell.failingSources, { n: status?.failingFeeds ?? 0 })}` : ""} — ${t.shell.syncNow}`}
+        aria-label={`${label}. ${t.shell.syncNow}`}
         className="flex h-8 items-center gap-2 rounded-full px-2.5 text-[12.5px] text-ink-2 hover:bg-surface hover:text-ink"
       >
         <span className={cn("size-2 rounded-full", color)} aria-hidden />
@@ -63,20 +65,21 @@ function SyncDot() {
 }
 
 function ShortcutLegend({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { t } = usePrefs();
   if (!open) return null;
   const rows: Array<[React.ReactNode, string]> = [
-    [<Kbd key="s">Space</Kbd>, "Play / pause article audio (when not typing)"],
-    [<span key="n" className="flex gap-1"><Kbd>1</Kbd><Kbd>2</Kbd><Kbd>3</Kbd><Kbd>4</Kbd></span>, "Switch explainer mode (inspector open)"],
-    [<span key="e" className="flex gap-1"><Kbd>⌘/Ctrl</Kbd><Kbd>Enter</Kbd></span>, "Submit answer · re-verify draft"],
-    [<Kbd key="esc">Esc</Kbd>, "Close inspector, sheet or dialog"],
-    [<Kbd key="q">?</Kbd>, "Show this legend"],
+    [<Kbd key="s">Space</Kbd>, t.shell.scSpace],
+    [<span key="n" className="flex gap-1"><Kbd>1</Kbd><Kbd>2</Kbd><Kbd>3</Kbd><Kbd>4</Kbd></span>, t.shell.scModes],
+    [<span key="e" className="flex gap-1"><Kbd>⌘/Ctrl</Kbd><Kbd>Enter</Kbd></span>, t.shell.scSubmit],
+    [<Kbd key="esc">Esc</Kbd>, t.shell.scEsc],
+    [<Kbd key="q">?</Kbd>, t.shell.scLegend],
   ];
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-ink/30 p-4" onClick={onClose} role="presentation">
-      <div role="dialog" aria-modal="true" aria-label="Keyboard shortcuts" className="animate-in w-full max-w-md rounded-lg border border-line bg-card p-5 shadow-lift" onClick={(e) => e.stopPropagation()}>
+      <div role="dialog" aria-modal="true" aria-label={t.shell.shortcutsTitle} className="animate-in w-full max-w-md rounded-lg border border-line bg-card p-5 shadow-lift" onClick={(e) => e.stopPropagation()}>
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-[15px] font-semibold">Keyboard shortcuts</h2>
-          <button type="button" onClick={onClose} aria-label="Close" className="rounded p-1 text-ink-3 hover:bg-surface hover:text-ink"><X className="size-4" /></button>
+          <h2 className="text-[15px] font-semibold">{t.shell.shortcutsTitle}</h2>
+          <button type="button" onClick={onClose} aria-label={t.common.close} className="rounded p-1 text-ink-3 hover:bg-surface hover:text-ink"><X className="size-4" /></button>
         </div>
         <ul className="space-y-2.5">
           {rows.map(([k, d], i) => (
@@ -100,10 +103,10 @@ export function isTypingTarget(t: EventTarget | null): boolean {
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { status } = useShell();
-  const { lang, setLang, theme, setTheme } = usePrefs();
+  const { theme, setTheme, t } = usePrefs();
   const [collapsed, setCollapsed] = useState(false);
   const [legend, setLegend] = useState(false);
-  const nav = useNav(status?.activeLessonId ?? null);
+  const nav = navItems(t);
 
   const streamId = status?.stream.id ?? null;
   useEffect(() => setCollapsed(readStreamValue(streamId, "sidebar") === "collapsed"), [streamId]);
@@ -139,13 +142,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <span className="flex size-7 items-center justify-center rounded-md bg-ink font-serif text-[15px] font-semibold text-canvas" aria-hidden>L</span>
           {!collapsed && <span className="text-[15px] font-semibold tracking-[-0.01em]">LexiForge</span>}
         </div>
-        <nav aria-label="Primary" className="mt-2 flex flex-1 flex-col gap-0.5 px-2">
+        <nav aria-label={t.nav.primary} className="mt-2 flex flex-1 flex-col gap-0.5 px-2">
           {nav.map((n) => {
             const active = n.match(pathname);
             const Icon = n.icon;
             return (
               <Link
-                key={n.label}
+                key={n.key}
                 href={n.href}
                 aria-current={active ? "page" : undefined}
                 title={collapsed ? n.label : undefined}
@@ -157,8 +160,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               >
                 <Icon className="size-[17px] shrink-0" aria-hidden />
                 {!collapsed && <span className="flex-1">{n.label}</span>}
-                {n.label === "Error Graveyard" && due > 0 && (
-                  <span className={cn("num rounded-full bg-critical px-1.5 text-[10.5px] font-semibold leading-[18px] text-white", collapsed && "absolute right-1.5 top-1")} aria-label={`${due} reviews due`}>
+                {n.key === "graveyard" && due > 0 && (
+                  <span className={cn("num rounded-full bg-critical px-1.5 text-[10.5px] font-semibold leading-[18px] text-white", collapsed && "absolute right-1.5 top-1")} aria-label={fmt(t.nav.reviewsDue, { n: due })}>
                     {due > 99 ? "99+" : due}
                   </span>
                 )}
@@ -167,22 +170,22 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           })}
         </nav>
         <div className={cn("flex flex-col gap-0.5 border-t border-line p-2", collapsed && "items-center")}>
-          <Link href="/settings" title="Settings" className={cn("flex h-8 items-center gap-2.5 rounded-md px-2.5 text-[13px] text-ink-3 hover:bg-surface hover:text-ink", collapsed && "w-9 justify-center px-0")}>
+          <Link href="/settings" title={t.nav.settings} className={cn("flex h-8 items-center gap-2.5 rounded-md px-2.5 text-[13px] text-ink-3 hover:bg-surface hover:text-ink", collapsed && "w-9 justify-center px-0")}>
             <Settings className="size-4" aria-hidden />
-            {!collapsed && "Settings"}
+            {!collapsed && t.nav.settings}
           </Link>
-          <button type="button" onClick={() => setLegend(true)} title="Keyboard shortcuts (?)" className={cn("flex h-8 items-center gap-2.5 rounded-md px-2.5 text-[13px] text-ink-3 hover:bg-surface hover:text-ink", collapsed && "w-9 justify-center px-0")}>
+          <button type="button" onClick={() => setLegend(true)} title={`${t.shell.shortcutsTitle} (?)`} className={cn("flex h-8 items-center gap-2.5 rounded-md px-2.5 text-[13px] text-ink-3 hover:bg-surface hover:text-ink", collapsed && "w-9 justify-center px-0")}>
             <Keyboard className="size-4" aria-hidden />
             {!collapsed && (
               <>
-                <span className="flex-1 text-left">Shortcuts</span>
+                <span className="flex-1 text-left">{t.nav.shortcuts}</span>
                 <Kbd>?</Kbd>
               </>
             )}
           </button>
-          <button type="button" onClick={toggleCollapsed} aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"} className={cn("flex h-8 items-center gap-2.5 rounded-md px-2.5 text-[13px] text-ink-3 hover:bg-surface hover:text-ink", collapsed && "w-9 justify-center px-0")}>
+          <button type="button" onClick={toggleCollapsed} aria-label={collapsed ? t.nav.expandSidebar : t.nav.collapseSidebar} className={cn("flex h-8 items-center gap-2.5 rounded-md px-2.5 text-[13px] text-ink-3 hover:bg-surface hover:text-ink", collapsed && "w-9 justify-center px-0")}>
             {collapsed ? <ChevronsRight className="size-4" aria-hidden /> : <ChevronsLeft className="size-4" aria-hidden />}
-            {!collapsed && "Collapse"}
+            {!collapsed && t.nav.collapse}
           </button>
         </div>
       </aside>
@@ -194,18 +197,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <StreamPill />
           <ProficiencyPill className="hidden sm:inline-flex" subBand={status?.subBand ?? null} ielts={status?.ielts ?? null} />
           <div className="ml-auto flex items-center gap-1.5">
-            <Segmented
-              label="Explanation language"
-              size="sm"
-              value={lang}
-              onChange={setLang}
-              options={[
-                { value: "en", label: "EN", hint: "Explanations in English" },
-                { value: "vi", label: "VI", hint: "Giải thích bằng tiếng Việt" },
-              ]}
-            />
+            <LangSwitch />
             <SyncDot />
-            <button type="button" onClick={() => setTheme(theme === "dark" ? "light" : "dark")} aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"} className="flex size-8 items-center justify-center rounded-full text-ink-2 hover:bg-surface hover:text-ink">
+            <button type="button" onClick={() => setTheme(theme === "dark" ? "light" : "dark")} aria-label={theme === "dark" ? t.shell.toLight : t.shell.toDark} className="flex size-8 items-center justify-center rounded-full text-ink-2 hover:bg-surface hover:text-ink">
               {theme === "dark" ? <Sun className="size-4" aria-hidden /> : <Moon className="size-4" aria-hidden />}
             </button>
           </div>
@@ -214,15 +208,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </div>
 
       {/* Mobile bottom tab bar */}
-      <nav aria-label="Primary" className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-4 border-t border-line bg-canvas/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
+      <nav aria-label={t.nav.primary} className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-line bg-canvas/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
         {nav.map((n) => {
           const active = n.match(pathname);
           const Icon = n.icon;
           return (
-            <Link key={n.label} href={n.href} aria-current={active ? "page" : undefined} className={cn("relative flex h-16 flex-col items-center justify-center gap-1 text-[11px] font-medium", active ? "text-ink" : "text-ink-3")}>
+            <Link key={n.key} href={n.href} aria-current={active ? "page" : undefined} className={cn("relative flex h-16 flex-col items-center justify-center gap-1 text-[11px] font-medium", active ? "text-ink" : "text-ink-3")}>
               <Icon className="size-5" aria-hidden />
-              {n.short ?? n.label}
-              {n.label === "Error Graveyard" && due > 0 && <span className="num absolute right-[calc(50%-22px)] top-2 rounded-full bg-critical px-1.5 text-[10px] font-semibold leading-4 text-white">{due > 99 ? "99+" : due}</span>}
+              <span className="max-w-full truncate px-0.5">{n.short}</span>
+              {n.key === "graveyard" && due > 0 && <span className="num absolute right-[calc(50%-22px)] top-2 rounded-full bg-critical px-1.5 text-[10px] font-semibold leading-4 text-white">{due > 99 ? "99+" : due}</span>}
             </Link>
           );
         })}

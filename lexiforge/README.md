@@ -80,13 +80,21 @@ npm run build
 
 ## Pages
 
+The whole interface is in Vietnamese by default (VI/EN switch in the top strip, on `/access` and `/onboarding`).
+Navigation: **Hôm nay · Lộ trình · Tự luyện · Kho lỗi & Ôn tập · Chỉ số** (settings in the sidebar footer).
+
 - `/access` — enter a private stream code (the only public page)
-- `/onboarding` — distraction-free 3-step calibration audit → Diagnostic Dossier
-- `/` **Today** — accountability gate, telemetry + promotion-lock checklist, i+1-matched live briefings
-- `/lesson/[id]` (**Workspace**, `/workspace` resumes the active one) — stepper, 62/38 reading + 4-mode inspector,
-  audio/shadowing pill, comprehension, production with the Error-Repair Gate, exit ticket and Arsenal receipt
-- `/graveyard` — Active SRS queue, recurring error patterns with 3-sentence repair drills, Error Detox
-- `/metrics` — radar with next-band ring, 30-day trajectory, errors/100 words, heatmap, evidence ledger
-- `/promotion` — zero-hint Band Promotion Audit (only when unlocked) · `/settings` — configuration status
+- `/onboarding` — Step 0 (comfort, goal, daily minutes) → adaptive staircase Tier 0–3 with "Tôi không biết / Bỏ qua"
+  on every item, early exit for true beginners, optional writing → Vietnamese baseline report → roadmap
+- `/` **Hôm nay** — accountability gate, "Lộ trình hiện tại" widget, level + promotion-lock checklist, i+1 live lessons
+- `/roadmap` **Lộ trình** — progress bar, honest ETA, next-step CTA, milestone timeline (outcomes, skill checklist,
+  GAI/LRI/RSS/Detox/Band-audit unlock bars, quick links), editable goal and daily minutes
+- `/practice` **Tự luyện** — dictation, speaking + IPA, sentence builder VI→EN, roleplay with a strict coach,
+  foundation core decks
+- `/lesson/[id]` (`/workspace` resumes the active one) — micro story (Pre-A1–A1.2) / bridge / authentic text,
+  4-mode inspector, audio pill, comprehension, production with the Error-Repair Gate, exit ticket and receipt
+- `/graveyard` **Kho lỗi & Ôn tập** — SRS queue, recurring mistakes with repair drills, Error Detox
+- `/metrics` **Chỉ số** — plain-language explanation of every metric, radar, trajectory, errors/100 words, heatmap, ledger
+- `/promotion` — zero-hint Band Promotion Audit (only when unlocked) · `/settings` — language, theme, stream, status
 
 Keyboard: `Space` play/pause audio · `1–4` explainer modes · `⌘/Ctrl+Enter` submit · `Esc` close · `?` legend.

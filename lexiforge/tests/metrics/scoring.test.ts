@@ -218,36 +218,44 @@ describe("composite, bands, IELTS", () => {
     expect(compositeScore({ gai: null, lri: null, cpr: null, rss: null, eri: null })).toBeNull();
   });
 
-  it("maps level to sub-bands at exact boundaries", () => {
-    expect(bandFromLevel(0)).toBe("A2_1");
-    expect(bandFromLevel(12.49)).toBe("A2_1");
-    expect(bandFromLevel(12.5)).toBe("A2_2");
-    expect(bandFromLevel(37.5)).toBe("B1_2");
-    expect(bandFromLevel(87.5)).toBe("C1_2");
-    expect(bandFromLevel(100)).toBe("C1_2");
-    expect(bandFromLevel(-5)).toBe("A2_1");
+  it("maps level to the 11 sub-bands at exact boundaries (Pre-A1 → C1.2)", () => {
+    const cases: Array<[number, string]> = [
+      [-5, "PRE_A1"], [0, "PRE_A1"], [14.99, "PRE_A1"], [15, "A1_1"], [24.99, "A1_1"], [25, "A1_2"], [33.99, "A1_2"], [34, "A2_1"],
+      [44, "A2_2"], [53, "B1_1"], [61, "B1_2"], [68.99, "B1_2"], [69, "B2_1"], [76, "B2_2"], [83, "C1_1"], [90, "C1_2"], [100, "C1_2"],
+    ];
+    for (const [l, b] of cases) expect(bandFromLevel(l)).toBe(b);
   });
 
-  it("maps IELTS piecewise-linearly in 0.5 steps within 4.0–8.5", () => {
-    expect(ieltsFromLevel(0)).toBe(4);
-    expect(ieltsFromLevel(50)).toBe(5.5);
-    expect(ieltsFromLevel(62.5)).toBe(6.5); // 6.25 → 6.5
-    expect(ieltsFromLevel(75)).toBe(7);
+  it("maps IELTS stepwise per sub-band (Pre-A1 < 3.0 … C1.2 8.0–8.5)", () => {
+    expect(ieltsFromLevel(5)).toBeLessThan(3);
+    expect(ieltsFromLevel(20)).toBe(3);
+    expect(ieltsFromLevel(30)).toBe(3.5);
+    expect(ieltsFromLevel(40)).toBe(4);
+    expect(ieltsFromLevel(50)).toBe(4.5);
+    expect(ieltsFromLevel(55)).toBe(5);
+    expect(ieltsFromLevel(65)).toBe(5.5);
+    expect(ieltsFromLevel(70)).toBe(6);
+    expect(ieltsFromLevel(80)).toBe(6.5);
+    expect(ieltsFromLevel(84)).toBe(7);
+    expect(ieltsFromLevel(88)).toBe(7.5);
+    expect(ieltsFromLevel(91)).toBe(8);
     expect(ieltsFromLevel(100)).toBe(8.5);
+    let prev = 0;
     for (let l = 0; l <= 100; l += 0.5) {
       const v = ieltsFromLevel(l);
       expect(v * 2).toBe(Math.round(v * 2));
-      expect(v).toBeGreaterThanOrEqual(4);
+      expect(v).toBeGreaterThanOrEqual(prev); // monotone
       expect(v).toBeLessThanOrEqual(8.5);
+      prev = v;
     }
   });
 
-  it("confidence interval narrows with evidence", () => {
+  it("confidence interval narrows with evidence and never drops below the floor", () => {
     const thin = ieltsEstimate(50, 100, 4);
     const thick = ieltsEstimate(50, 3000, 60);
     expect(thin.halfWidth).toBeGreaterThan(thick.halfWidth);
     expect(thick.halfWidth).toBe(0.5);
-    expect(thin.low).toBeGreaterThanOrEqual(4);
+    expect(ieltsEstimate(0, 0, 0).low).toBeGreaterThanOrEqual(2.5);
   });
 });
 
@@ -282,9 +290,10 @@ describe("difficulty-adjusted EWMA", () => {
 
 describe("promotion lock, decay, repair gate", () => {
   it("a session qualifies only at threshold, at-level difficulty, and first-try gate pass", () => {
-    expect(sessionQualifies("B1_1", 66, 25, true)).toBe(true);
-    expect(sessionQualifies("B1_1", 65.9, 25, true)).toBe(false);
-    expect(sessionQualifies("B1_1", 90, 24, true)).toBe(false); // too-easy material
+    expect(sessionQualifies("B1_1", 66, 53, true)).toBe(true);
+    expect(sessionQualifies("B1_1", 65.9, 53, true)).toBe(false);
+    expect(sessionQualifies("B1_1", 90, 52, true)).toBe(false); // too-easy material
+    expect(sessionQualifies("PRE_A1", 54, 0, true)).toBe(true);
     expect(sessionQualifies("B1_1", 90, 30, false)).toBe(false);
     expect(nextConsecutive(4, true)).toBe(5);
     expect(nextConsecutive(4, false)).toBe(0); // one-off spikes cannot accumulate
@@ -321,9 +330,11 @@ describe("promotion lock, decay, repair gate", () => {
   });
 
   it("demotes only below lower bound minus half a band", () => {
-    expect(demotionCheck("B2_1", 44)).toBe("B2_1"); // 50 − 6.25 = 43.75
-    expect(demotionCheck("B2_1", 43.7)).toBe("B1_2");
-    expect(demotionCheck("A2_1", 0)).toBe("A2_1");
+    expect(demotionCheck("B2_1", 65)).toBe("B2_1"); // 69 − width(B1.2)/2 = 69 − 4 = 65
+    expect(demotionCheck("B2_1", 64.9)).toBe("B1_2");
+    expect(demotionCheck("A1_1", 10.5)).toBe("A1_1"); // 15 − 15/2 = 7.5
+    expect(demotionCheck("A1_1", 7.4)).toBe("PRE_A1");
+    expect(demotionCheck("PRE_A1", 0)).toBe("PRE_A1");
   });
 
   it("repair gate blocks on any critical or ≥ 2 moderate", () => {

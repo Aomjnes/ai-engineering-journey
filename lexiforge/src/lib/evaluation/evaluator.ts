@@ -19,8 +19,30 @@ export interface WritingTask {
   /** How many chunks must be used correctly (defaults to all listed). Production lessons require 3. */
   chunkRequirement?: number;
   /** "production" | "rewrite" | "diagnostic" | "exit" — changes only the instructions, never the math. */
-  mode: "production" | "rewrite" | "diagnostic" | "exit" | "detox";
+  mode: "production" | "rewrite" | "diagnostic" | "exit" | "detox" | "practice";
   focusSubtype?: string;
+  /** Who reads the feedback. Beginners get calm, concrete, jargon-free Vietnamese, foundational fixes first. */
+  audience?: Audience;
+}
+
+export interface Audience {
+  locale: "vi" | "en";
+  beginner: boolean;
+}
+
+/** Extra instructions shaping only the explanation text (never the error detection itself). */
+export function audienceInstructions(a: Audience | undefined): string {
+  if (!a) return "";
+  const lines = ["\nFEEDBACK AUDIENCE:"];
+  if (a.beginner) {
+    lines.push(
+      "- The learner is an absolute beginner (Pre-A1/A1). Still report EVERY error with the same strictness.",
+      "- ruleVi and verdictVi: short, calm, concrete everyday Vietnamese (≤ 25 words each). No grammar jargon (do not say 'mệnh đề', 'trợ động từ', 'danh động từ'); explain with a tiny example instead.",
+      "- verdictVi/verdictEn: name the 1–2 most foundational fixes first (word order, missing verb 'be', basic tense, plural -s), as numbered steps.",
+    );
+  }
+  lines.push(a.locale === "vi" ? "- The learner reads Vietnamese: ruleVi and verdictVi must be complete and natural." : "- The learner reads English: ruleEn and verdictEn must be complete and plain.");
+  return lines.join("\n");
 }
 
 export interface ChunkVerification {
@@ -54,6 +76,7 @@ function writingPrompt(task: WritingTask): string {
     rewrite: "This is a forced rewrite after a failed Error-Repair Gate. Audit it from scratch; do not assume earlier errors were fixed.",
     diagnostic: "This is an unassisted placement writing sample. Audit it exactly as a placement examiner would.",
     exit: "This is a single exit-ticket sentence that must use the target chunk naturally in an original real-world context.",
+    practice: "This is a self-practice answer (one or a few sentences). Check meaning against the task and catch every error, including Vietnamese-calque word order.",
     detox: `This is an Error Detox repair of a recurring ${task.focusSubtype ?? "error"} pattern. Check that pattern with extra care.`,
   };
   return `${modeNote[task.mode]}
@@ -68,6 +91,7 @@ LEARNER TEXT (character offsets start at 0):
 <<<${task.text}>>>
 
 ${ERROR_TAXONOMY}
+${audienceInstructions(task.audience)}
 
 OUTPUT SCHEMA:
 {

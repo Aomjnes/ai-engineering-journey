@@ -1,71 +1,92 @@
 import { describe, expect, it } from "vitest";
-import { ERROR_ITEMS, ERROR_ITEMS_SERVED, READING_PASSAGES, READING_PASSAGES_SERVED } from "@/lib/diagnostic/item-bank";
-import { answerErrorItem, answerReading, computePlacementResult, initPlacement, PlacementFlowError, publicItem, writingImpliedLevel, type PlacementState } from "@/lib/diagnostic/placement";
-import { profileText } from "@/lib/metrics/readability";
+import { TIER0_EARLY_STOP_MISSES } from "@/lib/diagnostic/item-bank";
+import { answerUnit, computePlacementResult, currentUnitId, initPlacement, PlacementFlowError, PRE_A1_CEILING, publicItem, skipWriting, type PlacementState, type Tier } from "@/lib/diagnostic/placement";
+import { bandIndex } from "@/lib/metrics/scoring";
+import { oracleAnswer } from "./oracle";
 
-/** Simulates a learner of true level `trueLevel` who answers correctly iff item difficulty < trueLevel. */
-function simulate(trueLevel: number): PlacementState {
-  let s = initPlacement(0);
-  while (s.part === "READING") {
-    const p = READING_PASSAGES.find((x) => x.id === s.currentId);
-    if (!p) throw new Error("missing passage");
-    s = answerReading(s, p.id, p.questions.map((q) => (q.difficulty < trueLevel ? q.answer : (q.answer + 1) % 4)));
-  }
-  while (s.part === "ERRORS") {
-    const it = ERROR_ITEMS.find((x) => x.id === s.currentId);
-    if (!it) throw new Error("missing item");
-    s = answerErrorItem(s, it.id, it.difficulty < trueLevel ? it.answer : (it.answer + 1) % 5);
+/** Runs the staircase with a per-tier policy until writing or done. */
+function run(start: Tier, policy: (tier: number) => boolean | "skip"): PlacementState {
+  let s = initPlacement(start);
+  for (let guard = 0; guard < 200 && s.phase === "OBJECTIVE"; guard++) {
+    const id = currentUnitId(s) as string;
+    const p = policy(s.tier);
+    s = answerUnit(s, id, p === "skip" ? { kind: "skip" } : oracleAnswer(id, s.tier, p));
   }
   return s;
 }
 
-describe("item bank integrity", () => {
-  it("has passages for every sub-band with increasing difficulty and valid keys", () => {
-    expect(READING_PASSAGES).toHaveLength(8);
-    const ds = READING_PASSAGES.map((p) => p.difficulty);
-    expect([...ds].sort((a, b) => a - b)).toEqual(ds);
-    for (const p of READING_PASSAGES) for (const q of p.questions) expect(q.options[q.answer]).toBeTruthy();
-    expect(new Set(ERROR_ITEMS.map((i) => i.id)).size).toBe(ERROR_ITEMS.length);
+const noTrap = () => undefined;
+
+describe("adaptive staircase placement", () => {
+  it("Tier 0: a true beginner who skips everything stops early — no essay, Pre-A1/A1.1 only", () => {
+    const s = run(0, () => "skip");
+    expect(s.phase).toBe("DONE");
+    expect(s.writingTier).toBeNull();
+    expect(s.stoppedEarly).toBe(true);
+    expect(s.served.length).toBe(TIER0_EARLY_STOP_MISSES); // stops after 4 misses, not the full block
+    const r = computePlacementResult(s, null, noTrap);
+    expect(r.level).toBeLessThanOrEqual(PRE_A1_CEILING);
+    expect(["PRE_A1", "A1_1"]).toContain(r.subBand);
+    expect(r.skipped).toBe(TIER0_EARLY_STOP_MISSES);
+    expect(r.ielts.band).toBeLessThan(3.5);
   });
 
-  it("measured readability broadly agrees with assigned passage difficulty", () => {
-    const easy = profileText(READING_PASSAGES[0]?.text ?? "").difficultyScore;
-    const hard = profileText(READING_PASSAGES[7]?.text ?? "").difficultyScore;
-    expect(hard).toBeGreaterThan(easy + 30);
-  });
-});
-
-describe("adaptive placement flow", () => {
-  it("serves 4 passages then 8 error items then writing, never leaking answers", () => {
-    const s = simulate(50);
-    expect(s.part).toBe("WRITING");
-    expect(s.readingServed).toHaveLength(READING_PASSAGES_SERVED);
-    expect(s.errorServed).toHaveLength(ERROR_ITEMS_SERVED);
-    const first = publicItem(initPlacement(0));
-    expect(JSON.stringify(first)).not.toContain('"answer"');
+  it("Tier 0 below 50% without early stop still ends without writing", () => {
+    // Alternate right/wrong is 50% for the first items; make it 3 right out of 8 deterministically.
+    let n = 0;
+    const s = run(0, () => n++ % 3 === 0);
+    expect(s.phase).toBe("DONE");
+    expect(s.writingTier).toBeNull();
+    expect(computePlacementResult(s, null, noTrap).level).toBeLessThanOrEqual(PRE_A1_CEILING);
   });
 
-  it("rejects out-of-order answers", () => {
-    const s = initPlacement(0);
-    expect(() => answerReading(s, "r-c1-2", [0, 0])).toThrow(PlacementFlowError);
-    expect(() => answerErrorItem(s, "e-01", 0)).toThrow(PlacementFlowError);
-    expect(() => answerReading(s, s.currentId ?? "", [0])).toThrow(PlacementFlowError);
+  it("climbs the whole staircase 0 → 1 → 2 → 3 for a strong learner and ends with the C1 writing task", () => {
+    const s = run(0, () => true);
+    expect(s.visited).toEqual([0, 1, 2, 3]);
+    expect(s.phase).toBe("WRITING");
+    expect(s.writingTier).toBe(3);
+    const r = computePlacementResult(s, { gai: 92, lri: 88, words: 110 }, noTrap);
+    expect(bandIndex(r.subBand)).toBeGreaterThanOrEqual(bandIndex("B2_1"));
   });
 
-  it("places weak and strong simulated learners in the right region", () => {
-    const weak = computePlacementResult(simulate(15), { gai: 45, lri: 40, words: 90 });
-    const strong = computePlacementResult(simulate(85), { gai: 95, lri: 85, words: 110 });
-    expect(weak.level).toBeLessThan(30);
-    expect(strong.level).toBeGreaterThan(70);
-    expect(["A2_1", "A2_2", "B1_1"]).toContain(weak.subBand);
-    expect(["C1_1", "C1_2", "B2_2"]).toContain(strong.subBand);
-    expect(strong.ielts.band).toBeGreaterThan(weak.ielts.band);
-    expect(weak.missedTraps.length).toBeGreaterThan(0);
+  it("descends 2 → 1 → 0 for a learner who over-estimated their comfort", () => {
+    const s = run(2, () => false);
+    expect(s.visited).toEqual([2, 1, 0]);
+    expect(s.phase).toBe("DONE");
+    expect(computePlacementResult(s, null, noTrap).subBand).toMatch(/^(PRE_A1|A1_1)$/);
   });
 
-  it("writing-implied level formula", () => {
-    expect(writingImpliedLevel(30, 30)).toBe(0);
-    expect(writingImpliedLevel(95, 95)).toBe(100);
-    expect(writingImpliedLevel(60, 60)).toBeCloseTo((30 * 100) / 65, 6);
+  it("stops between tiers: passes Tier 2, fails Tier 3 → writing at Tier 2", () => {
+    const s = run(2, (t) => t === 2);
+    expect(s.visited).toEqual([2, 3]);
+    expect(s.phase).toBe("WRITING");
+    expect(s.writingTier).toBe(2);
+    expect(s.tierAccuracy["2"]).toBe(1);
+    expect(s.tierAccuracy["3"]).toBe(0);
+    const r = computePlacementResult(s, { gai: 70, lri: 60, words: 80 }, noTrap);
+    expect(bandIndex(r.subBand)).toBeGreaterThanOrEqual(bandIndex("A2_2"));
+    expect(bandIndex(r.subBand)).toBeLessThanOrEqual(bandIndex("B2_2"));
+  });
+
+  it("writing can be skipped; the result then relies on objective items only", () => {
+    const s = skipWriting(run(1, (t) => t === 1));
+    expect(s.phase).toBe("DONE");
+    expect(s.writingSkipped).toBe(true);
+    const r = computePlacementResult(s, null, noTrap);
+    expect(r.writingLevel).toBeNull();
+    expect(r.gai).toBeNull();
+  });
+
+  it("never leaks answer keys and rejects out-of-order answers", () => {
+    let s = initPlacement(0);
+    for (let i = 0; i < 8 && s.phase === "OBJECTIVE"; i++) {
+      const view = JSON.stringify(publicItem(s));
+      expect(view).not.toMatch(/"answer"|"sentence"/);
+      s = answerUnit(s, currentUnitId(s) as string, oracleAnswer(currentUnitId(s) as string, s.tier, true));
+    }
+    const s2 = initPlacement(2);
+    const view2 = JSON.stringify(publicItem(s2));
+    expect(view2).not.toMatch(/"answer"|"trap"|"explanation"/);
+    expect(() => answerUnit(s2, "not-the-current-item", { kind: "skip" })).toThrow(PlacementFlowError);
   });
 });

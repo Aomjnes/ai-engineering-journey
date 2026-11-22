@@ -3,7 +3,7 @@ import { prisma } from "@/lib/db";
 const TABLES = [
   "StreamAccount", "SourceFeed", "DailyArticle", "ExplanationCache", "AccessFailure",
   "UserSettings", "UserProgress", "LessonUnit", "LexicalChunk", "SubmissionAttempt", "ErrorLog", "SrsCard", "SrsReview",
-  "ProficiencyProfile", "ProficiencySnapshot", "DiagnosticAssessment",
+  "ProficiencyProfile", "ProficiencySnapshot", "DiagnosticAssessment", "LearningGoal", "RoadmapMilestone", "PracticeSession", "FoundationProgress",
 ];
 
 /** Empties every table (each DB test file calls this in beforeEach). */

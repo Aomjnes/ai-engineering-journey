@@ -6,7 +6,7 @@ export class ApiError extends Error {
   }
 }
 
-export async function api<T>(url: string, body?: unknown, opts?: { method?: "GET" | "POST" | "PATCH"; body?: unknown }): Promise<T> {
+export async function api<T>(url: string, body?: unknown, opts?: { method?: "GET" | "POST" | "PATCH" | "PUT"; body?: unknown }): Promise<T> {
   const payload = opts?.body ?? body;
   const res = await fetch(url, {
     method: opts?.method ?? (payload === undefined ? "GET" : "POST"),

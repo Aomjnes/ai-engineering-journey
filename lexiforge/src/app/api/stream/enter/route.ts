@@ -3,6 +3,8 @@ import { z } from "zod";
 import { handle, parseBody } from "@/lib/http";
 import { clientIp, enterStream, isSecureRequest } from "@/lib/auth/stream";
 import { sessionCookie } from "@/lib/auth/session";
+import { prisma } from "@/lib/db";
+import { isLocale, localeCookie } from "@/lib/i18n/locale";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +17,9 @@ export async function POST(req: Request) {
     const { stream, token } = await enterStream(code, clientIp(req));
     const res = NextResponse.json({ stream: { code: stream.code, label: stream.label } });
     res.headers.append("Set-Cookie", sessionCookie(token, isSecureRequest(req)));
+    // The stream's saved UI language wins on every device.
+    const settings = await prisma.userSettings.findUnique({ where: { streamId: stream.id }, select: { uiLocale: true } });
+    if (isLocale(settings?.uiLocale)) res.headers.append("Set-Cookie", localeCookie(settings.uiLocale, isSecureRequest(req)));
     res.headers.set("Cache-Control", "no-store");
     return res;
   });

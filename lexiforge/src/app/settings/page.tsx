@@ -5,8 +5,11 @@ import { useCrossDeviceSync, useShell } from "@/components/lf/shell-data";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/textarea";
 import { Check, X } from "lucide-react";
-import { api, errorMessage } from "@/lib/client/api";
-import { timeAgo } from "@/lib/client/format";
+import Link from "next/link";
+import { api } from "@/lib/client/api";
+import { fmt, timeAgoIn } from "@/lib/i18n";
+import { buttonVariants } from "@/components/ui/button";
+import { LangSwitch } from "@/components/lf/lang-switch";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -22,16 +25,18 @@ interface SettingsData {
 }
 
 function Flag({ on, label }: { on: boolean; label: string }) {
+  const { t } = usePrefs();
   return (
     <li className="flex items-center justify-between py-2 text-[13.5px]">
       <span className="font-mono text-[12.5px] text-ink-2">{label}</span>
-      {on ? <span className="flex items-center gap-1 text-mastered-ink"><Check className="size-3.5" aria-hidden />set</span> : <span className="flex items-center gap-1 text-ink-3"><X className="size-3.5" aria-hidden />not set</span>}
+      {on ? <span className="flex items-center gap-1 text-mastered-ink"><Check className="size-3.5" aria-hidden />{t.settings.set}</span> : <span className="flex items-center gap-1 text-ink-3"><X className="size-3.5" aria-hidden />{t.settings.notSet}</span>}
     </li>
   );
 }
 
 function StreamCard() {
   const { status, refresh, switchStream } = useShell();
+  const { t, err } = usePrefs();
   const [label, setLabel] = useState("");
   const [saved, setSaved] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -45,9 +50,9 @@ function StreamCard() {
     try {
       await api("/api/stream/me", undefined, { method: "PATCH", body: { label } });
       await refresh();
-      setSaved("Saved.");
+      setSaved(t.common.saved);
     } catch (e) {
-      setSaved(errorMessage(e));
+      setSaved(err(e));
     } finally {
       setBusy(false);
     }
@@ -55,10 +60,8 @@ function StreamCard() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Stream</CardTitle>
-        <CardDescription>
-          Access code <span className="num text-ink-2">{status.stream.code}</span>. The label is only a display name; the code never changes here.
-        </CardDescription>
+        <CardTitle>{t.settings.stream}</CardTitle>
+        <CardDescription>{fmt(t.settings.streamDesc, { code: status.stream.code })}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
         <form
@@ -68,11 +71,11 @@ function StreamCard() {
             void save();
           }}
         >
-          <Input aria-label="Stream label" value={label} maxLength={40} onChange={(e) => setLabel(e.target.value)} />
-          <Button type="submit" disabled={busy || !label.trim() || label.trim() === status.stream.label}>Save</Button>
+          <Input aria-label={t.settings.streamLabel} value={label} maxLength={40} onChange={(e) => setLabel(e.target.value)} />
+          <Button type="submit" disabled={busy || !label.trim() || label.trim() === status.stream.label}>{t.common.save}</Button>
         </form>
         {saved && <p className="text-[12.5px] text-ink-3">{saved}</p>}
-        <Button variant="outline" onClick={() => void switchStream()}>Switch stream</Button>
+        <Button variant="outline" onClick={() => void switchStream()}>{t.shell.switchStream}</Button>
       </CardContent>
     </Card>
   );
@@ -81,35 +84,44 @@ function StreamCard() {
 export default function SettingsPage() {
   const [data, setData] = useState<SettingsData | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const { lang, setLang, theme, setTheme } = usePrefs();
+  const { theme, setTheme, t, err } = usePrefs();
   const load = useCallback(() => {
-    api<SettingsData>("/api/settings").then(setData).catch((e) => setError(errorMessage(e)));
-  }, []);
+    api<SettingsData>("/api/settings").then(setData).catch((e) => setError(err(e)));
+  }, [err]);
   useEffect(() => load(), [load]);
   useCrossDeviceSync(load);
 
-  if (error) return <EmptyState title="Settings could not load" body={error} />;
+  if (error) return <EmptyState title={t.settings.loadFailed} body={error} />;
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <header>
-        <p className="eyebrow">Configuration</p>
-        <h1 className="mt-1 font-serif text-[30px] font-medium tracking-[-0.015em]">Settings</h1>
+        <p className="eyebrow">{t.settings.eyebrow}</p>
+        <h1 className="mt-1 font-serif text-[30px] font-medium tracking-[-0.015em]">{t.settings.title}</h1>
       </header>
       <StreamCard />
       <Card>
         <CardHeader>
-          <CardTitle>Preferences</CardTitle>
-          <CardDescription>Stored in this browser.</CardDescription>
+          <CardTitle>{t.settings.prefs}</CardTitle>
+          <CardDescription>{t.settings.prefsDesc}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="flex items-center justify-between gap-4 text-[13.5px]">
-            <span>Explanation language</span>
-            <Segmented label="Explanation language" value={lang} onChange={setLang} options={[{ value: "en", label: "English" }, { value: "vi", label: "Tiếng Việt" }]} />
+            <span>{t.settings.uiLanguage}</span>
+            <LangSwitch size="md" />
           </div>
           <div className="flex items-center justify-between gap-4 text-[13.5px]">
-            <span>Theme</span>
-            <Segmented label="Theme" value={theme} onChange={setTheme} options={[{ value: "light", label: "Light" }, { value: "dark", label: "Dark" }]} />
+            <span>{t.settings.theme}</span>
+            <Segmented label={t.settings.theme} value={theme} onChange={setTheme} options={[{ value: "light", label: t.settings.light }, { value: "dark", label: t.settings.dark }]} />
           </div>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>{t.settings.goal}</CardTitle>
+          <CardDescription>{t.settings.goalDesc}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Link href="/roadmap" className={buttonVariants({ variant: "outline", size: "sm" })}>{t.settings.openRoadmap}</Link>
         </CardContent>
       </Card>
       {!data ? (
@@ -118,8 +130,8 @@ export default function SettingsPage() {
         <>
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">Language model {data.llm ? <Badge variant="mastered">{data.llm.provider} · {data.llm.model}</Badge> : <Badge variant="critical">not configured</Badge>}</CardTitle>
-              <CardDescription>Keys live in <code className="font-mono">lexiforge/.env</code> and are never sent to the browser. Auto-detected in this order; restart the server after editing.</CardDescription>
+              <CardTitle className="flex items-center gap-2">{t.settings.llm} {data.llm ? <Badge variant="mastered">{data.llm.provider} · {data.llm.model}</Badge> : <Badge variant="critical">{t.settings.llmNone}</Badge>}</CardTitle>
+              <CardDescription>{t.settings.llmDesc}</CardDescription>
             </CardHeader>
             <CardContent>
               <ul className="divide-y divide-line">
@@ -134,8 +146,8 @@ export default function SettingsPage() {
           </Card>
           <Card>
             <CardHeader>
-              <CardTitle>Daily ingestion</CardTitle>
-              <CardDescription>The cron endpoint needs CRON_SECRET; the in-process scheduler runs daily at 05:30 when enabled.</CardDescription>
+              <CardTitle>{t.settings.ingestion}</CardTitle>
+              <CardDescription>{t.settings.ingestionDesc}</CardDescription>
             </CardHeader>
             <CardContent>
               <ul className="divide-y divide-line">
@@ -146,7 +158,7 @@ export default function SettingsPage() {
           </Card>
           <Card>
             <CardHeader>
-              <CardTitle>Live sources</CardTitle>
+              <CardTitle>{t.settings.sources}</CardTitle>
             </CardHeader>
             <CardContent>
               <ul className="divide-y divide-line">
@@ -154,7 +166,7 @@ export default function SettingsPage() {
                   <li key={f.url} className="flex items-center gap-3 py-2.5 text-[13.5px]">
                     <span className={f.status === "ACTIVE" ? "size-2 rounded-full bg-mastered" : f.status === "FAILING" ? "size-2 rounded-full bg-critical" : "size-2 rounded-full bg-ink-3"} aria-hidden />
                     <span className="flex-1">{f.name}</span>
-                    <span className="num text-[12px] text-ink-3" title={f.lastError ?? undefined}>{f.lastFetchedAt ? `fetched ${timeAgo(f.lastFetchedAt)}` : "never fetched"}{f.consecutiveFailures ? ` · ${f.consecutiveFailures} failures` : ""}</span>
+                    <span className="num text-[12px] text-ink-3" title={f.lastError ?? undefined}>{f.lastFetchedAt ? fmt(t.settings.fetched, { ago: timeAgoIn(t, f.lastFetchedAt) }) : t.settings.neverFetched}{f.consecutiveFailures ? ` · ${fmt(t.settings.failures, { n: f.consecutiveFailures })}` : ""}</span>
                   </li>
                 ))}
               </ul>

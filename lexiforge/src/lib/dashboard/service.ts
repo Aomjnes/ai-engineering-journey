@@ -60,30 +60,34 @@ export async function dashboardData(streamId: string, now: Date) {
   const next = nextBand(band);
   const rssEvidence = retention.matureReviews > 0;
   type CheckStatus = "PASS" | "PROGRESS" | "BLOCKED" | "LOCKED" | "NO_DATA";
-  const checks: Array<{ key: string; label: string; status: CheckStatus; detail: string }> = [
+  const checks: Array<{ key: string; label: string; status: CheckStatus; detail: string; params: Record<string, string | number> }> = [
     {
       key: "sessions",
       label: "Qualifying sessions",
       status: profile.consecutiveQualifying >= REQUIRED_CONSECUTIVE ? "PASS" : "PROGRESS",
       detail: `${profile.consecutiveQualifying}/${REQUIRED_CONSECUTIVE} consecutive · composite ≥ ${QUALIFYING_THRESHOLD[band]} on ≥ ${bandLabel(band)} text, first-try gate pass`,
+      params: { n: profile.consecutiveQualifying, req: REQUIRED_CONSECUTIVE, thr: QUALIFYING_THRESHOLD[band], band: bandLabel(band) },
     },
     {
       key: "eri",
       label: "Critical error recurrence",
       status: gate.passes ? "PASS" : "BLOCKED",
       detail: gate.passes ? `No critical pattern in > ${RECURRENCE_CEILING} of last 5 sessions` : `Over ceiling: ${gate.offending.join(", ")}`,
+      params: { n: RECURRENCE_CEILING, list: gate.offending.join(", ") },
     },
     {
       key: "rss",
       label: `Retention ≥ ${RSS_PROMOTION_FLOOR}`,
       status: !rssEvidence ? "NO_DATA" : (retention.rss ?? 0) >= RSS_PROMOTION_FLOOR ? "PASS" : "BLOCKED",
       detail: rssEvidence ? `RSS ${retention.rss?.toFixed(1)} from ${retention.matureReviews} mature reviews` : "No reviews ≥ 7 days old yet — not required until evidence exists",
+      params: { floor: RSS_PROMOTION_FLOOR, v: retention.rss?.toFixed(1) ?? "—", n: retention.matureReviews, evidence: rssEvidence ? 1 : 0 },
     },
     {
       key: "audit",
       label: "Band Promotion Audit",
       status: promotion.unlocked ? "PASS" : "LOCKED",
       detail: promotion.unlocked ? `Unlocked — zero-hint audit at ${next ? bandLabel(next) : "—"}` : "Unlocks when every check above passes",
+      params: { band: next ? bandLabel(next) : "—" },
     },
   ];
   const weekAgo = now.getTime() - 7 * DAY;

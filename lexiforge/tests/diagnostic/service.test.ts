@@ -1,8 +1,8 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { prisma } from "@/lib/db";
 import { setLlmClientForTesting } from "@/lib/llm/client";
-import { answerPlacement, startPlacement, startPromotionAudit, submitPlacementWriting } from "@/lib/diagnostic/service";
-import { ERROR_ITEMS, READING_PASSAGES } from "@/lib/diagnostic/item-bank";
+import { answerPlacement, setupAndStartPlacement, startPromotionAudit, submitPlacementWriting } from "@/lib/diagnostic/service";
+import { oracleAnswer } from "./oracle";
 import { getProfile } from "@/lib/profile/service";
 import { testStream } from "../helpers/db";
 import { AppError } from "@/lib/http";
@@ -34,43 +34,65 @@ describe("placement audit (DB + scripted evaluator)", () => {
   });
   afterAll(() => setLlmClientForTesting(null));
 
-  it("runs the full 3-part audit and creates a profile + baseline snapshot", async () => {
+  it("runs setup → staircase → writing, creates profile, goal, roadmap and a Vietnamese-ready report", async () => {
     const user = await testStream();
     const now = new Date("2026-05-01T08:00:00Z");
-    let step = await startPlacement(user.id, now);
-    // Resuming returns the same in-progress assessment.
-    expect((await startPlacement(user.id, now)).assessmentId).toBe(step.assessmentId);
-    while (step.part === "READING" && step.item && step.item.part === "READING") {
-      const passage = READING_PASSAGES.find((p) => p.id === step.item?.id);
-      step = await answerPlacement(user.id, step.assessmentId, { itemId: step.item.id, choices: passage?.questions.map((q) => (q.difficulty < 50 ? q.answer : 0)) ?? [] });
+    await expect(setupAndStartPlacement(user.id, { comfortTier: 2, targetSubBand: "Z9", dailyMinutes: 30 }, now)).rejects.toMatchObject({ code: "INVALID_TARGET" });
+    let step = await setupAndStartPlacement(user.id, { comfortTier: 2, targetSubBand: "B2_2", dailyMinutes: 45 }, now);
+    expect(step.tier).toBe(2);
+    // Pass Tier 2 (correct answers), fail Tier 3 (skip) → writing at Tier 2.
+    for (let guard = 0; guard < 40 && step.phase === "OBJECTIVE" && step.item; guard++) {
+      const answer = step.tier === 2 ? oracleAnswer(step.item.id, 2, true) : ({ kind: "skip" } as const);
+      step = await answerPlacement(user.id, step.assessmentId, step.item.id, answer, now);
     }
-    while (step.part === "ERRORS" && step.item && step.item.part === "ERRORS") {
-      const it = ERROR_ITEMS.find((i) => i.id === step.item?.id);
-      step = await answerPlacement(user.id, step.assessmentId, { itemId: step.item.id, choice: it && it.difficulty < 50 ? it.answer : 4 });
-    }
-    expect(step.part).toBe("WRITING");
+    expect(step.phase).toBe("WRITING");
+    expect(step.item?.part).toBe("WRITING");
 
     await expect(submitPlacementWriting(user.id, step.assessmentId, "Too short to grade.", now)).rejects.toBeInstanceOf(AppError);
-
-    const { report } = await submitPlacementWriting(user.id, step.assessmentId, SAMPLE, now);
-    expect(report.subBand).toMatch(/^(A2|B1|B2|C1)\.[12]$/);
-    expect(report.ielts.band).toBeGreaterThanOrEqual(4);
-    expect(report.ielts.low).toBeLessThan(report.ielts.high);
-    expect(report.topWeaknesses).toContain("SV_AGREEMENT");
+    const done = await submitPlacementWriting(user.id, step.assessmentId, SAMPLE, now);
+    const report = done.report;
+    expect(report.subBand).toMatch(/^(A2_2|B1_1|B1_2|B2_1|B2_2)$/);
+    expect(report.stoppedEarly).toBe(false);
+    expect(report.blockers).toContain("SV_AGREEMENT");
+    expect(report.blockers.length).toBeLessThanOrEqual(3);
+    expect(report.writingFeedback?.verdictVi).toContain("are");
     const profile = await getProfile(user.id);
-    expect(profile).not.toBeNull();
-    expect(profile?.gai).toBe(report.parts.writing.gai.gai);
+    expect(profile?.gai).toBe(report.metrics.gai);
     expect(await prisma.proficiencySnapshot.count({ where: { streamId: user.id, trigger: "DIAGNOSTIC" } })).toBe(1);
     expect(await prisma.errorLog.count({ where: { streamId: user.id } })).toBe(2);
-    // Finished assessments cannot be resubmitted.
+    const goal = await prisma.learningGoal.findUniqueOrThrow({ where: { streamId: user.id } });
+    expect(goal.targetSubBand).toBe("B2_2");
+    expect(goal.dailyMinutes).toBe(45);
+    expect(goal.startSubBand).toBe(report.subBand);
+    expect(await prisma.roadmapMilestone.count({ where: { streamId: user.id } })).toBeGreaterThan(0);
     await expect(submitPlacementWriting(user.id, step.assessmentId, SAMPLE, now)).rejects.toMatchObject({ code: "ALREADY_COMPLETED" });
+  });
+
+  it("a Pre-A1 learner who skips Tier 0 finishes without any writing or LLM call", async () => {
+    setLlmClientForTesting(new ScriptedLlm([() => { throw new Error("no LLM call expected"); }]));
+    const user = await testStream();
+    const now = new Date("2026-05-01T08:00:00Z");
+    let step = await setupAndStartPlacement(user.id, { comfortTier: 0, targetSubBand: "A2_2", dailyMinutes: 15 }, now);
+    let report: { stoppedEarly: boolean; subBand: string; writingFeedback: unknown } | undefined;
+    for (let guard = 0; guard < 20 && step.phase === "OBJECTIVE" && step.item; guard++) {
+      const r = await answerPlacement(user.id, step.assessmentId, step.item.id, { kind: "skip" }, now);
+      step = r;
+      if ("report" in r) report = r.report;
+    }
+    expect(step.phase).toBe("DONE");
+    expect(report?.stoppedEarly).toBe(true);
+    expect(["PRE_A1", "A1_1"]).toContain(report?.subBand);
+    expect(report?.writingFeedback).toBeNull();
+    const milestones = await prisma.roadmapMilestone.findMany({ where: { streamId: user.id }, orderBy: { orderIndex: "asc" } });
+    expect(milestones[0]?.fromBand).toBe(report?.subBand);
+    expect(milestones[milestones.length - 1]?.toBand).toBe("A2_2");
   });
 
   it("locks the Band Promotion Audit until conditions are met", async () => {
     const user = await testStream();
     await expect(startPromotionAudit(user.id, new Date())).rejects.toMatchObject({ code: "CALIBRATION_REQUIRED" });
     await prisma.proficiencyProfile.create({
-      data: { streamId: user.id, subBand: "B1_1", ieltsEstimate: 5, ieltsLow: 4.5, ieltsHigh: 5.5, gai: 70, lri: 60, cpr: 70, rss: 0, eri: 100, composite: 66, abilityLevel: 30 },
+      data: { streamId: user.id, subBand: "B1_1", ieltsEstimate: 5, ieltsLow: 4.5, ieltsHigh: 5.5, gai: 70, lri: 60, cpr: 70, rss: 0, eri: 100, composite: 66, abilityLevel: 55 },
     });
     await expect(startPromotionAudit(user.id, new Date())).rejects.toMatchObject({ code: "PROMOTION_LOCKED" });
   });

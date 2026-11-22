@@ -29,14 +29,20 @@ export const EXPLAIN_TEMPERATURE = 0.2;
 const CONTEXT_KEY_CHARS = 240;
 
 /** Cache key: sha256(normalized selection | first 240 chars of normalized context | CEFR level). */
-export function explanationCacheKey(selection: string, context: string, level: string): string {
-  return createHash("sha256").update(`${norm(selection)}|${norm(context).slice(0, CONTEXT_KEY_CHARS)}|${level}`).digest("hex");
+export function explanationCacheKey(selection: string, context: string, level: string, locale: "en" | "vi" = "en"): string {
+  // English keeps the original key shape so existing cache rows stay valid; Vietnamese explanations get their own rows.
+  const tail = locale === "vi" ? `${level}|vi` : level;
+  return createHash("sha256").update(`${norm(selection)}|${norm(context).slice(0, CONTEXT_KEY_CHARS)}|${tail}`).digest("hex");
 }
 
 const SYSTEM = "You are a bilingual English–Vietnamese applied linguist. Be concise and direct: no praise, no filler, no preamble. Vietnamese must be natural and fully accented. Output JSON only.";
 
-function prompt(selection: string, context: string, level: string): string {
-  return `Learner level: CEFR ${level}. Explain the SELECTION as used in the CONTEXT in four compact modes (each text field ≤ 35 words):
+function prompt(selection: string, context: string, level: string, locale: "en" | "vi"): string {
+  const lang =
+    locale === "vi"
+      ? `\nLANGUAGE: the learner reads Vietnamese. Write coreLogic.plainEnglish, coreLogic.mentalImage, structure.parts[].note, structure.summary and usage.why in simple, natural Vietnamese${/^(Pre-A1|A1)/.test(level) ? " for an absolute beginner (no grammar jargon, short sentences)" : ""}. Keep structure.parts[].text, dialogue lines, textbookTrap and natural in English.`
+      : "";
+  return `Learner level: CEFR ${level}.${lang} Explain the SELECTION as used in the CONTEXT in four compact modes (each text field ≤ 35 words):
 1 coreLogic: plain-English core meaning + one simple mental image.
 2 structure: consecutive parts of the selection (each "text" copied verbatim, in order, ≤ 8 parts) with grammatical role.
 3 contrastive: natural Vietnamese equivalent, nuance difference (in Vietnamese), the typical Vietlish/L1 mistake.
@@ -59,9 +65,9 @@ export interface ExplainResult {
  * 4-Mode Universal Understanding Engine. Checks the shared ExplanationCache first (any stream, any device),
  * otherwise calls the LLM with the "minimal" thinking tier and stores the validated result.
  */
-export async function explainSelection(selection: string, context: string, level = "B1.1", client?: LlmClient): Promise<ExplainResult> {
+export async function explainSelection(selection: string, context: string, level = "B1.1", client?: LlmClient, locale: "en" | "vi" = "en"): Promise<ExplainResult> {
   const started = Date.now();
-  const key = explanationCacheKey(selection, context, level);
+  const key = explanationCacheKey(selection, context, level, locale);
   const hit = await prisma.explanationCache.findUnique({ where: { key } });
   if (hit) {
     const parsed = ExplanationSchema.safeParse(hit.payload);
@@ -75,7 +81,7 @@ export async function explainSelection(selection: string, context: string, level
   const explanation = await generateStructured({
     schema: ExplanationSchema,
     system: SYSTEM,
-    user: prompt(selection, context, level),
+    user: prompt(selection, context, level, locale),
     tier: "minimal",
     temperature: EXPLAIN_TEMPERATURE,
     maxTokens: EXPLAIN_MAX_TOKENS,
@@ -91,7 +97,7 @@ export async function explainSelection(selection: string, context: string, level
   await prisma.explanationCache.upsert({
     where: { key },
     update: { payload: explanation, provider: llm.provider, model: llm.model },
-    create: { key, selection: selection.slice(0, 500), level, provider: llm.provider, model: llm.model, payload: explanation },
+    create: { key, selection: selection.slice(0, 500), level: locale === "vi" ? `${level}|vi` : level, provider: llm.provider, model: llm.model, payload: explanation },
   });
   return { explanation, cached: false, ms: Date.now() - started };
 }

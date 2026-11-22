@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { Check, ChevronDown, X } from "lucide-react";
-import { api, errorMessage } from "@/lib/client/api";
+import { api } from "@/lib/client/api";
+import { fmt } from "@/lib/i18n";
 import { detectCopy } from "@/lib/metrics/similarity";
 import { countWords } from "@/lib/metrics/text";
 import { cn } from "@/lib/utils";
@@ -18,6 +19,7 @@ interface Question {
   id: string;
   type: string;
   prompt: string;
+  promptVi?: string | null;
   passed: boolean;
 }
 
@@ -36,12 +38,13 @@ interface Result {
 }
 
 export function ReferenceDrawer({ text, title }: { text: string; title: string }) {
+  const { t } = usePrefs();
   const [open, setOpen] = useState(false);
   return (
     <div className="rounded-lg border border-line bg-card">
       <button type="button" aria-expanded={open} onClick={() => setOpen((o) => !o)} className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left">
         <span className="min-w-0">
-          <span className="eyebrow block">Reference</span>
+          <span className="eyebrow block">{t.comprehension.reference}</span>
           <span className="block truncate font-serif text-[15px] text-ink">{title}</span>
         </span>
         <ChevronDown className={cn("size-4 shrink-0 text-ink-3 transition-transform duration-200 ease-lf", open && "rotate-180")} aria-hidden />
@@ -55,8 +58,8 @@ export function ReferenceDrawer({ text, title }: { text: string; title: string }
   );
 }
 
-function QuestionCard({ q, index, lessonId, source, onPassed }: { q: Question; index: number; lessonId: string; source: string; onPassed: () => Promise<void> }) {
-  const { pick } = usePrefs();
+function QuestionCard({ q, index, lessonId, source, onPassed, minWords }: { q: Question; index: number; lessonId: string; source: string; onPassed: () => Promise<void>; minWords: number }) {
+  const { pick, t, err, lang } = usePrefs();
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<Result | null>(null);
@@ -64,10 +67,10 @@ function QuestionCard({ q, index, lessonId, source, onPassed }: { q: Question; i
   const words = countWords(text);
   const overlap = useMemo(() => (words >= 4 ? detectCopy(text, source).maxJaccard : 0), [text, source, words]);
   const tooClose = overlap > 0.65;
-  const tooShort = words > 0 && words < 5;
+  const tooShort = words > 0 && words < minWords;
 
   async function submit() {
-    if (busy || words < 5) return;
+    if (busy || words < minWords) return;
     setBusy(true);
     setError(null);
     try {
@@ -75,7 +78,7 @@ function QuestionCard({ q, index, lessonId, source, onPassed }: { q: Question; i
       setResult(r);
       if (r.passed) await onPassed();
     } catch (e) {
-      setError(errorMessage(e));
+      setError(err(e));
     } finally {
       setBusy(false);
     }
@@ -86,21 +89,22 @@ function QuestionCard({ q, index, lessonId, source, onPassed }: { q: Question; i
       <div className="flex items-start gap-3">
         <span className="num mt-0.5 text-[12px] text-ink-3">{String(index + 1).padStart(2, "0")}</span>
         <div className="min-w-0 flex-1">
-          <Badge variant="outline" className="capitalize">{q.type}</Badge>
+          <Badge variant="outline" className="capitalize">{(t.comprehension as Record<string, string>)[`type${q.type.charAt(0).toUpperCase()}${q.type.slice(1).toLowerCase()}`] ?? q.type}</Badge>
           <h3 id={`q-${q.id}`} className="mt-2 text-[16px] font-medium leading-snug text-ink">{q.prompt}</h3>
+          {lang === "vi" && q.promptVi && <p className="mt-1 text-[14px] text-ink-2">{q.promptVi}</p>}
         </div>
-        {q.passed && <Badge variant="mastered"><Check aria-hidden />Passed</Badge>}
+        {q.passed && <Badge variant="mastered"><Check aria-hidden />{t.comprehension.passed}</Badge>}
       </div>
       {!q.passed && (
         <div className="mt-4 pl-7">
-          <Textarea rows={4} value={text} onChange={(e) => setText(e.target.value)} onPaste={(e) => e.preventDefault()} onKeyDown={submitOnModEnter(() => void submit())} placeholder="Explain in your own words…" aria-describedby={`q-${q.id}-hint`} disabled={busy} />
+          <Textarea rows={4} value={text} onChange={(e) => setText(e.target.value)} onPaste={(e) => e.preventDefault()} onKeyDown={submitOnModEnter(() => void submit())} placeholder={t.comprehension.placeholder} aria-describedby={`q-${q.id}-hint`} disabled={busy} />
           <div id={`q-${q.id}-hint`} className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12.5px]" aria-live="polite">
-            <span className="num text-ink-3">{words} words</span>
-            {tooShort && <span className="text-moderate-ink">At least 5 words.</span>}
-            {tooClose && <span className="tabular-nums text-critical-ink">Too close to source text ({Math.round(overlap * 100)}% overlap) — explain in your own words.</span>}
+            <span className="num text-ink-3">{fmt(t.common.words, { n: words })}</span>
+            {tooShort && <span className="text-moderate-ink">{fmt(t.comprehension.minWords, { n: minWords })}</span>}
+            {tooClose && <span className="tabular-nums text-critical-ink">{fmt(t.comprehension.tooClose, { n: Math.round(overlap * 100) })}</span>}
             <span className="ml-auto flex items-center gap-2">
               <ModEnterHint />
-              <Button size="sm" onClick={() => void submit()} disabled={busy || words < 5}>{busy ? "Checking…" : "Submit"}</Button>
+              <Button size="sm" onClick={() => void submit()} disabled={busy || words < minWords}>{busy ? t.common.checking : t.common.submit}</Button>
             </span>
           </div>
           <PhasedStatus className="mt-3" phases={COMPREHENSION_PHASES} active={busy} />
@@ -113,11 +117,11 @@ function QuestionCard({ q, index, lessonId, source, onPassed }: { q: Question; i
             <p className="text-[13.5px] text-critical-ink">{result.message}</p>
           ) : (
             <>
-              <p className="text-[13px] font-semibold tabular-nums text-ink">{result.criteriaMet}/{result.criteriaTotal} criteria met {result.passed ? "· passed" : "· not passed — try again"}</p>
+              <p className="text-[13px] font-semibold tabular-nums text-ink">{fmt(t.comprehension.criteria, { a: result.criteriaMet ?? 0, b: result.criteriaTotal ?? 0 })} {result.passed ? t.comprehension.passedTag : t.comprehension.failedTag}</p>
               <ul className="mt-2 space-y-1">
                 {result.rubric?.map((r) => (
                   <li key={r.criterion} className="flex gap-2 text-[13px] text-ink-2">
-                    {r.met ? <Check className="mt-0.5 size-3.5 shrink-0 text-mastered-ink" aria-label="met" /> : <X className="mt-0.5 size-3.5 shrink-0 text-critical-ink" aria-label="not met" />}
+                    {r.met ? <Check className="mt-0.5 size-3.5 shrink-0 text-mastered-ink" aria-label={t.comprehension.met} /> : <X className="mt-0.5 size-3.5 shrink-0 text-critical-ink" aria-label={t.comprehension.notMet} />}
                     {r.criterion}
                   </li>
                 ))}
@@ -136,19 +140,20 @@ function QuestionCard({ q, index, lessonId, source, onPassed }: { q: Question; i
   );
 }
 
-export function ComprehensionStage({ lessonId, questions, source, title, onChange }: { lessonId: string; questions: Question[]; source: string; title: string; onChange: () => Promise<void> }) {
+export function ComprehensionStage({ lessonId, questions, source, title, onChange, minWords = 5 }: { lessonId: string; questions: Question[]; source: string; title: string; onChange: () => Promise<void>; minWords?: number }) {
+  const { t } = usePrefs();
   const done = questions.filter((q) => q.passed).length;
   return (
     <div className="mx-auto max-w-2xl space-y-4">
       <div>
-        <p className="eyebrow">Stage 2 · Deep comprehension</p>
-        <h2 className="mt-1 font-serif text-[26px] font-medium tracking-[-0.01em]">Show what the text means, not what it says.</h2>
-        <p className="mt-1 text-[13.5px] text-ink-2">Answers are graded against fixed rubrics. Copying more than 65% of a source passage is rejected and scores zero for this question.</p>
-        <p className="num mt-2 text-[12.5px] text-ink-3">{done}/{questions.length} passed</p>
+        <p className="eyebrow">{t.comprehension.eyebrow}</p>
+        <h2 className="mt-1 font-serif text-[26px] font-medium tracking-[-0.01em]">{t.comprehension.title}</h2>
+        <p className="mt-1 text-[13.5px] text-ink-2">{t.comprehension.sub}</p>
+        <p className="num mt-2 text-[12.5px] text-ink-3">{fmt(t.comprehension.passedCount, { n: done, total: questions.length })}</p>
       </div>
       <ReferenceDrawer text={source} title={title} />
       {questions.map((q, i) => (
-        <QuestionCard key={q.id} q={q} index={i} lessonId={lessonId} source={source} onPassed={onChange} />
+        <QuestionCard key={q.id} q={q} index={i} lessonId={lessonId} source={source} onPassed={onChange} minWords={minWords} />
       ))}
     </div>
   );

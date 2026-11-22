@@ -25,6 +25,9 @@ enum CefrTier {
 }
 
 enum CefrSubBand {
+  PRE_A1
+  A1_1
+  A1_2
   A2_1
   A2_2
   B1_1
@@ -67,6 +70,11 @@ enum SubmissionKind {
   EXIT_TICKET
   PROMOTION_AUDIT
   DETOX
+  PRACTICE_DICTATION
+  PRACTICE_SPEAKING
+  PRACTICE_SENTENCE
+  PRACTICE_ROLEPLAY
+  PRACTICE_FOUNDATION
 }
 
 enum DiagnosticKind {
@@ -139,12 +147,15 @@ model LessonUnit {
   targetSubBand     CefrSubBand
   difficultyScore   Float // difficulty of the text the learner actually reads
   isGraded          Boolean // true when a bridge (graded) version was synthesized
+  deliveryMode      String              @default("AUTHENTIC") // MICRO_STORY | GRADED_BRIDGE | AUTHENTIC
+  glossJson         Json? // MICRO_STORY: [{ text, vi }] tap-to-translate glosses
   readingText       String // text served for Stage 1 (bridge or authentic)
   authenticExcerpt  String // original passage, always shown for transparency
   comprehensibility Float // estimated share of known tokens (target 0.85–0.90)
   grammarInWild     Json // [{pattern, example, explanationEn, explanationVi}]
   questions         Json // Stage 2 questions [{id, type, prompt, rubric:[...]}]
   productionPrompt  String
+  productionPromptVi String              @default("")
   stage             LessonStage         @default(INPUT)
   createdAt         DateTime            @default(now())
   completedAt       DateTime?
@@ -192,6 +203,10 @@ model StreamAccount {
   errors       ErrorLog[]
   srsCards     SrsCard[]
   srsReviews   SrsReview[]
+  goal         LearningGoal?
+  milestones   RoadmapMilestone[]
+  practice     PracticeSession[]
+  foundation   FoundationProgress[]
 }
 
 model UserSettings {
@@ -202,6 +217,7 @@ model UserSettings {
   ttsVoice      String?
   dailyNewChunk Int      @default(6)
   timezone      String   @default("Asia/Ho_Chi_Minh")
+  uiLocale      String   @default("vi") // "vi" | "en" — UI language and coaching-feedback language
   updatedAt     DateTime @updatedAt
 }
 
@@ -401,4 +417,80 @@ model AccessFailure {
   createdAt DateTime @default(now())
 
   @@index([ipHash, createdAt])
+}
+
+// ───────────────────────────── Roadmap & practice (isolated per stream) ─────────────────────────────
+
+/// The learner's chosen destination and pace. One per stream.
+model LearningGoal {
+  id            String        @id @default(cuid())
+  streamId      String        @unique
+  stream        StreamAccount @relation(fields: [streamId], references: [id], onDelete: Cascade)
+  startSubBand  CefrSubBand
+  targetSubBand CefrSubBand
+  targetLabel   String
+  dailyMinutes  Int
+  startComfort  Int           @default(2) // placement starting tier the learner chose (0–3)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}
+
+/// One sub-band step on the learner's roadmap (deterministically generated from the curriculum).
+model RoadmapMilestone {
+  id               String        @id @default(cuid())
+  streamId         String
+  stream           StreamAccount @relation(fields: [streamId], references: [id], onDelete: Cascade)
+  orderIndex       Int
+  fromBand         CefrSubBand
+  toBand           CefrSubBand
+  titleVi          String
+  titleEn          String
+  outcomeVi        String
+  outcomeEn        String
+  coreTopicsJson   Json
+  status           String // COMPLETED | ACTIVE | LOCKED
+  requiredGai      Float
+  requiredLri      Float
+  requiredRss      Float
+  requiredSessions Int
+  estimatedHours   Float
+  completedAt      DateTime?
+  createdAt        DateTime      @default(now())
+
+  @@unique([streamId, orderIndex])
+  @@index([streamId, status])
+}
+
+/// A self-practice session (dictation, speaking, sentence builder, roleplay, foundation deck).
+model PracticeSession {
+  id          String        @id @default(cuid())
+  streamId    String
+  stream      StreamAccount @relation(fields: [streamId], references: [id], onDelete: Cascade)
+  mode        String // DICTATION | SPEAKING | SENTENCE | ROLEPLAY | FOUNDATION
+  level       CefrSubBand
+  topic       String
+  itemsJson   Json // generated items (answer keys stay server-side)
+  stateJson   Json // per-item progress / roleplay transcript
+  status      String        @default("ACTIVE") // ACTIVE | COMPLETED
+  score       Float?
+  createdAt   DateTime      @default(now())
+  completedAt DateTime?
+
+  @@index([streamId, mode, createdAt])
+}
+
+/// Mastery of one foundation-deck item; mastered items are pushed into the SRS deck.
+model FoundationProgress {
+  id         String        @id @default(cuid())
+  streamId   String
+  stream     StreamAccount @relation(fields: [streamId], references: [id], onDelete: Cascade)
+  deckId     String
+  itemKey    String
+  correct    Int           @default(0)
+  attempts   Int           @default(0)
+  mastered   Boolean       @default(false)
+  srsCardId  String?
+  updatedAt  DateTime      @updatedAt
+
+  @@unique([streamId, deckId, itemKey])
 }

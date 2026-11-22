@@ -48,12 +48,12 @@ async function seedLesson() {
   const user = await testStream();
   const feed = await prisma.sourceFeed.create({ data: { name: "T", url: "https://e.com/rss", homepage: "https://e.com", topic: "t" } });
   const article = await prisma.dailyArticle.create({
-    data: { feedId: feed.id, urlHash: "x", url: "https://e.com/a", title: "Floating classrooms", content: READING, wordCount: 330, sentenceCount: 14, fleschKincaidGrade: 12, fleschReadingEase: 45, avgSentenceLength: 23, avgSyllablesPerWord: 1.6, lexicalSophistication: 0.2, cefrTier: "B2", difficultyScore: 52 },
+    data: { feedId: feed.id, urlHash: "x", url: "https://e.com/a", title: "Floating classrooms", content: READING, wordCount: 330, sentenceCount: 14, fleschKincaidGrade: 12, fleschReadingEase: 45, avgSentenceLength: 23, avgSyllablesPerWord: 1.6, lexicalSophistication: 0.2, cefrTier: "B2", difficultyScore: 72 },
   });
-  await prisma.proficiencyProfile.create({ data: { streamId: user.id, subBand: "B2_1", ieltsEstimate: 6, ieltsLow: 5.5, ieltsHigh: 6.5, gai: 70, lri: 60, cpr: 70, rss: 0, eri: 100, composite: 66, abilityLevel: 52 } });
+  await prisma.proficiencyProfile.create({ data: { streamId: user.id, subBand: "B2_1", ieltsEstimate: 6, ieltsLow: 5.5, ieltsHigh: 6.5, gai: 70, lri: 60, cpr: 70, rss: 0, eri: 100, composite: 66, abilityLevel: 70 } });
   const lesson = await prisma.lessonUnit.create({
     data: {
-      streamId: user.id, articleId: article.id, targetSubBand: "B2_1", difficultyScore: 52, isGraded: false, readingText: READING, authenticExcerpt: READING, comprehensibility: 0.88,
+      streamId: user.id, articleId: article.id, targetSubBand: "B2_1", difficultyScore: 72, isGraded: false, readingText: READING, authenticExcerpt: READING, comprehensibility: 0.88,
       grammarInWild: [], productionPrompt: "Write a 100-word email to the council about the floating classrooms using 3 chunks.",
       questions: [
         { id: "q1", type: "inference", prompt: "Why might insurers hesitate?", rubric: ["Mentions storms", "Links to insurance"] },

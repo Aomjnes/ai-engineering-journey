@@ -10,6 +10,13 @@ import { GET as srsGET, POST as srsPOST } from "@/app/api/srs/route";
 import { POST as evaluatePOST } from "@/app/api/evaluate/route";
 import { GET as accountabilityGET } from "@/app/api/accountability/route";
 import { POST as diagnosticPOST } from "@/app/api/diagnostic/route";
+import { GET as roadmapGET, PUT as roadmapPUT } from "@/app/api/roadmap/route";
+import { GET as practiceGET, POST as practicePOST } from "@/app/api/practice/route";
+import { GET as foundationGET, POST as foundationPOST } from "@/app/api/practice/foundation/route";
+import { PATCH as preferencesPATCH } from "@/app/api/preferences/route";
+import { GET as shellGET } from "@/app/api/shell/route";
+import { setGoal, syncRoadmap } from "@/lib/roadmap/service";
+import { FOUNDATION_DECKS } from "@/lib/practice/foundation-decks";
 import { resetEnvCache } from "@/lib/env";
 import { resetDb, testStream } from "../helpers/db";
 import { cookieFor, req, TEST_SECRET } from "../helpers/session";
@@ -151,5 +158,57 @@ describe("stream data isolation (000 vs 001)", () => {
     expect(await prisma.errorLog.count({ where: { streamId: a.id } })).toBe(0);
     expect(await prisma.errorLog.count({ where: { streamId: b.id } })).toBe(1);
     expect(await prisma.dailyArticle.count()).toBe(1); // shared content survives
+  });
+
+  it("goals, roadmap milestones, practice sessions, foundation progress and UI language stay per stream", async () => {
+    const a = await testStream("000");
+    const b = await testStream("001");
+    await seedPrivateData(a.id, "A");
+    await seedPrivateData(b.id, "B");
+    const now = new Date();
+    await setGoal(a.id, { startSubBand: "B1_2", targetSubBand: "B2_2", dailyMinutes: 15, targetLabel: "B2.2" }, now);
+    await setGoal(b.id, { startSubBand: "B1_2", targetSubBand: "C1_1", dailyMinutes: 60, targetLabel: "C1.1" }, now);
+    await syncRoadmap(a.id, now);
+    await syncRoadmap(b.id, now);
+    const ca = await cookieFor(a);
+
+    // Roadmap: A sees only its own goal and milestones.
+    const ra = await (await roadmapGET(req("/api/roadmap", { cookie: ca }))).json();
+    expect(ra.goal.targetSubBand).toBe("B2_2");
+    expect(ra.goal.dailyMinutes).toBe(15);
+    const bMilestoneIds = (await prisma.roadmapMilestone.findMany({ where: { streamId: b.id }, select: { id: true } })).map((m) => m.id);
+    expect(bMilestoneIds.length).toBeGreaterThan(ra.milestones.length);
+    for (const m of ra.milestones) expect(bMilestoneIds).not.toContain(m.id);
+    // Editing A's goal never touches B.
+    const put = await roadmapPUT(req("/api/roadmap", { method: "PUT", cookie: ca, body: { dailyMinutes: 45 } }));
+    expect(put.status).toBe(200);
+    expect((await prisma.learningGoal.findUniqueOrThrow({ where: { streamId: b.id } })).dailyMinutes).toBe(60);
+
+    // Practice: B's session is a 404 for A, by GET and by every action.
+    const bSession = await prisma.practiceSession.create({
+      data: { streamId: b.id, mode: "DICTATION", level: "B1_2", topic: "secret topic B", itemsJson: { items: [{ text: "Secret sentence for B only.", vi: "x" }] }, stateJson: { items: [{ attempts: 0, firstAccuracy: null, checked: false, locked: false }] } },
+    });
+    expect((await practiceGET(req(`/api/practice?session=${bSession.id}`, { cookie: ca }))).status).toBe(404);
+    const steal = await practicePOST(req("/api/practice", { cookie: ca, body: { action: "dictation.check", sessionId: bSession.id, index: 0, typed: "Secret sentence for B only." } }));
+    expect(steal.status).toBe(404);
+    const overview = await (await practiceGET(req("/api/practice", { cookie: ca }))).json();
+    expect(JSON.stringify(overview)).not.toContain("secret topic B");
+    expect((await prisma.practiceSession.findUniqueOrThrow({ where: { id: bSession.id } })).stateJson).toEqual({ items: [{ attempts: 0, firstAccuracy: null, checked: false, locked: false }] });
+
+    // Foundation progress is counted per stream.
+    const deck = FOUNDATION_DECKS[0]!;
+    const item = deck.items[0]!;
+    const ans = await foundationPOST(req("/api/practice/foundation", { cookie: ca, body: { deckId: deck.id, key: item.key, typed: item.answer, responseMs: 3000 } }));
+    expect(ans.status).toBe(200);
+    expect(await prisma.foundationProgress.count({ where: { streamId: a.id } })).toBe(1);
+    expect(await prisma.foundationProgress.count({ where: { streamId: b.id } })).toBe(0);
+    const decksB = await (await foundationGET(req("/api/practice/foundation", { cookie: await cookieFor(b) }))).json();
+    expect(decksB.decks.every((d: { mastered: number }) => d.mastered === 0)).toBe(true);
+
+    // UI language is saved per stream and mirrored in a cookie.
+    const pref = await preferencesPATCH(req("/api/preferences", { method: "PATCH", cookie: ca, body: { uiLocale: "en" } }));
+    expect(pref.headers.get("set-cookie")).toMatch(/lexiforge_locale=en/);
+    expect((await (await shellGET(req("/api/shell", { cookie: ca }))).json()).uiLocale).toBe("en");
+    expect((await (await shellGET(req("/api/shell", { cookie: await cookieFor(b) }))).json()).uiLocale).not.toBe("en");
   });
 });

@@ -19,8 +19,14 @@ export function pCorrect(theta: number, b: number): number {
   return 1 / (1 + Math.exp(-(theta - b) / IRT_SCALE));
 }
 
-export function logPosterior(theta: number, responses: readonly ItemResponse[]): number {
-  let ll = -((theta - PRIOR_MEAN) ** 2) / (2 * PRIOR_SD ** 2);
+export interface Prior {
+  mean: number;
+  sd: number;
+}
+const DEFAULT_PRIOR: Prior = { mean: PRIOR_MEAN, sd: PRIOR_SD };
+
+export function logPosterior(theta: number, responses: readonly ItemResponse[], prior: Prior = DEFAULT_PRIOR): number {
+  let ll = -((theta - prior.mean) ** 2) / (2 * prior.sd ** 2);
   for (const r of responses) {
     const p = clamp(pCorrect(theta, r.difficulty), 1e-9, 1 - 1e-9);
     ll += r.correct ? Math.log(p) : Math.log(1 - p);
@@ -28,11 +34,11 @@ export function logPosterior(theta: number, responses: readonly ItemResponse[]):
   return ll;
 }
 
-export function estimateAbility(responses: readonly ItemResponse[]): number {
-  let best = PRIOR_MEAN;
+export function estimateAbility(responses: readonly ItemResponse[], prior: Prior = DEFAULT_PRIOR): number {
+  let best = prior.mean;
   let bestLl = -Infinity;
   for (let theta = 0; theta <= 100; theta += 0.25) {
-    const ll = logPosterior(theta, responses);
+    const ll = logPosterior(theta, responses, prior);
     if (ll > bestLl) {
       bestLl = ll;
       best = theta;

@@ -13,9 +13,9 @@ import { JSON_ONLY } from "@/lib/llm/prompts";
 import { chunkPresent } from "@/lib/evaluation/chunks";
 import { comprehensibility, profileText } from "@/lib/metrics/readability";
 import { bandLabel, type SubBand } from "@/lib/metrics/scoring";
-import { excerptByWords, isCoreWord, tokenize } from "@/lib/metrics/text";
+import { countWords, excerptByWords, isCoreWord, splitSentences, tokenize } from "@/lib/metrics/text";
 import { generateQuestionSet } from "./questions";
-import { bridgeAccepted, deliveryMode, rankArticles, targetDifficulty } from "./match";
+import { BRIDGE_TOLERANCE, bridgeAccepted, deliveryMode, rankArticles, targetDifficulty } from "./match";
 
 const LESSON_WORDS = 420;
 const AUTHENTIC_EXCERPT_WORDS = 260;
@@ -64,7 +64,7 @@ export function verifyLessonContent(content: LessonContent, readingText: string)
   return problems.length ? `Fix: ${problems.join("; ")}.` : null;
 }
 
-async function writeBridge(excerpt: string, level: number, label: string, client?: LlmClient): Promise<{ text: string; difficulty: number; attempts: number }> {
+export async function writeBridge(excerpt: string, level: number, label: string, client?: LlmClient): Promise<{ text: string; difficulty: number; attempts: number }> {
   const target = targetDifficulty(level);
   let feedback = "";
   for (let attempt = 1; attempt <= 3; attempt++) {
@@ -108,6 +108,65 @@ ${JSON_ONLY}`,
   });
 }
 
+// ───────────────────────────── Micro real-world story (Pre-A1 … A1.2) ─────────────────────────────
+
+export const MicroStorySchema = z.object({
+  story: z.string().min(120).max(900),
+  glosses: z.array(z.object({ text: z.string().min(1).max(40), vi: z.string().min(1).max(80) })).min(6).max(24),
+  chunks: z.array(ChunkProposalSchema).length(3),
+  pattern: z.object({ pattern: z.string().min(3).max(120), example: z.string().min(5).max(300), explanationEn: z.string().min(5).max(400), explanationVi: z.string().min(5).max(400) }),
+});
+export type MicroStory = z.infer<typeof MicroStorySchema>;
+
+export const MICRO_WORDS: [number, number] = [50, 90];
+export const MICRO_SENTENCES: [number, number] = [4, 6];
+
+/** Deterministic acceptance rules for a micro story (length, sentence count, difficulty, verbatim glosses/chunks). */
+export function verifyMicroStory(m: MicroStory, maxDifficulty: number): string | null {
+  const problems: string[] = [];
+  const words = countWords(m.story);
+  const sentences = splitSentences(m.story).length;
+  if (words < MICRO_WORDS[0] || words > MICRO_WORDS[1]) problems.push(`story must be ${MICRO_WORDS[0]}–${MICRO_WORDS[1]} words (it has ${words})`);
+  if (sentences < MICRO_SENTENCES[0] || sentences > MICRO_SENTENCES[1]) problems.push(`story must have ${MICRO_SENTENCES[0]}–${MICRO_SENTENCES[1]} sentences (it has ${sentences})`);
+  const d = profileText(m.story).difficultyScore;
+  if (d > maxDifficulty) problems.push(`story is too hard (difficulty ${d.toFixed(1)} > ${maxDifficulty.toFixed(1)}): shorter sentences, more common words`);
+  const storyNorm = norm(m.story);
+  const missingGloss = m.glosses.filter((g) => !storyNorm.includes(norm(g.text)));
+  if (missingGloss.length) problems.push(`gloss texts not found verbatim in the story: ${missingGloss.map((g) => JSON.stringify(g.text)).join(", ")}`);
+  for (const c of m.chunks) {
+    if (tokenize(c.phrase).length < 2) problems.push(`"${c.phrase}" must be a multi-word chunk`);
+    else if (!storyNorm.includes(norm(c.sourceSentence))) problems.push(`sourceSentence for "${c.phrase}" is not copied from the story`);
+    else if (!chunkPresent(c.sourceSentence, c.phrase)) problems.push(`"${c.phrase}" is not in its sourceSentence`);
+  }
+  if (!storyNorm.includes(norm(m.pattern.example))) problems.push("pattern.example must be a sentence copied from the story");
+  return problems.length ? `Fix: ${problems.join("; ")}.` : null;
+}
+
+/** Writes a 4–6 sentence, 50–90 word story on today's real topic in high-frequency A0/A1 English. */
+export async function writeMicroStory(sourceText: string, headline: string, level: number, client?: LlmClient): Promise<MicroStory> {
+  const maxDifficulty = targetDifficulty(level) + BRIDGE_TOLERANCE;
+  return generateStructured({
+    schema: MicroStorySchema,
+    system: "You write graded micro stories for absolute beginners learning English from real news. Facts stay true to the source; language is A0/A1.",
+    user: `Today's real news headline: ${headline}
+Write a MICRO REAL-WORLD STORY about this news for an absolute beginner:
+- ${MICRO_SENTENCES[0]}–${MICRO_SENTENCES[1]} very short sentences, ${MICRO_WORDS[0]}–${MICRO_WORDS[1]} words total, present or simple past, the 500 most common English words where possible.
+- Keep the real facts (who, what, where) from the source. No invented numbers.
+- glosses: 8–16 words or short phrases copied exactly from the story, each with a simple Vietnamese meaning (tap-to-translate).
+- chunks: exactly 3 useful survival chunks (2–4 words) copied from the story, each with the exact story sentence, English meaning, Vietnamese meaning, cefrTier "A2".
+- pattern: one basic sentence pattern from the story with a plain explanation (Vietnamese without grammar jargon).
+
+SOURCE:
+${sourceText.slice(0, 3000)}
+
+OUTPUT SCHEMA: {"story": string, "glosses":[{"text","vi"}], "chunks":[{"phrase","sourceSentence","meaningEn","meaningVi","cefrTier"}], "pattern":{"pattern","example","explanationEn","explanationVi"}}
+${JSON_ONLY}`,
+    tier: "standard",
+    client,
+    validate: (v) => verifyMicroStory(v, maxDifficulty),
+  });
+}
+
 export type LessonWithChunks = LessonUnit & { chunks: LexicalChunk[]; article: DailyArticle };
 
 export async function synthesizeLesson(streamId: string, profile: ProficiencyProfile, articleId: string | undefined, now: Date, client?: LlmClient): Promise<LessonWithChunks> {
@@ -131,13 +190,24 @@ export async function synthesizeLesson(streamId: string, profile: ProficiencyPro
   const lessonSource = excerptByWords(article.content, LESSON_WORDS);
   let readingText = lessonSource;
   let difficulty = profileText(lessonSource).difficultyScore;
-  if (mode === "GRADED_BRIDGE") {
-    const bridge = await writeBridge(lessonSource, level, label, client);
-    readingText = bridge.text;
-    difficulty = bridge.difficulty;
+  let content: LessonContent;
+  let glosses: MicroStory["glosses"] | null = null;
+  if (mode === "MICRO_STORY") {
+    const micro = await writeMicroStory(lessonSource, article.title, level, client);
+    readingText = micro.story;
+    difficulty = profileText(micro.story).difficultyScore;
+    glosses = micro.glosses;
+    content = { chunks: micro.chunks, grammarInWild: [micro.pattern] };
+  } else {
+    if (mode === "GRADED_BRIDGE") {
+      const bridge = await writeBridge(lessonSource, level, label, client);
+      readingText = bridge.text;
+      difficulty = bridge.difficulty;
+    }
+    content = await extractContent(readingText, label, client);
   }
-  const content = await extractContent(readingText, label, client);
-  const questions = await generateQuestionSet({ text: readingText, count: 3, levelLabel: label, chunks: content.chunks.map((c) => c.phrase), client });
+  const beginner = mode === "MICRO_STORY";
+  const questions = await generateQuestionSet({ text: readingText, count: beginner ? 2 : 3, levelLabel: label, chunks: content.chunks.map((c) => c.phrase), beginner, client });
   const known = new Set((await prisma.srsCard.findMany({ where: { streamId }, select: { front: true } })).flatMap((c) => tokenize(c.front)));
 
   return prisma.lessonUnit.create({
@@ -146,13 +216,16 @@ export async function synthesizeLesson(streamId: string, profile: ProficiencyPro
       articleId: article.id,
       targetSubBand: profile.subBand,
       difficultyScore: difficulty,
-      isGraded: mode === "GRADED_BRIDGE",
+      isGraded: mode !== "AUTHENTIC",
+      deliveryMode: mode,
+      glossJson: glosses ?? undefined,
       readingText,
       authenticExcerpt,
       comprehensibility: comprehensibility(readingText, known),
       grammarInWild: content.grammarInWild,
       questions: questions.questions,
       productionPrompt: questions.productionPrompt,
+      productionPromptVi: questions.productionPromptVi,
       createdAt: now,
       chunks: {
         create: content.chunks.map((c) => ({
