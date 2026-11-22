@@ -3,7 +3,8 @@ import { prisma } from "@/lib/db";
 import { setLlmClientForTesting } from "@/lib/llm/client";
 import { answerPlacement, startPlacement, startPromotionAudit, submitPlacementWriting } from "@/lib/diagnostic/service";
 import { ERROR_ITEMS, READING_PASSAGES } from "@/lib/diagnostic/item-bank";
-import { getLocalUser, getProfile } from "@/lib/profile/service";
+import { getProfile } from "@/lib/profile/service";
+import { testStream } from "../helpers/db";
 import { AppError } from "@/lib/http";
 import { resetDb } from "../helpers/db";
 import { errorFor, learnerText, ScriptedLlm } from "../helpers/scripted-llm";
@@ -34,7 +35,7 @@ describe("placement audit (DB + scripted evaluator)", () => {
   afterAll(() => setLlmClientForTesting(null));
 
   it("runs the full 3-part audit and creates a profile + baseline snapshot", async () => {
-    const user = await getLocalUser();
+    const user = await testStream();
     const now = new Date("2026-05-01T08:00:00Z");
     let step = await startPlacement(user.id, now);
     // Resuming returns the same in-progress assessment.
@@ -59,17 +60,17 @@ describe("placement audit (DB + scripted evaluator)", () => {
     const profile = await getProfile(user.id);
     expect(profile).not.toBeNull();
     expect(profile?.gai).toBe(report.parts.writing.gai.gai);
-    expect(await prisma.proficiencySnapshot.count({ where: { userId: user.id, trigger: "DIAGNOSTIC" } })).toBe(1);
-    expect(await prisma.errorLog.count({ where: { userId: user.id } })).toBe(2);
+    expect(await prisma.proficiencySnapshot.count({ where: { streamId: user.id, trigger: "DIAGNOSTIC" } })).toBe(1);
+    expect(await prisma.errorLog.count({ where: { streamId: user.id } })).toBe(2);
     // Finished assessments cannot be resubmitted.
     await expect(submitPlacementWriting(user.id, step.assessmentId, SAMPLE, now)).rejects.toMatchObject({ code: "ALREADY_COMPLETED" });
   });
 
   it("locks the Band Promotion Audit until conditions are met", async () => {
-    const user = await getLocalUser();
+    const user = await testStream();
     await expect(startPromotionAudit(user.id, new Date())).rejects.toMatchObject({ code: "CALIBRATION_REQUIRED" });
     await prisma.proficiencyProfile.create({
-      data: { userId: user.id, subBand: "B1_1", ieltsEstimate: 5, ieltsLow: 4.5, ieltsHigh: 5.5, gai: 70, lri: 60, cpr: 70, rss: 0, eri: 100, composite: 66, abilityLevel: 30 },
+      data: { streamId: user.id, subBand: "B1_1", ieltsEstimate: 5, ieltsLow: 4.5, ieltsHigh: 5.5, gai: 70, lri: 60, cpr: 70, rss: 0, eri: 100, composite: 66, abilityLevel: 30 },
     });
     await expect(startPromotionAudit(user.id, new Date())).rejects.toMatchObject({ code: "PROMOTION_LOCKED" });
   });

@@ -29,18 +29,12 @@ export class CalibrationRequiredError extends Error {
   }
 }
 
-export async function getLocalUser() {
-  const existing = await prisma.user.findFirst({ orderBy: { createdAt: "asc" } });
-  if (existing) return existing;
-  return prisma.user.create({ data: { settings: { create: {} }, progress: { create: {} } } });
+export async function getProfile(streamId: string): Promise<ProficiencyProfile | null> {
+  return prisma.proficiencyProfile.findUnique({ where: { streamId } });
 }
 
-export async function getProfile(userId: string): Promise<ProficiencyProfile | null> {
-  return prisma.proficiencyProfile.findUnique({ where: { userId } });
-}
-
-export async function requireProfile(userId: string): Promise<ProficiencyProfile> {
-  const p = await getProfile(userId);
+export async function requireProfile(streamId: string): Promise<ProficiencyProfile> {
+  const p = await getProfile(streamId);
   if (!p) throw new CalibrationRequiredError();
   return p;
 }
@@ -48,24 +42,24 @@ export async function requireProfile(userId: string): Promise<ProficiencyProfile
 const PRODUCTION_KINDS: SubmissionKind[] = ["PRODUCTION", "DIAGNOSTIC_WRITING", "PROMOTION_AUDIT"];
 
 /** First-attempt production sessions with their errors (ERI input). */
-export async function loadProductionSessions(userId: string): Promise<ProductionSession[]> {
+export async function loadProductionSessions(streamId: string): Promise<ProductionSession[]> {
   const subs = await prisma.submissionAttempt.findMany({
-    where: { userId, kind: { in: PRODUCTION_KINDS }, attemptNumber: 1, rejected: false },
+    where: { streamId, kind: { in: PRODUCTION_KINDS }, attemptNumber: 1, rejected: false },
     select: { createdAt: true, wordCount: true, errors: { select: { subtype: true, severity: true } } },
     orderBy: { createdAt: "asc" },
   });
   return subs.map((s) => ({ at: s.createdAt, words: s.wordCount, errors: s.errors }));
 }
 
-export async function computeRetention(userId: string, now: Date) {
+export async function computeRetention(streamId: string, now: Date) {
   const [cards, reviews] = await Promise.all([
-    prisma.srsCard.findMany({ where: { userId }, select: { stability: true, lastReviewAt: true, state: true } }),
-    prisma.srsReview.findMany({ where: { card: { userId } }, select: { elapsedDays: true, recalled: true } }),
+    prisma.srsCard.findMany({ where: { streamId }, select: { stability: true, lastReviewAt: true, state: true } }),
+    prisma.srsReview.findMany({ where: { streamId }, select: { elapsedDays: true, recalled: true } }),
   ]);
   return computeRss(reviews, cards, now, retrievability);
 }
 
-export async function createProfileFromPlacement(userId: string, r: PlacementResult, now: Date): Promise<ProficiencyProfile> {
+export async function createProfileFromPlacement(streamId: string, r: PlacementResult, now: Date): Promise<ProficiencyProfile> {
   const data = {
     subBand: r.subBand as CefrSubBand,
     ieltsEstimate: r.ielts.band,
@@ -88,7 +82,7 @@ export async function createProfileFromPlacement(userId: string, r: PlacementRes
     lastActivityAt: now,
     calibratedAt: now,
   };
-  const profile = await prisma.proficiencyProfile.upsert({ where: { userId }, update: data, create: { userId, ...data } });
+  const profile = await prisma.proficiencyProfile.upsert({ where: { streamId }, update: data, create: { streamId, ...data } });
   await snapshot(profile, "DIAGNOSTIC", null, now);
   return profile;
 }
@@ -96,7 +90,7 @@ export async function createProfileFromPlacement(userId: string, r: PlacementRes
 async function snapshot(p: ProficiencyProfile, trigger: string, errorsPer100W: number | null, now: Date) {
   await prisma.proficiencySnapshot.create({
     data: {
-      userId: p.userId,
+      streamId: p.streamId,
       takenAt: now,
       subBand: p.subBand,
       ieltsEstimate: p.ieltsEstimate,
@@ -134,9 +128,9 @@ export interface SessionOutcome {
 }
 
 /** Applies one verified session: EWMA metrics, difficulty-adjusted level, promotion lock, snapshot. */
-export async function recordSession(userId: string, s: SessionInput, now: Date): Promise<SessionOutcome> {
-  const p = await requireProfile(userId);
-  const [retention, sessions] = await Promise.all([computeRetention(userId, now), loadProductionSessions(userId)]);
+export async function recordSession(streamId: string, s: SessionInput, now: Date): Promise<SessionOutcome> {
+  const p = await requireProfile(streamId);
+  const [retention, sessions] = await Promise.all([computeRetention(streamId, now), loadProductionSessions(streamId)]);
   const eri = computeEri(sessions, now);
   const gate = eriGate(sessions);
   const sessionComposite =
@@ -163,7 +157,7 @@ export async function recordSession(userId: string, s: SessionInput, now: Date):
     rss: retention.matureReviews > 0 ? retention.rss : null,
   });
   const updated = await prisma.proficiencyProfile.update({
-    where: { userId },
+    where: { streamId },
     data: {
       gai,
       lri,
@@ -191,10 +185,10 @@ export async function recordSession(userId: string, s: SessionInput, now: Date):
 }
 
 /** Lazily applies honest decay (inactivity + retention) on dashboard load. Idempotent per day. */
-export async function applyDecay(userId: string, now: Date): Promise<ProficiencyProfile | null> {
-  const p = await getProfile(userId);
+export async function applyDecay(streamId: string, now: Date): Promise<ProficiencyProfile | null> {
+  const p = await getProfile(streamId);
   if (!p) return null;
-  const retention = await computeRetention(userId, now);
+  const retention = await computeRetention(streamId, now);
   const decay = inactivityDecay(p.abilityLevel, p.lastActivityAt, now, p.decayedDays);
   const rssChanged = retention.rss !== null && Math.abs(retention.rss - p.rss) >= 0.5;
   if (decay.newlyDecayedDays === 0 && !rssChanged) return p;
@@ -215,14 +209,14 @@ export async function applyDecay(userId: string, now: Date): Promise<Proficiency
     ieltsHigh: ielts.high,
     ...(band !== p.subBand || decay.newlyDecayedDays > 0 ? { consecutiveQualifying: 0, promotionAuditUnlocked: false } : {}),
   };
-  const updated = await prisma.proficiencyProfile.update({ where: { userId }, data });
+  const updated = await prisma.proficiencyProfile.update({ where: { streamId }, data });
   if (decay.newlyDecayedDays > 0 || band !== p.subBand) await snapshot(updated, band !== p.subBand ? "DEMOTION" : "DECAY", null, now);
   return updated;
 }
 
 /** Applies a Band Promotion Audit outcome. */
-export async function applyPromotionAudit(userId: string, passed: boolean, targetBand: SubBand, now: Date): Promise<ProficiencyProfile> {
-  const p = await requireProfile(userId);
+export async function applyPromotionAudit(streamId: string, passed: boolean, targetBand: SubBand, now: Date): Promise<ProficiencyProfile> {
+  const p = await requireProfile(streamId);
   const data: Prisma.ProficiencyProfileUpdateInput = passed
     ? {
         subBand: targetBand as CefrSubBand,
@@ -233,10 +227,10 @@ export async function applyPromotionAudit(userId: string, passed: boolean, targe
         lastActivityAt: now,
       }
     : { consecutiveQualifying: 0, promotionAuditUnlocked: false, lastActivityAt: now };
-  const updated = await prisma.proficiencyProfile.update({ where: { userId }, data });
+  const updated = await prisma.proficiencyProfile.update({ where: { streamId }, data });
   if (updated.abilityLevel !== p.abilityLevel) {
     const ielts = ieltsEstimate(updated.abilityLevel, updated.evidenceWords, updated.evidenceItems);
-    await prisma.proficiencyProfile.update({ where: { userId }, data: { ieltsEstimate: ielts.band, ieltsLow: ielts.low, ieltsHigh: ielts.high } });
+    await prisma.proficiencyProfile.update({ where: { streamId }, data: { ieltsEstimate: ielts.band, ieltsLow: ielts.low, ieltsHigh: ielts.high } });
   }
   await snapshot(updated, passed ? "PROMOTION" : "PROMOTION_FAILED", null, now);
   return updated;

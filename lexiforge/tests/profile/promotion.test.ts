@@ -1,24 +1,24 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { prisma } from "@/lib/db";
-import { applyDecay, applyPromotionAudit, getLocalUser, recordSession } from "@/lib/profile/service";
-import { resetDb } from "../helpers/db";
+import { applyDecay, applyPromotionAudit, recordSession } from "@/lib/profile/service";
+import { resetDb, testStream } from "../helpers/db";
 
 const T0 = new Date("2026-08-01T09:00:00Z");
 const day = (n: number) => new Date(T0.getTime() + n * 86_400_000);
 
 async function setup(level = 40) {
-  const user = await getLocalUser();
+  const user = await testStream();
   await prisma.proficiencyProfile.create({
-    data: { userId: user.id, subBand: "B1_2", ieltsEstimate: 5, ieltsLow: 4.5, ieltsHigh: 5.5, gai: 80, lri: 75, cpr: 80, rss: 0, eri: 100, composite: 78, abilityLevel: level, lastActivityAt: T0 },
+    data: { streamId: user.id, subBand: "B1_2", ieltsEstimate: 5, ieltsLow: 4.5, ieltsHigh: 5.5, gai: 80, lri: 75, cpr: 80, rss: 0, eri: 100, composite: 78, abilityLevel: level, lastActivityAt: T0 },
   });
   return user;
 }
 
 /** Stores a first-attempt production submission (ERI input) with optional critical subtype. */
-async function production(userId: string, at: Date, criticalSubtype?: string) {
-  const sub = await prisma.submissionAttempt.create({ data: { userId, kind: "PRODUCTION", text: "text", wordCount: 120, taskDifficulty: 45, createdAt: at } });
+async function production(streamId: string, at: Date, criticalSubtype?: string) {
+  const sub = await prisma.submissionAttempt.create({ data: { streamId, kind: "PRODUCTION", text: "text", wordCount: 120, taskDifficulty: 45, createdAt: at } });
   if (criticalSubtype) {
-    await prisma.errorLog.create({ data: { userId, submissionId: sub.id, category: "GRAMMAR", subtype: criticalSubtype, severity: "CRITICAL", spanStart: 0, spanEnd: 1, original: "t", correction: "T", ruleEn: "r", ruleVi: "q", createdAt: at } });
+    await prisma.errorLog.create({ data: { streamId, submissionId: sub.id, category: "GRAMMAR", subtype: criticalSubtype, severity: "CRITICAL", spanStart: 0, spanEnd: 1, original: "t", correction: "T", ruleEn: "r", ruleVi: "q", createdAt: at } });
   }
 }
 
@@ -60,7 +60,7 @@ describe("strict promotion lock", () => {
       await production(user.id, day(i), i < 3 ? "ARTICLE_OMISSION" : undefined);
       await recordSession(user.id, strong, day(i));
     }
-    const p = await prisma.proficiencyProfile.findUniqueOrThrow({ where: { userId: user.id } });
+    const p = await prisma.proficiencyProfile.findUniqueOrThrow({ where: { streamId: user.id } });
     expect(p.consecutiveQualifying).toBe(5);
     expect(p.promotionAuditUnlocked).toBe(false);
   });
@@ -86,6 +86,6 @@ describe("strict promotion lock", () => {
     expect(decayed?.subBand).toBe("B1_2");
     // Idempotent on the same day.
     expect((await applyDecay(user.id, day(40)))?.abilityLevel).toBe(33.5);
-    expect(await prisma.proficiencySnapshot.count({ where: { userId: user.id, trigger: "DEMOTION" } })).toBe(1);
+    expect(await prisma.proficiencySnapshot.count({ where: { streamId: user.id, trigger: "DEMOTION" } })).toBe(1);
   });
 });

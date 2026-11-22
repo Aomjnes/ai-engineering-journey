@@ -12,10 +12,10 @@ wrong (or this file must be updated in the same commit).
 ```bash
 npm run typecheck      # tsc --noEmit, strict + noUncheckedIndexedAccess
 npm run lint           # eslint (next/core-web-vitals + typescript); TODO/FIXME comments are lint errors
-npm test               # vitest: metrics, schemas, pipelines (offline, deterministic)
+npm test               # vitest on Postgres (lexiforge_test): metrics, isolation, pipelines (deterministic LLM double)
 npm run test:live      # live RSS/Readability integration (needs network access to feed hosts)
 npm run build          # prisma generate + next build
-npx prisma validate && npx prisma db push
+npx prisma validate && npm run db:push
 ```
 
 ## Architecture
@@ -48,8 +48,48 @@ prisma/schema.prisma      complete schema; seed.ts seeds feeds + local user
 tests/                    vitest (unit) and tests/integration (live network)
 ```
 
-Single local learner: the app auto-creates one `User` row (`getLocalUser()`).
-The schema is multi-user ready.
+## Data & streams (PostgreSQL)
+
+- Database: PostgreSQL (Neon / Supabase). `DATABASE_URL` = pooled runtime URL, `DIRECT_URL` = direct URL for
+  `prisma db push`. No SQLite anywhere. Tests use a dedicated `lexiforge_test` database (dropped/recreated per run).
+- **Streams:** up to `MAX_STREAMS = 5` `StreamAccount` rows, one per private access code in `ALLOWED_STREAM_CODES`
+  (default `000,001,002,003,004`, max 5 entries). Codes are never listed; only the label is editable.
+- **Shared tables** (no learner data): `SourceFeed`, `DailyArticle`, `ExplanationCache`, `AccessFailure`.
+- **Isolated tables** (every row has `streamId` → `StreamAccount`, `onDelete: Cascade`, indexed): `ProficiencyProfile`,
+  `ProficiencySnapshot`, `DiagnosticAssessment`, `LessonUnit` (`@@unique([streamId, articleId])`), `LexicalChunk`,
+  `UserProgress`, `SubmissionAttempt`, `ErrorLog`, `SrsCard`, `SrsReview`, `UserSettings`.
+- **Isolation invariant:** every Prisma call on an isolated model includes `streamId` in its `where`/`data`
+  (single-row reads use `findFirst({ where: { id, streamId } })`, updates use `where: { id, streamId }`).
+  `tests/security/scope-audit.test.ts` statically fails the suite if any call omits it.
+- **Sessions:** `POST /api/stream/enter` validates the code (10 failures / 15 min / IP → 429, stored in
+  `AccessFailure` so it works across serverless instances), lazily creates the stream, and sets `lexiforge_stream`
+  = base64url(payload).HMAC-SHA256(SESSION_SECRET), HttpOnly, SameSite=Lax, Secure in production, 30 days.
+  `src/middleware.ts` verifies the signature on every non-public route (pages → redirect `/access`, APIs → 401);
+  route handlers call `requireStream(req)`, which re-verifies and loads the stream (revoked codes → 401).
+  Public: `/access`, `/api/stream/enter`, `/api/stream/logout`, `/api/cron/ingest` (CRON_SECRET or session).
+- **Cross-device sync:** all user routes are `force-dynamic` and fetched with `cache: "no-store"`; the client
+  re-pulls state on `visibilitychange`/`focus` (`useCrossDeviceSync`). localStorage keys are
+  `lexiforge:${streamId}:…` so streams on one device never share drafts or UI state.
+
+## LLM thinking tiers & explainer latency
+
+- `CompletionRequest.tier`: `minimal` (explainer) · `standard` (lesson synthesis, question sets) ·
+  `thorough` (evaluate, diagnostic, promotion audit — never lowered).
+  Gemini 3+: `thinkingLevel` MINIMAL / LOW / HIGH; Gemini 2.5: `thinkingBudget` 0 (Pro 128) / 2048 / dynamic.
+  Anthropic: effort low / medium / high (adaptive thinking). OpenAI reasoning models: effort minimal / medium / high.
+- `/api/explain`: tier `minimal`, temperature 0.2, `maxOutputTokens` 3000, concise prompt including the learner's
+  CEFR level. Results are cached in `ExplanationCache` keyed by
+  sha256(normalized selection | first 240 chars of normalized context | CEFR level); hits return in milliseconds
+  (`X-Explain-Cache: HIT`). The lesson workspace also keeps an in-memory Map per page.
+- Measured on gemini-3.5-flash (free tier): explainer 1–2 min before → ~8 s uncached, ~4 ms cached;
+  thorough evaluation 40–64 s (hence 300 s `maxDuration` on grading routes).
+
+## Deployment (Vercel)
+
+- Project root directory: `lexiforge/` (holds `vercel.json`). Build: `prisma generate && next build`.
+- Vercel Cron: `GET /api/cron/ingest` daily at `0 22 * * *` (05:00 Hanoi), `Authorization: Bearer $CRON_SECRET`.
+  `node-cron` never starts when `VERCEL=1`.
+- `maxDuration`: explain & cron 60 s; evaluate, diagnostic, lessons/synthesize 300 s.
 
 ## Pedagogical invariants (never violate)
 

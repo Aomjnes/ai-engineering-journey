@@ -2,9 +2,12 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { handle, parseBody } from "@/lib/http";
 import { answerPlacement, placementStatus, startPlacement, startPromotionAudit, submitPlacementWriting, submitPromotionAudit } from "@/lib/diagnostic/service";
-import { getLocalUser, getProfile } from "@/lib/profile/service";
+import { getProfile } from "@/lib/profile/service";
+import { requireStream } from "@/lib/auth/stream";
 
 export const dynamic = "force-dynamic";
+// Thorough grading measured 40–64 s on Gemini Flash; 60 s would cut real evaluations. Vercel Fluid Compute allows 300 s.
+export const maxDuration = 300;
 
 const BodySchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("start"), kind: z.enum(["PLACEMENT", "PROMOTION"]) }),
@@ -24,28 +27,28 @@ const BodySchema = z.discriminatedUnion("action", [
   }),
 ]);
 
-export async function GET() {
+export async function GET(req: Request) {
   return handle(async () => {
-    const user = await getLocalUser();
-    const [profile, placement] = await Promise.all([getProfile(user.id), placementStatus(user.id)]);
+    const stream = await requireStream(req);
+    const [profile, placement] = await Promise.all([getProfile(stream.id), placementStatus(stream.id)]);
     return NextResponse.json({ calibrated: profile !== null, placement });
   });
 }
 
 export async function POST(req: Request) {
   return handle(async () => {
+    const stream = await requireStream(req);
     const body = await parseBody(req, BodySchema);
-    const user = await getLocalUser();
     const now = new Date();
     switch (body.action) {
       case "start":
-        return NextResponse.json(body.kind === "PLACEMENT" ? await startPlacement(user.id, now) : await startPromotionAudit(user.id, now));
+        return NextResponse.json(body.kind === "PLACEMENT" ? await startPlacement(stream.id, now) : await startPromotionAudit(stream.id, now));
       case "answer":
-        return NextResponse.json(await answerPlacement(user.id, body.assessmentId, body));
+        return NextResponse.json(await answerPlacement(stream.id, body.assessmentId, body));
       case "write":
-        return NextResponse.json(await submitPlacementWriting(user.id, body.assessmentId, body.text, now));
+        return NextResponse.json(await submitPlacementWriting(stream.id, body.assessmentId, body.text, now));
       case "submitPromotion":
-        return NextResponse.json(await submitPromotionAudit(user.id, body.assessmentId, body.answers, body.writing, now));
+        return NextResponse.json(await submitPromotionAudit(stream.id, body.assessmentId, body.answers, body.writing, now));
     }
   });
 }

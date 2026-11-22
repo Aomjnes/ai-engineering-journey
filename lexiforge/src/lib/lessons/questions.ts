@@ -46,7 +46,7 @@ ${JSON_ONLY}`;
     schema: QuestionSetSchema,
     system: "You are an assessment designer for an English-acquisition program. You write precise, unambiguous items with fixed rubrics.",
     user,
-    effort: "medium",
+    tier: "standard",
     client: opts.client,
     validate: (v) => {
       if (v.questions.length !== opts.count) return `Return exactly ${opts.count} questions.`;

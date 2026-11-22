@@ -29,11 +29,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
       </head>
       <body className="min-h-screen">
-        <PrefsProvider>
-          <ShellDataProvider>
+        <ShellDataProvider>
+          <PrefsProvider>
             <AppShell>{children}</AppShell>
-          </ShellDataProvider>
-        </PrefsProvider>
+          </PrefsProvider>
+        </ShellDataProvider>
       </body>
     </html>
   );

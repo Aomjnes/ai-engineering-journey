@@ -1,15 +1,41 @@
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, ThinkingLevel, type ThinkingConfig } from "@google/genai";
 import { detectProvider, type LlmProviderName } from "@/lib/env";
 
-export type Effort = "low" | "medium" | "high";
+/**
+ * Per-task reasoning profile.
+ * - minimal: latency-critical display tasks (4-mode explainer). Thinking off / lowest supported level.
+ * - standard: content generation (lesson synthesis, question sets).
+ * - thorough: anything that produces graded evidence (evaluate, diagnostic, promotion audit). Never lowered.
+ */
+export type ThinkingTier = "minimal" | "standard" | "thorough";
 
 export interface CompletionRequest {
   system: string;
   user: string;
   maxTokens?: number;
-  effort?: Effort;
+  tier?: ThinkingTier;
+  /** Honoured only where the provider/model accepts sampling parameters (Gemini). */
+  temperature?: number;
+}
+
+const ANTHROPIC_EFFORT: Record<ThinkingTier, "low" | "medium" | "high"> = { minimal: "low", standard: "medium", thorough: "high" };
+const OPENAI_EFFORT: Record<ThinkingTier, "minimal" | "medium" | "high"> = { minimal: "minimal", standard: "medium", thorough: "high" };
+
+/**
+ * Gemini thinking configuration for a tier. Gemini 3+ models take `thinkingLevel`; 2.5 models take a token
+ * `thinkingBudget` (Flash can switch thinking off with 0; Pro's minimum is 128).
+ */
+export function geminiThinkingConfig(model: string, tier: ThinkingTier): ThinkingConfig {
+  const m = model.toLowerCase();
+  if (/gemini-2\.5/.test(m)) {
+    const pro = m.includes("pro");
+    const budget = tier === "minimal" ? (pro ? 128 : 0) : tier === "standard" ? 2048 : -1; // -1 = dynamic (model decides, full depth)
+    return { thinkingBudget: budget, includeThoughts: false };
+  }
+  const level = tier === "minimal" ? ThinkingLevel.MINIMAL : tier === "standard" ? ThinkingLevel.LOW : ThinkingLevel.HIGH;
+  return { thinkingLevel: level, includeThoughts: false };
 }
 
 /** Minimal provider-agnostic surface. Implementations must return the raw text of the reply. */
@@ -45,7 +71,8 @@ class AnthropicLlm implements LlmClient {
   constructor(apiKey: string, readonly model: string) {
     this.client = new Anthropic({ apiKey, maxRetries: 3 });
   }
-  async complete({ system, user, maxTokens = 16000, effort = "medium" }: CompletionRequest): Promise<string> {
+  async complete({ system, user, maxTokens = 16000, tier = "standard" }: CompletionRequest): Promise<string> {
+    const effort = ANTHROPIC_EFFORT[tier];
     try {
       const useFallback = FALLBACK_CAPABLE.has(this.model);
       const response = await this.client.beta.messages.create({
@@ -77,13 +104,15 @@ class OpenAiLlm implements LlmClient {
   constructor(apiKey: string, readonly model: string) {
     this.client = new OpenAI({ apiKey, maxRetries: 3 });
   }
-  async complete({ system, user, maxTokens = 16000 }: CompletionRequest): Promise<string> {
+  async complete({ system, user, maxTokens = 16000, tier = "standard" }: CompletionRequest): Promise<string> {
     try {
+      const reasoning = /^(gpt-5|o\d)/.test(this.model) ? { reasoning: { effort: OPENAI_EFFORT[tier] } } : {};
       const response = await this.client.responses.create({
         model: this.model,
         instructions: system,
         input: user,
         max_output_tokens: maxTokens,
+        ...reasoning,
       });
       return response.output_text;
     } catch (error) {
@@ -101,17 +130,27 @@ class GeminiLlm implements LlmClient {
   constructor(apiKey: string, readonly model: string) {
     this.client = new GoogleGenAI({ apiKey });
   }
-  async complete({ system, user, maxTokens = 16000 }: CompletionRequest): Promise<string> {
+  async complete({ system, user, maxTokens = 16000, tier = "standard", temperature }: CompletionRequest): Promise<string> {
     try {
       const response = await this.client.models.generateContent({
         model: this.model,
         contents: user,
-        config: { systemInstruction: system, responseMimeType: "application/json", maxOutputTokens: maxTokens },
+        config: {
+          systemInstruction: system,
+          responseMimeType: "application/json",
+          maxOutputTokens: maxTokens,
+          thinkingConfig: geminiThinkingConfig(this.model, tier),
+          ...(temperature === undefined ? {} : { temperature }),
+        },
       });
+      const finish = response.candidates?.[0]?.finishReason;
+      if (finish === "MAX_TOKENS") throw new LlmRequestError("Gemini reply was truncated (max tokens).", "LLM_TRUNCATED", true);
       return response.text ?? "";
     } catch (error) {
+      if (error instanceof LlmRequestError) throw error;
       const message = error instanceof Error ? error.message : String(error);
-      throw new LlmRequestError(`Gemini API error: ${message}`, "LLM_UPSTREAM", true);
+      const rate = /\b429\b|RESOURCE_EXHAUSTED|quota/i.test(message);
+      throw new LlmRequestError(`Gemini API error: ${message}`, rate ? "LLM_RATE_LIMIT" : "LLM_UPSTREAM", !rate);
     }
   }
 }

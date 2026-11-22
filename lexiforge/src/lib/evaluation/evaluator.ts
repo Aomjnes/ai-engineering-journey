@@ -87,7 +87,7 @@ export async function evaluateWriting(task: WritingTask, client?: LlmClient): Pr
     schema: WritingEvidenceSchema,
     system: EDITOR_PERSONA,
     user: writingPrompt(task),
-    effort: "high",
+    tier: "thorough",
     client,
     validate: (v) => {
       const praise = findBannedPraise(`${v.verdictEn} ${v.chunkUsage.map((c) => c.note).join(" ")}`);
@@ -177,7 +177,7 @@ ${JSON_ONLY}`;
     schema: ComprehensionEvidenceSchema,
     system: EDITOR_PERSONA,
     user,
-    effort: "medium",
+    tier: "thorough",
     client,
     validate: (v) => {
       if (v.rubric.length !== task.rubric.length) return `rubric must have exactly ${task.rubric.length} entries in the given order.`;

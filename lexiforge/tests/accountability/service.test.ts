@@ -2,17 +2,16 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { prisma } from "@/lib/db";
 import { setLlmClientForTesting } from "@/lib/llm/client";
 import { accountabilityStatus, assertLessonsUnlocked, completeDetox, errorGraveyard, startDetox, submitDetoxRewrite } from "@/lib/accountability/service";
-import { getLocalUser } from "@/lib/profile/service";
-import { resetDb } from "../helpers/db";
+import { resetDb, testStream } from "../helpers/db";
 import { errorFor, learnerText, ScriptedLlm } from "../helpers/scripted-llm";
 
 const T0 = new Date("2026-06-01T10:00:00Z");
 const at = (s: number) => new Date(T0.getTime() + s * 1000);
 
-async function seedErrors(userId: string) {
+async function seedErrors(streamId: string) {
   for (let i = 0; i < 4; i++) {
-    const sub = await prisma.submissionAttempt.create({ data: { userId, kind: "PRODUCTION", text: "He go to market yesterday and buy fish.", wordCount: 8, taskDifficulty: 40, createdAt: new Date(T0.getTime() - (i + 1) * 86_400_000) } });
-    await prisma.errorLog.create({ data: { userId, submissionId: sub.id, category: "GRAMMAR", subtype: "TENSE_SHIFT", severity: "CRITICAL", spanStart: 3, spanEnd: 5, original: "go", correction: "went", ruleEn: "Past time needs past tense.", ruleVi: "Thời quá khứ cần động từ quá khứ.", createdAt: sub.createdAt } });
+    const sub = await prisma.submissionAttempt.create({ data: { streamId, kind: "PRODUCTION", text: "He go to market yesterday and buy fish.", wordCount: 8, taskDifficulty: 40, createdAt: new Date(T0.getTime() - (i + 1) * 86_400_000) } });
+    await prisma.errorLog.create({ data: { streamId, submissionId: sub.id, category: "GRAMMAR", subtype: "TENSE_SHIFT", severity: "CRITICAL", spanStart: 3, spanEnd: 5, original: "go", correction: "went", ruleEn: "Past time needs past tense.", ruleVi: "Thời quá khứ cần động từ quá khứ.", createdAt: sub.createdAt } });
   }
 }
 
@@ -32,7 +31,7 @@ describe("Error Detox accountability gate", () => {
   afterAll(() => setLlmClientForTesting(null));
 
   it("locks lessons on recurring error debt and only unlocks after a timed, clean detox", async () => {
-    const user = await getLocalUser();
+    const user = await testStream();
     await seedErrors(user.id);
     const status = await accountabilityStatus(user.id, T0);
     expect(status.errorDebt).toBe(12);
@@ -59,11 +58,11 @@ describe("Error Detox accountability gate", () => {
   });
 
   it("locks on overdue SRS cards", async () => {
-    const user = await getLocalUser();
+    const user = await testStream();
     await prisma.srsCard.createMany({
-      data: Array.from({ length: 15 }, (_, i) => ({ userId: user.id, front: `chunk ${i}`, back: "{}", state: "REVIEW", stability: 3, lastReviewAt: new Date(T0.getTime() - 5 * 86_400_000), dueAt: new Date(T0.getTime() - 86_400_000) })),
+      data: Array.from({ length: 15 }, (_, i) => ({ streamId: user.id, front: `chunk ${i}`, back: "{}", state: "REVIEW", stability: 3, lastReviewAt: new Date(T0.getTime() - 5 * 86_400_000), dueAt: new Date(T0.getTime() - 86_400_000) })),
     });
-    await prisma.userProgress.upsert({ where: { userId: user.id }, update: { lastReviewAt: new Date(T0.getTime() - 86_400_000) }, create: { userId: user.id } });
+    await prisma.userProgress.upsert({ where: { streamId: user.id }, update: { lastReviewAt: new Date(T0.getTime() - 86_400_000) }, create: { streamId: user.id } });
     const s = await accountabilityStatus(user.id, T0);
     expect(s.overdueCards).toBe(15);
     expect(s.locked).toBe(true);

@@ -21,8 +21,8 @@ export function gapSentence(sentence: string, phrase: string): string {
   return "_____";
 }
 
-export async function dueCards(userId: string, now: Date, limit = 30) {
-  const cards = await prisma.srsCard.findMany({ where: { userId, dueAt: { lte: now } }, orderBy: [{ dueAt: "asc" }], take: limit });
+export async function dueCards(streamId: string, now: Date, limit = 30) {
+  const cards = await prisma.srsCard.findMany({ where: { streamId, dueAt: { lte: now } }, orderBy: [{ dueAt: "asc" }], take: limit });
   return cards.map((c) => {
     const back = BackSchema.safeParse(JSON.parse(c.back));
     // Alternate active-production formats: fill-in-your-own-context, then nuance → expression.
@@ -40,9 +40,9 @@ export async function dueCards(userId: string, now: Date, limit = 30) {
   });
 }
 
-export async function reviewCard(userId: string, cardId: string, typed: string, responseMs: number, now: Date) {
-  const card = await prisma.srsCard.findUnique({ where: { id: cardId } });
-  if (!card || card.userId !== userId) throw new AppError(404, "CARD_NOT_FOUND", "Card not found.");
+export async function reviewCard(streamId: string, cardId: string, typed: string, responseMs: number, now: Date) {
+  const card = await prisma.srsCard.findFirst({ where: { id: cardId, streamId } });
+  if (!card || card.streamId !== streamId) throw new AppError(404, "CARD_NOT_FOUND", "Card not found.");
   if (card.dueAt.getTime() > now.getTime()) throw new AppError(409, "NOT_DUE", "This card is not due yet.");
   const rating = ratingFromRecall(card.front, typed, responseMs);
   const state: CardState = {
@@ -52,11 +52,11 @@ export async function reviewCard(userId: string, cardId: string, typed: string, 
   const out = review(state, rating, now);
   await prisma.$transaction([
     prisma.srsCard.update({
-      where: { id: card.id },
+      where: { id: card.id, streamId },
       data: { stability: out.card.stability, difficulty: out.card.difficulty, reps: out.card.reps, lapses: out.card.lapses, state: out.card.state, lastReviewAt: now, dueAt: out.card.dueAt },
     }),
-    prisma.srsReview.create({ data: { cardId: card.id, rating, elapsedDays: out.elapsedDays, retrievability: out.retrievabilityAtReview, recalled: out.recalled, reviewedAt: now } }),
-    prisma.userProgress.upsert({ where: { userId }, update: { lastReviewAt: now }, create: { userId, lastReviewAt: now } }),
+    prisma.srsReview.create({ data: { streamId, cardId: card.id, rating, elapsedDays: out.elapsedDays, retrievability: out.retrievabilityAtReview, recalled: out.recalled, reviewedAt: now } }),
+    prisma.userProgress.upsert({ where: { streamId }, update: { lastReviewAt: now }, create: { streamId, lastReviewAt: now } }),
   ]);
   const intervalDays = Math.max(0, (out.card.dueAt.getTime() - now.getTime()) / 86_400_000);
   return {

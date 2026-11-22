@@ -79,7 +79,7 @@ ${excerpt}
 
 OUTPUT SCHEMA: {"bridgeText": string}
 ${JSON_ONLY}`,
-      effort: "medium",
+      tier: "standard",
       client,
     });
     const measured = profileText(out.bridgeText).difficultyScore;
@@ -102,7 +102,7 @@ ${readingText}
 
 OUTPUT SCHEMA: {"chunks":[{"phrase","sourceSentence","meaningEn","meaningVi","cefrTier":"A2"|"B1"|"B2"|"C1"}],"grammarInWild":[{"pattern","example","explanationEn","explanationVi"}]}
 ${JSON_ONLY}`,
-    effort: "medium",
+    tier: "standard",
     client,
     validate: (v) => verifyLessonContent(v, readingText),
   });
@@ -110,7 +110,7 @@ ${JSON_ONLY}`,
 
 export type LessonWithChunks = LessonUnit & { chunks: LexicalChunk[]; article: DailyArticle };
 
-export async function synthesizeLesson(userId: string, profile: ProficiencyProfile, articleId: string | undefined, now: Date, client?: LlmClient): Promise<LessonWithChunks> {
+export async function synthesizeLesson(streamId: string, profile: ProficiencyProfile, articleId: string | undefined, now: Date, client?: LlmClient): Promise<LessonWithChunks> {
   const level = profile.abilityLevel;
   const label = bandLabel(profile.subBand as SubBand);
   let article: DailyArticle | null;
@@ -118,12 +118,12 @@ export async function synthesizeLesson(userId: string, profile: ProficiencyProfi
     article = await prisma.dailyArticle.findUnique({ where: { id: articleId } });
     if (!article) throw new AppError(404, "ARTICLE_NOT_FOUND", "Article not found.");
   } else {
-    const used = new Set((await prisma.lessonUnit.findMany({ where: { userId }, select: { articleId: true } })).map((l) => l.articleId));
+    const used = new Set((await prisma.lessonUnit.findMany({ where: { streamId }, select: { articleId: true } })).map((l) => l.articleId));
     const recent = await prisma.dailyArticle.findMany({ where: { ingestedAt: { gte: new Date(now.getTime() - 3 * 86_400_000) } } });
     article = rankArticles(recent, level, used)[0] ?? null;
     if (!article) throw new AppError(409, "NO_CONTENT", 'No unused live articles from the last 3 days. Press "Sync Live Content Now".');
   }
-  const existing = await prisma.lessonUnit.findFirst({ where: { userId, articleId: article.id }, include: { chunks: true, article: true } });
+  const existing = await prisma.lessonUnit.findFirst({ where: { streamId, articleId: article.id }, include: { chunks: true, article: true } });
   if (existing) return existing;
 
   const mode = deliveryMode(level, article.difficultyScore);
@@ -138,11 +138,11 @@ export async function synthesizeLesson(userId: string, profile: ProficiencyProfi
   }
   const content = await extractContent(readingText, label, client);
   const questions = await generateQuestionSet({ text: readingText, count: 3, levelLabel: label, chunks: content.chunks.map((c) => c.phrase), client });
-  const known = new Set((await prisma.srsCard.findMany({ where: { userId }, select: { front: true } })).flatMap((c) => tokenize(c.front)));
+  const known = new Set((await prisma.srsCard.findMany({ where: { streamId }, select: { front: true } })).flatMap((c) => tokenize(c.front)));
 
   return prisma.lessonUnit.create({
     data: {
-      userId,
+      streamId,
       articleId: article.id,
       targetSubBand: profile.subBand,
       difficultyScore: difficulty,
@@ -156,6 +156,7 @@ export async function synthesizeLesson(userId: string, profile: ProficiencyProfi
       createdAt: now,
       chunks: {
         create: content.chunks.map((c) => ({
+          streamId,
           phrase: c.phrase,
           sourceSentence: c.sourceSentence,
           meaningEn: c.meaningEn,

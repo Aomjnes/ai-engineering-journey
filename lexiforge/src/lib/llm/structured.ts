@@ -1,5 +1,5 @@
 import type { z } from "zod";
-import { getLlmClient, LlmRequestError, type Effort, type LlmClient } from "./client";
+import { getLlmClient, LlmRequestError, type LlmClient, type ThinkingTier } from "./client";
 
 export class StructuredOutputError extends Error {
   readonly code = "LLM_MALFORMED_OUTPUT";
@@ -31,7 +31,8 @@ export interface StructuredRequest<S extends z.ZodTypeAny> {
   schema: S;
   system: string;
   user: string;
-  effort?: Effort;
+  tier?: ThinkingTier;
+  temperature?: number;
   maxTokens?: number;
   maxAttempts?: number;
   /** Extra semantic validation beyond the schema; return an error message to force a retry. */
@@ -54,7 +55,8 @@ export async function generateStructured<S extends z.ZodTypeAny>(req: Structured
       raw = await client.complete({
         system: req.system,
         user: feedback ? `${req.user}\n\n---\nYOUR PREVIOUS OUTPUT WAS REJECTED:\n${feedback}\nReturn ONLY the corrected JSON object.` : req.user,
-        effort: req.effort,
+        tier: req.tier,
+        temperature: req.temperature,
         maxTokens: req.maxTokens,
       });
     } catch (error) {

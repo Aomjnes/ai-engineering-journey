@@ -3,8 +3,7 @@ import { prisma } from "@/lib/db";
 import { setLlmClientForTesting, type CompletionRequest } from "@/lib/llm/client";
 import { lessonView, shadowSentenceFor, submitComprehension, submitExitTicket, submitProduction, submitRewrite, submitShadowing } from "@/lib/lessons/flow";
 import { dueCards, gapSentence, reviewCard } from "@/lib/srs/service";
-import { getLocalUser } from "@/lib/profile/service";
-import { resetDb } from "../helpers/db";
+import { resetDb, testStream } from "../helpers/db";
 import { errorFor, learnerText, ScriptedLlm } from "../helpers/scripted-llm";
 import { ARTICLE_PARAGRAPHS } from "../fixtures/article";
 
@@ -46,21 +45,21 @@ function reply(req: CompletionRequest): string {
 }
 
 async function seedLesson() {
-  const user = await getLocalUser();
+  const user = await testStream();
   const feed = await prisma.sourceFeed.create({ data: { name: "T", url: "https://e.com/rss", homepage: "https://e.com", topic: "t" } });
   const article = await prisma.dailyArticle.create({
     data: { feedId: feed.id, urlHash: "x", url: "https://e.com/a", title: "Floating classrooms", content: READING, wordCount: 330, sentenceCount: 14, fleschKincaidGrade: 12, fleschReadingEase: 45, avgSentenceLength: 23, avgSyllablesPerWord: 1.6, lexicalSophistication: 0.2, cefrTier: "B2", difficultyScore: 52 },
   });
-  await prisma.proficiencyProfile.create({ data: { userId: user.id, subBand: "B2_1", ieltsEstimate: 6, ieltsLow: 5.5, ieltsHigh: 6.5, gai: 70, lri: 60, cpr: 70, rss: 0, eri: 100, composite: 66, abilityLevel: 52 } });
+  await prisma.proficiencyProfile.create({ data: { streamId: user.id, subBand: "B2_1", ieltsEstimate: 6, ieltsLow: 5.5, ieltsHigh: 6.5, gai: 70, lri: 60, cpr: 70, rss: 0, eri: 100, composite: 66, abilityLevel: 52 } });
   const lesson = await prisma.lessonUnit.create({
     data: {
-      userId: user.id, articleId: article.id, targetSubBand: "B2_1", difficultyScore: 52, isGraded: false, readingText: READING, authenticExcerpt: READING, comprehensibility: 0.88,
+      streamId: user.id, articleId: article.id, targetSubBand: "B2_1", difficultyScore: 52, isGraded: false, readingText: READING, authenticExcerpt: READING, comprehensibility: 0.88,
       grammarInWild: [], productionPrompt: "Write a 100-word email to the council about the floating classrooms using 3 chunks.",
       questions: [
         { id: "q1", type: "inference", prompt: "Why might insurers hesitate?", rubric: ["Mentions storms", "Links to insurance"] },
         { id: "q2", type: "paraphrase", prompt: "What risk do opposition councillors see?", rubric: ["Mentions storms", "Mentions safety"] },
       ],
-      chunks: { create: CHUNKS.map((phrase) => ({ phrase, sourceSentence: READING.split(/(?<=\.)\s+/).find((s) => s.includes(phrase.split(" ")[0] as string)) ?? "", meaningEn: "m", meaningVi: "nghĩa", cefrTier: "B2", isStretch: false })) },
+      chunks: { create: CHUNKS.map((phrase) => ({ streamId: user.id, phrase, sourceSentence: READING.split(/(?<=\.)\s+/).find((s) => s.includes(phrase.split(" ")[0] as string)) ?? "", meaningEn: "m", meaningVi: "nghĩa", cefrTier: "B2", isStretch: false })) },
     },
     include: { chunks: true },
   });
@@ -99,7 +98,7 @@ describe("4-stage acquisition loop (grading pipeline)", () => {
     expect(prod.reasons[0]).toMatch(/critical/);
     expect(prod.diff.filter((d) => d.type === "error")).toHaveLength(2);
     expect(prod.session.qualified).toBe(false);
-    const snap = await prisma.proficiencySnapshot.findFirst({ where: { userId: user.id, trigger: "SESSION" } });
+    const snap = await prisma.proficiencySnapshot.findFirst({ where: { streamId: user.id, trigger: "SESSION" } });
     expect(snap).not.toBeNull();
     // CPR uses first attempts only: q1 first attempt was copy-paste (0), q2 passed (1) → 50.
     const sub = await prisma.submissionAttempt.findFirstOrThrow({ where: { lessonId: lesson.id, kind: "PRODUCTION" } });
@@ -123,7 +122,7 @@ describe("4-stage acquisition loop (grading pipeline)", () => {
     expect(first.nextStage).toBe("EXIT_TICKET");
     const second = await submitExitTicket(user.id, lesson.id, [{ chunkId: ids[1] as string, text: "The new library won the support of almost every parent in our street." }], NOW);
     expect(second.nextStage).toBe("COMPLETED");
-    expect(await prisma.srsCard.count({ where: { userId: user.id } })).toBe(3);
+    expect(await prisma.srsCard.count({ where: { streamId: user.id } })).toBe(3);
     const view = await lessonView(user.id, lesson.id);
     expect(view.stage).toBe("COMPLETED");
     expect(JSON.stringify(view)).not.toContain("rubric");

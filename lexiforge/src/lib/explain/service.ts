@@ -1,6 +1,8 @@
+import { createHash } from "node:crypto";
 import { z } from "zod";
+import { prisma } from "@/lib/db";
 import { generateStructured } from "@/lib/llm/structured";
-import type { LlmClient } from "@/lib/llm/client";
+import { getLlmClient, type LlmClient } from "@/lib/llm/client";
 import { JSON_ONLY, findBannedPraise } from "@/lib/llm/prompts";
 
 export const ExplanationSchema = z.object({
@@ -21,24 +23,63 @@ export type Explanation = z.infer<typeof ExplanationSchema>;
 
 const norm = (s: string) => s.toLowerCase().replace(/[“”"‘’']/g, "").replace(/\s+/g, " ").trim();
 
-/** 4-Mode Universal Understanding Engine for any clicked phrase or sentence. */
-export async function explainSelection(selection: string, context: string, client?: LlmClient): Promise<Explanation> {
-  return generateStructured({
-    schema: ExplanationSchema,
-    system: "You are a bilingual (English–Vietnamese) applied linguist. You explain precisely, with no praise or filler. Vietnamese must be natural and accented.",
-    user: `Explain the SELECTION as it is used in the CONTEXT, in four modes:
-1. coreLogic — plain-English core meaning + a simple mental image.
-2. structure — dissect the selection into consecutive parts (each "text" copied verbatim from the selection, in order) with grammatical role (subject, main verb, object, modifier, clause, connector, …).
-3. contrastive — the exact natural Vietnamese equivalent, the nuance difference (in Vietnamese), and an explicit warning about the typical Vietlish/L1-interference mistake.
-4. usage — a short realistic A/B dialogue using it naturally, a "textbook trap" (the wrong or unnatural version learners produce), the natural version, and why.
+/** Output cap sized to the 4-mode schema (≈ 600–1200 tokens incl. Vietnamese); generous enough to avoid truncation retries. */
+export const EXPLAIN_MAX_TOKENS = 3000;
+export const EXPLAIN_TEMPERATURE = 0.2;
+const CONTEXT_KEY_CHARS = 240;
+
+/** Cache key: sha256(normalized selection | first 240 chars of normalized context | CEFR level). */
+export function explanationCacheKey(selection: string, context: string, level: string): string {
+  return createHash("sha256").update(`${norm(selection)}|${norm(context).slice(0, CONTEXT_KEY_CHARS)}|${level}`).digest("hex");
+}
+
+const SYSTEM = "You are a bilingual English–Vietnamese applied linguist. Be concise and direct: no praise, no filler, no preamble. Vietnamese must be natural and fully accented. Output JSON only.";
+
+function prompt(selection: string, context: string, level: string): string {
+  return `Learner level: CEFR ${level}. Explain the SELECTION as used in the CONTEXT in four compact modes (each text field ≤ 35 words):
+1 coreLogic: plain-English core meaning + one simple mental image.
+2 structure: consecutive parts of the selection (each "text" copied verbatim, in order, ≤ 8 parts) with grammatical role.
+3 contrastive: natural Vietnamese equivalent, nuance difference (in Vietnamese), the typical Vietlish/L1 mistake.
+4 usage: 2–4 line A/B dialogue, the textbook trap (wrong/unnatural version), the natural version, why.
 
 SELECTION: ${selection}
-CONTEXT: ${context.slice(0, 1500)}
+CONTEXT: ${context.slice(0, 900)}
 
-OUTPUT SCHEMA: {"coreLogic":{"plainEnglish","mentalImage"},"structure":{"parts":[{"text","role","note"}],"summary"},"contrastive":{"vietnamese","nuanceVi","interferenceWarning"},"usage":{"dialogue":[{"speaker":"A"|"B","line"}],"textbookTrap","natural","why"}}
-${JSON_ONLY}`,
-    effort: "low",
-    client,
+JSON: {"coreLogic":{"plainEnglish","mentalImage"},"structure":{"parts":[{"text","role","note"}],"summary"},"contrastive":{"vietnamese","nuanceVi","interferenceWarning"},"usage":{"dialogue":[{"speaker":"A"|"B","line"}],"textbookTrap","natural","why"}}
+${JSON_ONLY}`;
+}
+
+export interface ExplainResult {
+  explanation: Explanation;
+  cached: boolean;
+  ms: number;
+}
+
+/**
+ * 4-Mode Universal Understanding Engine. Checks the shared ExplanationCache first (any stream, any device),
+ * otherwise calls the LLM with the "minimal" thinking tier and stores the validated result.
+ */
+export async function explainSelection(selection: string, context: string, level = "B1.1", client?: LlmClient): Promise<ExplainResult> {
+  const started = Date.now();
+  const key = explanationCacheKey(selection, context, level);
+  const hit = await prisma.explanationCache.findUnique({ where: { key } });
+  if (hit) {
+    const parsed = ExplanationSchema.safeParse(hit.payload);
+    if (parsed.success) {
+      await prisma.explanationCache.update({ where: { key }, data: { hits: { increment: 1 }, lastHitAt: new Date() } });
+      return { explanation: parsed.data, cached: true, ms: Date.now() - started };
+    }
+    await prisma.explanationCache.delete({ where: { key } });
+  }
+  const llm = client ?? getLlmClient();
+  const explanation = await generateStructured({
+    schema: ExplanationSchema,
+    system: SYSTEM,
+    user: prompt(selection, context, level),
+    tier: "minimal",
+    temperature: EXPLAIN_TEMPERATURE,
+    maxTokens: EXPLAIN_MAX_TOKENS,
+    client: llm,
     validate: (v) => {
       const sel = norm(selection);
       const bad = v.structure.parts.filter((p) => !sel.includes(norm(p.text)));
@@ -47,4 +88,10 @@ ${JSON_ONLY}`,
       return praise ? `Remove praise ("${praise}").` : null;
     },
   });
+  await prisma.explanationCache.upsert({
+    where: { key },
+    update: { payload: explanation, provider: llm.provider, model: llm.model },
+    create: { key, selection: selection.slice(0, 500), level, provider: llm.provider, model: llm.model, payload: explanation },
+  });
+  return { explanation, cached: false, ms: Date.now() - started };
 }

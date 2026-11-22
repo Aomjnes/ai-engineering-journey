@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 import { handle } from "@/lib/http";
 import { dashboardData } from "@/lib/dashboard/service";
-import { getLocalUser } from "@/lib/profile/service";
+import { requireStream } from "@/lib/auth/stream";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(req: Request) {
   return handle(async () => {
-    const user = await getLocalUser();
-    return NextResponse.json(await dashboardData(user.id, new Date()));
+    const stream = await requireStream(req);
+    return NextResponse.json(await dashboardData(stream.id, new Date()));
   });
 }

@@ -3,7 +3,7 @@ import { prisma } from "@/lib/db";
 import type { EvidenceError } from "./schemas";
 
 export interface NewSubmission {
-  userId: string;
+  streamId: string;
   kind: SubmissionKind;
   text: string;
   wordCount: number;
@@ -28,7 +28,7 @@ export async function saveSubmission(s: NewSubmission) {
   return prisma.$transaction(async (tx) => {
     const sub = await tx.submissionAttempt.create({
       data: {
-        userId: s.userId,
+        streamId: s.streamId,
         kind: s.kind,
         text: s.text,
         wordCount: s.wordCount,
@@ -50,7 +50,7 @@ export async function saveSubmission(s: NewSubmission) {
     if (s.errors?.length) {
       await tx.errorLog.createMany({
         data: s.errors.map((e) => ({
-          userId: s.userId,
+          streamId: s.streamId,
           submissionId: sub.id,
           category: e.category,
           subtype: e.subtype,
@@ -68,6 +68,8 @@ export async function saveSubmission(s: NewSubmission) {
   });
 }
 
-export async function attemptCount(where: { userId: string; lessonId?: string; diagnosticId?: string; kind: SubmissionKind; questionId?: string }) {
-  return prisma.submissionAttempt.count({ where: { ...where, rejected: false } });
+export async function attemptCount(where: { streamId: string; lessonId?: string; diagnosticId?: string; kind: SubmissionKind; questionId?: string }) {
+  return prisma.submissionAttempt.count({
+    where: { streamId: where.streamId, lessonId: where.lessonId, diagnosticId: where.diagnosticId, kind: where.kind, questionId: where.questionId, rejected: false },
+  });
 }

@@ -3,15 +3,16 @@ import { prisma } from "@/lib/db";
 import { handle } from "@/lib/http";
 import { deliveryMode, estimateSessionMinutes, matchTag, rankArticles, targetDifficulty } from "@/lib/lessons/match";
 import { excerptByWords } from "@/lib/metrics/text";
-import { getLocalUser, requireProfile } from "@/lib/profile/service";
+import { requireProfile } from "@/lib/profile/service";
+import { requireStream } from "@/lib/auth/stream";
 
 export const dynamic = "force-dynamic";
 
 /** Today's i+1-ranked live articles plus the learner's recent lessons. */
-export async function GET() {
+export async function GET(req: Request) {
   return handle(async () => {
-    const user = await getLocalUser();
-    const profile = await requireProfile(user.id);
+    const stream = await requireStream(req);
+    const profile = await requireProfile(stream.id);
     const now = new Date();
     const [articles, lessons] = await Promise.all([
       prisma.dailyArticle.findMany({
@@ -19,7 +20,7 @@ export async function GET() {
         include: { feed: { select: { name: true, topic: true } } },
       }),
       prisma.lessonUnit.findMany({
-        where: { userId: user.id },
+        where: { streamId: stream.id },
         orderBy: { createdAt: "desc" },
         take: 12,
         include: { article: { select: { title: true, url: true, publishedAt: true, feed: { select: { name: true } } } }, _count: { select: { chunks: true } } },

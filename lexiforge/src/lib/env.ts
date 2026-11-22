@@ -4,7 +4,23 @@ const emptyToUndefined = (v: unknown) => (typeof v === "string" && v.trim() === 
 const optionalString = z.preprocess(emptyToUndefined, z.string().min(1).optional());
 
 const EnvSchema = z.object({
-  DATABASE_URL: z.string().min(1).default("file:./lexiforge.db"),
+  DATABASE_URL: z.string().regex(/^postgres(ql)?:\/\//, "DATABASE_URL must be a PostgreSQL connection string"),
+  DIRECT_URL: z.string().regex(/^postgres(ql)?:\/\//, "DIRECT_URL must be a PostgreSQL connection string"),
+  /** Signs stream session cookies. Optional at boot so non-auth tooling runs; auth routes refuse to work without it. */
+  SESSION_SECRET: z.preprocess(emptyToUndefined, z.string().min(32, "SESSION_SECRET must be at least 32 characters").optional()),
+  ALLOWED_STREAM_CODES: z.preprocess(
+    emptyToUndefined,
+    z
+      .string()
+      .default("000,001,002,003,004")
+      .transform((v) => [...new Set(v.split(",").map((c) => c.trim()).filter(Boolean))])
+      .pipe(
+        z
+          .array(z.string().regex(/^[A-Za-z0-9_-]{3,32}$/, "stream codes are 3–32 chars of letters, digits, _ or -"))
+          .min(1, "ALLOWED_STREAM_CODES needs at least one code")
+          .max(5, "ALLOWED_STREAM_CODES allows at most 5 codes (hard cap)"),
+      ),
+  ),
   ANTHROPIC_API_KEY: optionalString,
   OPENAI_API_KEY: optionalString,
   GEMINI_API_KEY: optionalString,
@@ -18,6 +34,11 @@ const EnvSchema = z.object({
 export type Env = z.infer<typeof EnvSchema>;
 
 let cached: Env | null = null;
+
+/** Test seam: forget the cached env after tests mutate process.env. */
+export function resetEnvCache(): void {
+  cached = null;
+}
 
 export function getEnv(): Env {
   if (cached) return cached;

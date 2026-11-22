@@ -15,7 +15,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState, EVAL_PHASES, PhasedStatus } from "@/components/lf/states";
 import { CATEGORY_LABEL } from "@/components/lf/severity";
 import { usePrefs } from "@/components/lf/prefs";
-import { useShell } from "@/components/lf/shell-data";
+import { useCrossDeviceSync, useShell } from "@/components/lf/shell-data";
 import { submitOnModEnter } from "@/components/lesson/common";
 
 interface DueCard {
@@ -100,6 +100,9 @@ function SrsQueue() {
   useEffect(() => {
     void load();
   }, [load]);
+  useCrossDeviceSync(() => {
+    if (!result) void load();
+  });
 
   const card = cards?.[0];
   useEffect(() => {
@@ -385,6 +388,7 @@ function GraveyardInner() {
   useEffect(() => {
     void load();
   }, [load]);
+  useCrossDeviceSync(load);
 
   const showDetox = data && (data.status.locked || data.status.detox || params.get("tab") === "detox");
 

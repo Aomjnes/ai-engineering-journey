@@ -7,6 +7,8 @@ const globalForCron = globalThis as unknown as { lexiforgeCron?: boolean };
 /** Registers the in-process daily ingestion job (05:30 server time) once per process. */
 export function startScheduler(): void {
   if (globalForCron.lexiforgeCron) return;
+  // Serverless (Vercel) has no long-lived process: ingestion runs via Vercel Cron → /api/cron/ingest.
+  if (process.env.VERCEL === "1") return;
   if (getEnv().ENABLE_INTERNAL_CRON !== "true") return;
   globalForCron.lexiforgeCron = true;
   cron.schedule("30 5 * * *", async () => {

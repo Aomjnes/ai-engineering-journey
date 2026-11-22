@@ -4,17 +4,22 @@ import { AppError, handle } from "@/lib/http";
 import { LlmNotConfiguredError, setLlmClientForTesting } from "@/lib/llm/client";
 import { POST as evaluatePOST } from "@/app/api/evaluate/route";
 import { POST as explainPOST } from "@/app/api/explain/route";
-import { GET as cronGET } from "@/app/api/cron/ingest/route";
+import { GET as cronGET, POST as cronPOST } from "@/app/api/cron/ingest/route";
 import { POST as ingestPOST } from "@/app/api/ingest/route";
 import { GET as lessonsGET } from "@/app/api/lessons/route";
 import { POST as diagnosticPOST } from "@/app/api/diagnostic/route";
-import { resetDb } from "../helpers/db";
+import { resetDb, testStream } from "../helpers/db";
+import { cookieFor } from "../helpers/session";
 
+let cookie = "";
 const post = (url: string, body: unknown, headers: Record<string, string> = {}) =>
-  new Request(`http://localhost:3000${url}`, { method: "POST", headers: { "content-type": "application/json", ...headers }, body: typeof body === "string" ? body : JSON.stringify(body) });
+  new Request(`http://localhost:3000${url}`, { method: "POST", headers: { "content-type": "application/json", cookie, ...headers }, body: typeof body === "string" ? body : JSON.stringify(body) });
 
 describe("API hardening", () => {
-  beforeEach(resetDb);
+  beforeEach(async () => {
+    await resetDb();
+    cookie = await cookieFor(await testStream("000"));
+  });
   afterAll(() => setLlmClientForTesting(null));
 
   it("maps domain, validation and configuration errors to typed JSON", async () => {
@@ -38,6 +43,11 @@ describe("API hardening", () => {
     expect(await d.json()).toEqual({ error: { code: "INTERNAL", message: "Unexpected server error." } });
   });
 
+  it("returns 401 before reading the body when there is no session", async () => {
+    const r = await evaluatePOST(new Request("http://localhost:3000/api/evaluate", { method: "POST", body: "{not json" }));
+    expect(r.status).toBe(401);
+  });
+
   it("rejects malformed and invalid bodies with 400", async () => {
     expect((await evaluatePOST(post("/api/evaluate", "{not json"))).status).toBe(400);
     const r = await evaluatePOST(post("/api/evaluate", { stage: "PRODUCTION", lessonId: "" }));
@@ -50,7 +60,7 @@ describe("API hardening", () => {
     const r = await evaluatePOST(post("/api/evaluate", { stage: "PRODUCTION", lessonId: "x", text: "hello" }));
     expect(r.status).toBe(409);
     expect((await r.json()).error.code).toBe("CALIBRATION_REQUIRED");
-    expect((await lessonsGET()).status).toBe(409);
+    expect((await lessonsGET(new Request("http://localhost:3000/api/lessons", { headers: { cookie } }))).status).toBe(409);
   });
 
   it("explains missing LLM keys instead of crashing", async () => {
@@ -65,5 +75,8 @@ describe("API hardening", () => {
     expect(noAuth.status).toBe(401);
     const crossSite = await ingestPOST(post("/api/ingest", {}, { origin: "https://evil.example", host: "localhost:3000" }));
     expect(crossSite.status).toBe(403);
+    // Manual sync through the cron route also needs a session or the bearer token.
+    const anon = await cronPOST(new Request("http://localhost:3000/api/cron/ingest", { method: "POST", headers: { origin: "http://localhost:3000", host: "localhost:3000" } }));
+    expect(anon.status).toBe(401);
   });
 });

@@ -3,20 +3,21 @@ import { prisma } from "@/lib/db";
 import { detectProvider } from "@/lib/env";
 import { handle } from "@/lib/http";
 import { bandLabel, type SubBand } from "@/lib/metrics/scoring";
-import { getLocalUser, getProfile } from "@/lib/profile/service";
+import { getProfile } from "@/lib/profile/service";
+import { requireStream } from "@/lib/auth/stream";
 
 export const dynamic = "force-dynamic";
 
 /** Lightweight status for the app shell (pill, badges, sync dot). */
-export async function GET() {
+export async function GET(req: Request) {
   return handle(async () => {
-    const user = await getLocalUser();
+    const stream = await requireStream(req);
     const now = new Date();
     const [profile, overdue, lastFeed, active, failing] = await Promise.all([
-      getProfile(user.id),
-      prisma.srsCard.count({ where: { userId: user.id, dueAt: { lte: now } } }),
+      getProfile(stream.id),
+      prisma.srsCard.count({ where: { streamId: stream.id, dueAt: { lte: now } } }),
       prisma.sourceFeed.findFirst({ where: { lastFetchedAt: { not: null } }, orderBy: { lastFetchedAt: "desc" }, select: { lastFetchedAt: true } }),
-      prisma.lessonUnit.findFirst({ where: { userId: user.id, stage: { not: "COMPLETED" } }, orderBy: { createdAt: "desc" }, select: { id: true } }),
+      prisma.lessonUnit.findFirst({ where: { streamId: stream.id, stage: { not: "COMPLETED" } }, orderBy: { createdAt: "desc" }, select: { id: true } }),
       prisma.sourceFeed.count({ where: { status: "FAILING" } }),
     ]);
     return NextResponse.json({
@@ -27,6 +28,8 @@ export async function GET() {
       lastSyncedAt: lastFeed?.lastFetchedAt ?? null,
       failingFeeds: failing,
       llm: detectProvider()?.provider ?? null,
+      stream: { id: stream.id, code: stream.code, label: stream.label },
+      serverTime: now.toISOString(),
       activeLessonId: active?.id ?? null,
     });
   });

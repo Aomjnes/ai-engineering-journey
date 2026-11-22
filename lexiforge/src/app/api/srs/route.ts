@@ -2,14 +2,14 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { handle, parseBody } from "@/lib/http";
 import { dueCards, reviewCard } from "@/lib/srs/service";
-import { getLocalUser } from "@/lib/profile/service";
+import { requireStream } from "@/lib/auth/stream";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(req: Request) {
   return handle(async () => {
-    const user = await getLocalUser();
-    return NextResponse.json({ cards: await dueCards(user.id, new Date()) });
+    const stream = await requireStream(req);
+    return NextResponse.json({ cards: await dueCards(stream.id, new Date()) });
   });
 }
 
@@ -17,8 +17,8 @@ const Body = z.object({ cardId: z.string().min(1), typed: z.string().max(200), r
 
 export async function POST(req: Request) {
   return handle(async () => {
+    const stream = await requireStream(req);
     const body = await parseBody(req, Body);
-    const user = await getLocalUser();
-    return NextResponse.json(await reviewCard(user.id, body.cardId, body.typed, body.responseMs, new Date()));
+    return NextResponse.json(await reviewCard(stream.id, body.cardId, body.typed, body.responseMs, new Date()));
   });
 }

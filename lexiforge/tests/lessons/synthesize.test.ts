@@ -3,8 +3,7 @@ import { prisma } from "@/lib/db";
 import { setLlmClientForTesting, type CompletionRequest } from "@/lib/llm/client";
 import { isStretchChunk, synthesizeLesson, verifyLessonContent } from "@/lib/lessons/synthesize";
 import { profileText } from "@/lib/metrics/readability";
-import { getLocalUser } from "@/lib/profile/service";
-import { resetDb } from "../helpers/db";
+import { resetDb, testStream } from "../helpers/db";
 import { ScriptedLlm } from "../helpers/scripted-llm";
 import { ARTICLE_PARAGRAPHS } from "../fixtures/article";
 
@@ -43,7 +42,7 @@ function reply(req: CompletionRequest): string {
 }
 
 async function seed(level: number) {
-  const user = await getLocalUser();
+  const user = await testStream();
   const feed = await prisma.sourceFeed.create({ data: { name: "Test", url: "https://example.com/rss", homepage: "https://example.com", topic: "t" } });
   const p = profileText(CONTENT);
   const article = await prisma.dailyArticle.create({
@@ -55,7 +54,7 @@ async function seed(level: number) {
   });
   const subBand = level < 37.5 ? "B1_1" : "B2_1";
   const profile = await prisma.proficiencyProfile.create({
-    data: { userId: user.id, subBand, ieltsEstimate: 5.5, ieltsLow: 5, ieltsHigh: 6, gai: 70, lri: 60, cpr: 70, rss: 0, eri: 100, composite: 66, abilityLevel: level },
+    data: { streamId: user.id, subBand, ieltsEstimate: 5.5, ieltsLow: 5, ieltsHigh: 6, gai: 70, lri: 60, cpr: 70, rss: 0, eri: 100, composite: 66, abilityLevel: level },
   });
   return { user, article, profile };
 }

@@ -1,6 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { useCrossDeviceSync, useShell } from "@/components/lf/shell-data";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/textarea";
 import { Check, X } from "lucide-react";
 import { api, errorMessage } from "@/lib/client/api";
 import { timeAgo } from "@/lib/client/format";
@@ -27,13 +30,63 @@ function Flag({ on, label }: { on: boolean; label: string }) {
   );
 }
 
+function StreamCard() {
+  const { status, refresh, switchStream } = useShell();
+  const [label, setLabel] = useState("");
+  const [saved, setSaved] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (status) setLabel(status.stream.label);
+  }, [status]);
+  if (!status) return <Skeleton className="h-40" />;
+  const save = async () => {
+    setBusy(true);
+    setSaved(null);
+    try {
+      await api("/api/stream/me", undefined, { method: "PATCH", body: { label } });
+      await refresh();
+      setSaved("Saved.");
+    } catch (e) {
+      setSaved(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Stream</CardTitle>
+        <CardDescription>
+          Access code <span className="num text-ink-2">{status.stream.code}</span>. The label is only a display name; the code never changes here.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <form
+          className="flex gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void save();
+          }}
+        >
+          <Input aria-label="Stream label" value={label} maxLength={40} onChange={(e) => setLabel(e.target.value)} />
+          <Button type="submit" disabled={busy || !label.trim() || label.trim() === status.stream.label}>Save</Button>
+        </form>
+        {saved && <p className="text-[12.5px] text-ink-3">{saved}</p>}
+        <Button variant="outline" onClick={() => void switchStream()}>Switch stream</Button>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function SettingsPage() {
   const [data, setData] = useState<SettingsData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const { lang, setLang, theme, setTheme } = usePrefs();
-  useEffect(() => {
+  const load = useCallback(() => {
     api<SettingsData>("/api/settings").then(setData).catch((e) => setError(errorMessage(e)));
   }, []);
+  useEffect(() => load(), [load]);
+  useCrossDeviceSync(load);
 
   if (error) return <EmptyState title="Settings could not load" body={error} />;
   return (
@@ -42,6 +95,7 @@ export default function SettingsPage() {
         <p className="eyebrow">Configuration</p>
         <h1 className="mt-1 font-serif text-[30px] font-medium tracking-[-0.015em]">Settings</h1>
       </header>
+      <StreamCard />
       <Card>
         <CardHeader>
           <CardTitle>Preferences</CardTitle>

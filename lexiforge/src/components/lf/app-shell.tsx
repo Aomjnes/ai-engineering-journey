@@ -11,6 +11,8 @@ import { Kbd } from "@/components/ui/kbd";
 import { usePrefs } from "./prefs";
 import { useShell } from "./shell-data";
 import { ProficiencyPill } from "./proficiency-pill";
+import { StreamPill } from "./stream-pill";
+import { readStreamValue, writeStreamValue } from "@/lib/client/storage";
 
 function useNav(activeLessonId: string | null) {
   return [
@@ -21,13 +23,6 @@ function useNav(activeLessonId: string | null) {
   ];
 }
 
-function readCollapsed(): boolean {
-  try {
-    return window.localStorage.getItem("lf-sidebar") === "collapsed";
-  } catch {
-    return false;
-  }
-}
 
 function SyncDot() {
   const { status, syncing, sync, syncError } = useShell();
@@ -110,7 +105,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [legend, setLegend] = useState(false);
   const nav = useNav(status?.activeLessonId ?? null);
 
-  useEffect(() => setCollapsed(readCollapsed()), []);
+  const streamId = status?.stream.id ?? null;
+  useEffect(() => setCollapsed(readStreamValue(streamId, "sidebar") === "collapsed"), [streamId]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "?" && !isTypingTarget(e.target)) {
@@ -125,17 +121,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   const toggleCollapsed = () => {
     setCollapsed((c) => {
-      try {
-        window.localStorage.setItem("lf-sidebar", c ? "open" : "collapsed");
-      } catch {
-        /* ignore */
-      }
+      writeStreamValue(streamId, "sidebar", c ? "open" : "collapsed");
       return !c;
     });
   };
 
   // The calibration audit is a distraction-free studio: no navigation chrome.
-  if (pathname.startsWith("/onboarding")) return <>{children}</>;
+  if (pathname.startsWith("/onboarding") || pathname.startsWith("/access")) return <>{children}</>;
 
   const due = status?.dueCards ?? 0;
 
@@ -199,7 +191,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {/* Top utility strip */}
         <header className="sticky top-0 z-20 flex h-14 items-center gap-2 border-b border-line bg-canvas/90 px-4 backdrop-blur supports-[backdrop-filter]:bg-canvas/75 md:px-6">
           <span className="mr-1 flex size-7 items-center justify-center rounded-md bg-ink font-serif text-[15px] font-semibold text-canvas md:hidden" aria-hidden>L</span>
-          <ProficiencyPill subBand={status?.subBand ?? null} ielts={status?.ielts ?? null} />
+          <StreamPill />
+          <ProficiencyPill className="hidden sm:inline-flex" subBand={status?.subBand ?? null} ielts={status?.ielts ?? null} />
           <div className="ml-auto flex items-center gap-1.5">
             <Segmented
               label="Explanation language"

@@ -1,13 +1,18 @@
-// LexiForge — complete schema. SQLite for zero-setup local use; every type
-// used here maps 1:1 to PostgreSQL (switch `provider` + DATABASE_URL only).
+// LexiForge — PostgreSQL schema (Neon / Supabase / any Postgres 14+).
+// DATABASE_URL = pooled connection (serverless), DIRECT_URL = direct connection (schema pushes).
+//
+// Data ownership:
+//   SHARED (global cache, no stream data): SourceFeed, DailyArticle, ExplanationCache, AccessFailure
+//   ISOLATED (every row carries streamId → StreamAccount, onDelete: Cascade): everything else.
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 // ───────────────────────────── Enums ─────────────────────────────
@@ -129,8 +134,8 @@ model LessonUnit {
   id                String              @id @default(cuid())
   articleId         String
   article           DailyArticle        @relation(fields: [articleId], references: [id], onDelete: Cascade)
-  userId            String
-  user              User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  streamId            String
+  stream              StreamAccount                @relation(fields: [streamId], references: [id], onDelete: Cascade)
   targetSubBand     CefrSubBand
   difficultyScore   Float // difficulty of the text the learner actually reads
   isGraded          Boolean // true when a bridge (graded) version was synthesized
@@ -146,11 +151,14 @@ model LessonUnit {
   chunks            LexicalChunk[]
   submissions       SubmissionAttempt[]
 
-  @@index([userId, createdAt])
+  @@unique([streamId, articleId])
+  @@index([streamId, createdAt])
 }
 
 model LexicalChunk {
   id             String     @id @default(cuid())
+  streamId       String
+  stream         StreamAccount @relation(fields: [streamId], references: [id], onDelete: Cascade)
   lessonId       String
   lesson         LessonUnit @relation(fields: [lessonId], references: [id], onDelete: Cascade)
   phrase         String
@@ -160,29 +168,36 @@ model LexicalChunk {
   cefrTier       CefrTier
   isStretch      Boolean // part of the +1 band
   srsCards       SrsCard[]
+
+  @@index([streamId, lessonId])
 }
 
 // ───────────────────────────── Learning & Grading ─────────────────────────────
 
-model User {
-  id               String                 @id @default(cuid())
-  displayName      String                 @default("Learner")
-  createdAt        DateTime               @default(now())
-  settings         UserSettings?
-  progress         UserProgress?
-  profile          ProficiencyProfile?
-  snapshots        ProficiencySnapshot[]
-  diagnostics      DiagnosticAssessment[]
-  lessons          LessonUnit[]
-  submissions      SubmissionAttempt[]
-  errors           ErrorLog[]
-  srsCards         SrsCard[]
+/// One of at most 5 isolated learner streams, entered with a private access code (000–004).
+model StreamAccount {
+  id           String                 @id @default(cuid())
+  code         String                 @unique
+  label        String
+  createdAt    DateTime               @default(now())
+  lastActiveAt DateTime               @default(now())
+  settings     UserSettings?
+  progress     UserProgress?
+  profile      ProficiencyProfile?
+  snapshots    ProficiencySnapshot[]
+  diagnostics  DiagnosticAssessment[]
+  lessons      LessonUnit[]
+  chunks       LexicalChunk[]
+  submissions  SubmissionAttempt[]
+  errors       ErrorLog[]
+  srsCards     SrsCard[]
+  srsReviews   SrsReview[]
 }
 
 model UserSettings {
   id            String   @id @default(cuid())
-  userId        String   @unique
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  streamId        String   @unique
+  stream          StreamAccount     @relation(fields: [streamId], references: [id], onDelete: Cascade)
   ttsRate       Float    @default(1.0)
   ttsVoice      String?
   dailyNewChunk Int      @default(6)
@@ -192,8 +207,8 @@ model UserSettings {
 
 model UserProgress {
   id                 String    @id @default(cuid())
-  userId             String    @unique
-  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  streamId             String    @unique
+  stream               StreamAccount      @relation(fields: [streamId], references: [id], onDelete: Cascade)
   lessonsCompleted   Int       @default(0)
   lastLessonAt       DateTime?
   lastReviewAt       DateTime?
@@ -206,8 +221,8 @@ model UserProgress {
 
 model SubmissionAttempt {
   id               String         @id @default(cuid())
-  userId           String
-  user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  streamId           String
+  stream             StreamAccount           @relation(fields: [streamId], references: [id], onDelete: Cascade)
   lessonId         String?
   lesson           LessonUnit?    @relation(fields: [lessonId], references: [id], onDelete: Cascade)
   diagnosticId     String?
@@ -229,13 +244,13 @@ model SubmissionAttempt {
   createdAt        DateTime       @default(now())
   errors           ErrorLog[]
 
-  @@index([userId, createdAt])
+  @@index([streamId, createdAt])
 }
 
 model ErrorLog {
   id           String            @id @default(cuid())
-  userId       String
-  user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  streamId       String
+  stream         StreamAccount              @relation(fields: [streamId], references: [id], onDelete: Cascade)
   submissionId String
   submission   SubmissionAttempt @relation(fields: [submissionId], references: [id], onDelete: Cascade)
   category     ErrorCategory
@@ -250,13 +265,13 @@ model ErrorLog {
   resolved     Boolean           @default(false)
   createdAt    DateTime          @default(now())
 
-  @@index([userId, subtype, createdAt])
+  @@index([streamId, subtype, createdAt])
 }
 
 model SrsCard {
   id            String        @id @default(cuid())
-  userId        String
-  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  streamId        String
+  stream          StreamAccount          @relation(fields: [streamId], references: [id], onDelete: Cascade)
   chunkId       String?
   chunk         LexicalChunk? @relation(fields: [chunkId], references: [id], onDelete: SetNull)
   front         String // the chunk
@@ -273,11 +288,13 @@ model SrsCard {
   createdAt     DateTime      @default(now())
   reviews       SrsReview[]
 
-  @@index([userId, dueAt])
+  @@index([streamId, dueAt])
 }
 
 model SrsReview {
   id              String   @id @default(cuid())
+  streamId        String
+  stream          StreamAccount @relation(fields: [streamId], references: [id], onDelete: Cascade)
   cardId          String
   card            SrsCard  @relation(fields: [cardId], references: [id], onDelete: Cascade)
   rating          Int // 1 Again, 2 Hard, 3 Good, 4 Easy
@@ -287,14 +304,15 @@ model SrsReview {
   reviewedAt      DateTime @default(now())
 
   @@index([cardId, reviewedAt])
+  @@index([streamId, reviewedAt])
 }
 
 // ───────────────────────────── Proficiency & Metrics ─────────────────────────────
 
 model ProficiencyProfile {
   id                    String      @id @default(cuid())
-  userId                String      @unique
-  user                  User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  streamId                String      @unique
+  stream                  StreamAccount        @relation(fields: [streamId], references: [id], onDelete: Cascade)
   subBand               CefrSubBand
   ieltsEstimate         Float
   ieltsLow              Float
@@ -320,8 +338,8 @@ model ProficiencyProfile {
 
 model ProficiencySnapshot {
   id             String      @id @default(cuid())
-  userId         String
-  user           User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  streamId         String
+  stream           StreamAccount        @relation(fields: [streamId], references: [id], onDelete: Cascade)
   takenAt        DateTime    @default(now())
   subBand        CefrSubBand
   ieltsEstimate  Float
@@ -335,13 +353,13 @@ model ProficiencySnapshot {
   errorsPer100W  Float?
   trigger        String // DIAGNOSTIC | SESSION | DECAY | PROMOTION | DEMOTION
 
-  @@index([userId, takenAt])
+  @@index([streamId, takenAt])
 }
 
 model DiagnosticAssessment {
   id           String              @id @default(cuid())
-  userId       String
-  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  streamId       String
+  stream         StreamAccount                @relation(fields: [streamId], references: [id], onDelete: Cascade)
   kind         DiagnosticKind
   status       DiagnosticStatus    @default(IN_PROGRESS)
   targetBand   CefrSubBand? // promotion audit only
@@ -356,4 +374,31 @@ model DiagnosticAssessment {
   startedAt    DateTime            @default(now())
   completedAt  DateTime?
   submissions  SubmissionAttempt[]
+
+  @@index([streamId, kind, status])
+}
+
+// ───────────────────────────── Shared caches & security ─────────────────────────────
+
+/// Global cache of validated 4-mode explanations (shared across streams: article text only, no learner data).
+model ExplanationCache {
+  id        String   @id @default(cuid())
+  key       String   @unique // sha256(normalized selection | context snippet | CEFR level)
+  selection String
+  level     String
+  provider  String
+  model     String
+  payload   Json
+  hits      Int      @default(0)
+  createdAt DateTime @default(now())
+  lastHitAt DateTime @default(now())
+}
+
+/// Failed access-code attempts, used for IP rate limiting on /api/stream/enter (serverless-safe).
+model AccessFailure {
+  id        String   @id @default(cuid())
+  ipHash    String
+  createdAt DateTime @default(now())
+
+  @@index([ipHash, createdAt])
 }

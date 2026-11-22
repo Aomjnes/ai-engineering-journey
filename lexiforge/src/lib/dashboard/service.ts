@@ -15,18 +15,18 @@ function isoWeek(d: Date): string {
   return `${t.getUTCFullYear()}-W${String(week).padStart(2, "0")}`;
 }
 
-export async function dashboardData(userId: string, now: Date) {
-  const profile = await applyDecay(userId, now);
+export async function dashboardData(streamId: string, now: Date) {
+  const profile = await applyDecay(streamId, now);
   if (!profile) return { calibrated: false as const, llm: detectProvider()?.provider ?? null };
   const [sessions, retention, snapshots, accountability, feeds, arsenal, production] = await Promise.all([
-    loadProductionSessions(userId),
-    computeRetention(userId, now),
-    prisma.proficiencySnapshot.findMany({ where: { userId, takenAt: { gte: new Date(now.getTime() - 30 * DAY) } }, orderBy: { takenAt: "asc" } }),
-    accountabilityStatus(userId, now),
+    loadProductionSessions(streamId),
+    computeRetention(streamId, now),
+    prisma.proficiencySnapshot.findMany({ where: { streamId, takenAt: { gte: new Date(now.getTime() - 30 * DAY) } }, orderBy: { takenAt: "asc" } }),
+    accountabilityStatus(streamId, now),
     prisma.sourceFeed.findMany({ select: { name: true, status: true, lastFetchedAt: true, lastError: true, _count: { select: { articles: true } } }, orderBy: { name: "asc" } }),
-    prisma.srsCard.findMany({ where: { userId, createdAt: { gte: new Date(now.getTime() - DAY) }, chunkId: { not: null } }, select: { front: true, back: true, createdAt: true } }),
+    prisma.srsCard.findMany({ where: { streamId, createdAt: { gte: new Date(now.getTime() - DAY) }, chunkId: { not: null } }, select: { front: true, back: true, createdAt: true } }),
     prisma.submissionAttempt.findMany({
-      where: { userId, kind: { in: ["PRODUCTION", "DIAGNOSTIC_WRITING", "PROMOTION_AUDIT"] }, attemptNumber: 1, rejected: false },
+      where: { streamId, kind: { in: ["PRODUCTION", "DIAGNOSTIC_WRITING", "PROMOTION_AUDIT"] }, attemptNumber: 1, rejected: false },
       select: { createdAt: true, wordCount: true, gai: true, lri: true, errors: { select: { subtype: true, severity: true } } },
       orderBy: { createdAt: "asc" },
     }),
@@ -95,7 +95,7 @@ export async function dashboardData(userId: string, now: Date) {
     const v = xs.filter((x): x is number => x !== null);
     return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null;
   };
-  const recentCpr = await prisma.submissionAttempt.findMany({ where: { userId, kind: "COMPREHENSION", attemptNumber: 1 }, orderBy: { createdAt: "desc" }, take: 9, select: { cpr: true } });
+  const recentCpr = await prisma.submissionAttempt.findMany({ where: { streamId, kind: "COMPREHENSION", attemptNumber: 1 }, orderBy: { createdAt: "desc" }, take: 9, select: { cpr: true } });
   const eri = computeEri(sessions, now);
   const ledger = {
     weights: COMPOSITE_WEIGHTS,

@@ -21,34 +21,34 @@ function readState(a: DiagnosticAssessment): PlacementState {
   return parsed.data;
 }
 
-async function activePlacement(userId: string) {
-  return prisma.diagnosticAssessment.findFirst({ where: { userId, kind: "PLACEMENT", status: "IN_PROGRESS" }, orderBy: { startedAt: "desc" } });
+async function activePlacement(streamId: string) {
+  return prisma.diagnosticAssessment.findFirst({ where: { streamId, kind: "PLACEMENT", status: "IN_PROGRESS" }, orderBy: { startedAt: "desc" } });
 }
 
-export async function placementStatus(userId: string) {
-  const a = await activePlacement(userId);
+export async function placementStatus(streamId: string) {
+  const a = await activePlacement(streamId);
   if (!a) return null;
   const state = readState(a);
   return { assessmentId: a.id, part: state.part, item: publicItem(state) };
 }
 
-export async function startPlacement(userId: string, now: Date) {
-  const existing = await placementStatus(userId);
+export async function startPlacement(streamId: string, now: Date) {
+  const existing = await placementStatus(streamId);
   if (existing) return existing;
   const state = initPlacement(dayOfYear(now));
-  const a = await prisma.diagnosticAssessment.create({ data: { userId, kind: "PLACEMENT", itemsJson: state, startedAt: now } });
+  const a = await prisma.diagnosticAssessment.create({ data: { streamId, kind: "PLACEMENT", itemsJson: state, startedAt: now } });
   return { assessmentId: a.id, part: state.part, item: publicItem(state) };
 }
 
-async function loadOwned(userId: string, assessmentId: string, kind: "PLACEMENT" | "PROMOTION") {
-  const a = await prisma.diagnosticAssessment.findUnique({ where: { id: assessmentId } });
-  if (!a || a.userId !== userId || a.kind !== kind) throw new AppError(404, "NOT_FOUND", "Assessment not found.");
+async function loadOwned(streamId: string, assessmentId: string, kind: "PLACEMENT" | "PROMOTION") {
+  const a = await prisma.diagnosticAssessment.findFirst({ where: { id: assessmentId, streamId } });
+  if (!a || a.streamId !== streamId || a.kind !== kind) throw new AppError(404, "NOT_FOUND", "Assessment not found.");
   if (a.status !== "IN_PROGRESS") throw new AppError(409, "ALREADY_COMPLETED", "This assessment is already finished.");
   return a;
 }
 
-export async function answerPlacement(userId: string, assessmentId: string, answer: { itemId: string; choices?: number[]; choice?: number }) {
-  const a = await loadOwned(userId, assessmentId, "PLACEMENT");
+export async function answerPlacement(streamId: string, assessmentId: string, answer: { itemId: string; choices?: number[]; choice?: number }) {
+  const a = await loadOwned(streamId, assessmentId, "PLACEMENT");
   let state = readState(a);
   try {
     if (state.part === "READING") state = answerReading(state, answer.itemId, answer.choices ?? []);
@@ -58,12 +58,12 @@ export async function answerPlacement(userId: string, assessmentId: string, answ
     if (e instanceof PlacementFlowError) throw new AppError(409, e.code, e.message);
     throw e;
   }
-  await prisma.diagnosticAssessment.update({ where: { id: a.id }, data: { itemsJson: state } });
+  await prisma.diagnosticAssessment.update({ where: { id: a.id, streamId }, data: { itemsJson: state } });
   return { assessmentId: a.id, part: state.part, item: publicItem(state) };
 }
 
-export async function submitPlacementWriting(userId: string, assessmentId: string, text: string, now: Date) {
-  const a = await loadOwned(userId, assessmentId, "PLACEMENT");
+export async function submitPlacementWriting(streamId: string, assessmentId: string, text: string, now: Date) {
+  const a = await loadOwned(streamId, assessmentId, "PLACEMENT");
   const state = readState(a);
   if (state.part !== "WRITING") throw new AppError(409, "WRONG_PART", "Finish the reading and error-detection parts first.");
   const guard = guardSubmission(text, { minWords: WRITING_MIN_WORDS, maxWords: WRITING_MAX_WORDS });
@@ -72,7 +72,7 @@ export async function submitPlacementWriting(userId: string, assessmentId: strin
   const words = countWords(text);
   const result = computePlacementResult(state, { gai: evaluation.gai.gai, lri: evaluation.lri.lri, words });
   await saveSubmission({
-    userId,
+    streamId,
     kind: "DIAGNOSTIC_WRITING",
     diagnosticId: a.id,
     text,
@@ -84,9 +84,9 @@ export async function submitPlacementWriting(userId: string, assessmentId: strin
     passedGate: !evaluation.gate.blocked,
     errors: evaluation.errors,
   });
-  const profile = await createProfileFromPlacement(userId, result, now);
+  const profile = await createProfileFromPlacement(streamId, result, now);
   await prisma.diagnosticAssessment.update({
-    where: { id: a.id },
+    where: { id: a.id, streamId },
     data: {
       status: "COMPLETED",
       itemsJson: { ...state, part: "DONE", currentId: null },
@@ -101,7 +101,7 @@ export async function submitPlacementWriting(userId: string, assessmentId: strin
   });
   const weaknesses = await prisma.errorLog.groupBy({
     by: ["subtype"],
-    where: { userId },
+    where: { streamId },
     _count: { subtype: true },
     orderBy: { _count: { subtype: "desc" } },
     take: 5,
@@ -137,9 +137,9 @@ const PromotionStateSchema = z.object({
 
 const MIN_AUDIT_WORDS = 250;
 
-export async function startPromotionAudit(userId: string, now: Date) {
-  const profile = await requireProfile(userId);
-  const active = await prisma.diagnosticAssessment.findFirst({ where: { userId, kind: "PROMOTION", status: "IN_PROGRESS" } });
+export async function startPromotionAudit(streamId: string, now: Date) {
+  const profile = await requireProfile(streamId);
+  const active = await prisma.diagnosticAssessment.findFirst({ where: { streamId, kind: "PROMOTION", status: "IN_PROGRESS" } });
   if (active) {
     const st = PromotionStateSchema.parse(active.itemsJson);
     return { assessmentId: active.id, targetBand: bandLabel(st.targetBand), excerpt: st.excerpt, questions: st.questions.map(({ id, prompt }) => ({ id, prompt })), writingPrompt: st.writingPrompt };
@@ -158,12 +158,12 @@ export async function startPromotionAudit(userId: string, now: Date) {
   const excerpt = excerptByWords(article.content, 320);
   const set = await generateQuestionSet({ text: excerpt, count: 3, levelLabel: bandLabel(target), chunks: [] });
   const state = { version: 1 as const, targetBand: target, articleId: article.id, difficulty: article.difficultyScore, excerpt, questions: set.questions, writingPrompt: set.productionPrompt };
-  const a = await prisma.diagnosticAssessment.create({ data: { userId, kind: "PROMOTION", targetBand: target as CefrSubBand, itemsJson: state, startedAt: now } });
+  const a = await prisma.diagnosticAssessment.create({ data: { streamId, kind: "PROMOTION", targetBand: target as CefrSubBand, itemsJson: state, startedAt: now } });
   return { assessmentId: a.id, targetBand: bandLabel(target), excerpt, questions: set.questions.map(({ id, prompt }) => ({ id, prompt })), writingPrompt: set.productionPrompt };
 }
 
-export async function submitPromotionAudit(userId: string, assessmentId: string, answers: Array<{ questionId: string; text: string }>, writing: string, now: Date) {
-  const a = await loadOwned(userId, assessmentId, "PROMOTION");
+export async function submitPromotionAudit(streamId: string, assessmentId: string, answers: Array<{ questionId: string; text: string }>, writing: string, now: Date) {
+  const a = await loadOwned(streamId, assessmentId, "PROMOTION");
   const st = PromotionStateSchema.parse(a.itemsJson);
   const missing = st.questions.filter((q) => !answers.some((x) => x.questionId === q.id && x.text.trim().length > 0));
   if (missing.length) throw new AppError(422, "INCOMPLETE", `Answer every question (${missing.map((m) => m.id).join(", ")} missing).`);
@@ -192,7 +192,7 @@ export async function submitPromotionAudit(userId: string, assessmentId: string,
   const critical = w.errors.filter((e) => e.severity === "CRITICAL").length + items.filter((i) => i.criticalLogicError).length;
   const passed = promotionAuditPasses(st.targetBand, auditComposite, critical);
   await saveSubmission({
-    userId,
+    streamId,
     kind: "PROMOTION_AUDIT",
     diagnosticId: a.id,
     text: writing,
@@ -206,10 +206,10 @@ export async function submitPromotionAudit(userId: string, assessmentId: string,
     errors: w.errors,
   });
   await prisma.diagnosticAssessment.update({
-    where: { id: a.id },
+    where: { id: a.id, streamId },
     data: { status: "COMPLETED", readingScore: cpr, writingGai: w.gai.gai, writingLri: w.lri.lri, passed, resultBand: passed ? (st.targetBand as CefrSubBand) : undefined, completedAt: now },
   });
-  const profile = await applyPromotionAudit(userId, passed, st.targetBand, now);
+  const profile = await applyPromotionAudit(streamId, passed, st.targetBand, now);
   return {
     passed,
     targetBand: bandLabel(st.targetBand),

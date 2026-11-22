@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { useCrossDeviceSync } from "@/components/lf/shell-data";
 import { useRouter } from "next/navigation";
 import type { dashboardData } from "@/lib/dashboard/service";
 import { api, errorMessage } from "@/lib/client/api";
@@ -22,11 +23,13 @@ export default function MetricsPage() {
   const [data, setData] = useState<Dashboard | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     api<DashboardResponse>("/api/dashboard")
       .then((d) => (d.calibrated ? setData(d) : router.replace("/onboarding")))
       .catch((e) => setError(errorMessage(e)));
   }, [router]);
+  useEffect(() => load(), [load]);
+  useCrossDeviceSync(load);
 
   if (error) return <EmptyState title="Metrics could not load" body={error} />;
   if (!data)

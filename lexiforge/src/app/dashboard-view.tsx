@@ -13,7 +13,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/lf/states";
 import { PromotionAction, PromotionLockList } from "@/components/lf/promotion-lock-card";
-import { useShell } from "@/components/lf/shell-data";
+import { useCrossDeviceSync, useShell } from "@/components/lf/shell-data";
 
 type DashboardResponse = Awaited<ReturnType<typeof dashboardData>>;
 type Dashboard = Extract<DashboardResponse, { calibrated: true }>;
@@ -168,10 +168,8 @@ export function DashboardView() {
 
   useEffect(() => {
     void load();
-    const onSynced = () => void load();
-    window.addEventListener("lf:synced", onSynced);
-    return () => window.removeEventListener("lf:synced", onSynced);
   }, [load]);
+  useCrossDeviceSync(load);
 
   async function start(articleId: string) {
     setStarting(articleId);

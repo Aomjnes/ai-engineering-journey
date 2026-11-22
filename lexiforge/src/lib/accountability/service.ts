@@ -11,15 +11,15 @@ import { detoxElapsedEnough, detoxLock, DETOX_MIN_SECONDS, errorDebt, topRecurri
 
 const TargetsSchema = z.array(z.object({ subtype: z.string(), cleared: z.boolean() }));
 
-async function loadErrors(userId: string) {
-  return prisma.errorLog.findMany({ where: { userId }, select: { subtype: true, severity: true, resolved: true, createdAt: true } });
+async function loadErrors(streamId: string) {
+  return prisma.errorLog.findMany({ where: { streamId }, select: { subtype: true, severity: true, resolved: true, createdAt: true } });
 }
 
-export async function accountabilityStatus(userId: string, now: Date) {
+export async function accountabilityStatus(streamId: string, now: Date) {
   const [errors, overdue, progress] = await Promise.all([
-    loadErrors(userId),
-    prisma.srsCard.count({ where: { userId, state: { not: "NEW" }, dueAt: { lte: now } } }),
-    prisma.userProgress.findUnique({ where: { userId } }),
+    loadErrors(streamId),
+    prisma.srsCard.count({ where: { streamId, state: { not: "NEW" }, dueAt: { lte: now } } }),
+    prisma.userProgress.findUnique({ where: { streamId } }),
   ]);
   const debt = errorDebt(errors, now);
   const lock = detoxLock({ overdueCards: overdue, debt, lastReviewAt: progress?.lastReviewAt ?? null, lastDetoxAt: progress?.lastDetoxAt ?? null, now });
@@ -40,27 +40,27 @@ export async function accountabilityStatus(userId: string, now: Date) {
   };
 }
 
-export async function assertLessonsUnlocked(userId: string, now: Date): Promise<void> {
-  const s = await accountabilityStatus(userId, now);
+export async function assertLessonsUnlocked(streamId: string, now: Date): Promise<void> {
+  const s = await accountabilityStatus(streamId, now);
   if (s.locked) throw new AppError(423, "LOCKED_ERROR_DETOX", `New lessons are locked: ${s.reasons.join(" ")} Complete the 5-minute Error Detox first.`, { reasons: s.reasons });
 }
 
 /** Starts (or resumes) a server-timed detox targeting the top recurring subtypes. */
-export async function startDetox(userId: string, now: Date) {
-  const progress = await prisma.userProgress.upsert({ where: { userId }, update: {}, create: { userId } });
-  if (progress.detoxStartedAt) return accountabilityStatus(userId, now);
-  const top = topRecurring(await loadErrors(userId), now);
+export async function startDetox(streamId: string, now: Date) {
+  const progress = await prisma.userProgress.upsert({ where: { streamId }, update: {}, create: { streamId } });
+  if (progress.detoxStartedAt) return accountabilityStatus(streamId, now);
+  const top = topRecurring(await loadErrors(streamId), now);
   await prisma.userProgress.update({
-    where: { userId },
+    where: { streamId },
     data: { detoxStartedAt: now, detoxTargets: top.map((t) => ({ subtype: t.subtype, cleared: false })) },
   });
-  return accountabilityStatus(userId, now);
+  return accountabilityStatus(streamId, now);
 }
 
 /** Evidence for one detox target: the learner's own past mistakes of that subtype. */
-export async function detoxExamples(userId: string, subtype: string) {
+export async function detoxExamples(streamId: string, subtype: string) {
   return prisma.errorLog.findMany({
-    where: { userId, subtype, resolved: false },
+    where: { streamId, subtype, resolved: false },
     orderBy: { createdAt: "desc" },
     take: 4,
     select: { original: true, correction: true, ruleEn: true, ruleVi: true, severity: true, submission: { select: { text: true } } },
@@ -71,10 +71,10 @@ export async function detoxExamples(userId: string, subtype: string) {
  * Repairs one recurring pattern: the learner rewrites their own past sentences (or writes new ones) without the
  * pattern. A clean result (no error of that subtype, gate not blocked) marks earlier errors of that subtype resolved.
  */
-export async function repairPattern(userId: string, subtype: string, text: string, now: Date) {
+export async function repairPattern(streamId: string, subtype: string, text: string, now: Date) {
   const guard = guardSubmission(text, { minWords: 8, maxWords: 200 });
   if (!guard.ok) throw new AppError(422, guard.code ?? "REJECTED", guard.message ?? "Rejected.");
-  const examples = await detoxExamples(userId, subtype);
+  const examples = await detoxExamples(streamId, subtype);
   const ev = await evaluateWriting({
     text,
     prompt: `Rewrite these sentences correctly in your own words, fixing the ${subtype} pattern:\n${examples.map((e) => `- ${e.submission.text.slice(0, 300)}`).join("\n") || "(write 3 original sentences that would normally trigger this pattern)"}`,
@@ -84,28 +84,28 @@ export async function repairPattern(userId: string, subtype: string, text: strin
   });
   const repeated = ev.errors.filter((e) => e.subtype === subtype);
   const clean = repeated.length === 0 && !ev.gate.blocked;
-  await saveSubmission({ userId, kind: "DETOX", text, wordCount: countWords(text), taskDifficulty: 0, gai: ev.gai.gai, lri: ev.lri.lri, passedGate: clean, errors: ev.errors });
-  if (clean) await prisma.errorLog.updateMany({ where: { userId, subtype, resolved: false, createdAt: { lt: now } }, data: { resolved: true } });
+  await saveSubmission({ streamId, kind: "DETOX", text, wordCount: countWords(text), taskDifficulty: 0, gai: ev.gai.gai, lri: ev.lri.lri, passedGate: clean, errors: ev.errors });
+  if (clean) await prisma.errorLog.updateMany({ where: { streamId, subtype, resolved: false, createdAt: { lt: now } }, data: { resolved: true } });
   return { clean, repeated, errors: ev.errors, gate: ev.gate, verdictEn: ev.verdictEn, verdictVi: ev.verdictVi };
 }
 
 /** Detox variant of repairPattern: also ticks the detox target. */
-export async function submitDetoxRewrite(userId: string, subtype: string, text: string, now: Date) {
-  const progress = await prisma.userProgress.findUnique({ where: { userId } });
+export async function submitDetoxRewrite(streamId: string, subtype: string, text: string, now: Date) {
+  const progress = await prisma.userProgress.findUnique({ where: { streamId } });
   if (!progress?.detoxStartedAt) throw new AppError(409, "DETOX_NOT_STARTED", "Start the Error Detox first.");
   const targets = TargetsSchema.parse(progress.detoxTargets ?? []);
   const target = targets.find((t) => t.subtype === subtype);
   if (!target) throw new AppError(404, "NOT_A_TARGET", `${subtype} is not part of this detox.`);
-  const out = await repairPattern(userId, subtype, text, now);
+  const out = await repairPattern(streamId, subtype, text, now);
   if (out.clean) {
     target.cleared = true;
-    await prisma.userProgress.update({ where: { userId }, data: { detoxTargets: targets } });
+    await prisma.userProgress.update({ where: { streamId }, data: { detoxTargets: targets } });
   }
   return { ...out, targets };
 }
 
-export async function completeDetox(userId: string, now: Date) {
-  const progress = await prisma.userProgress.findUnique({ where: { userId } });
+export async function completeDetox(streamId: string, now: Date) {
+  const progress = await prisma.userProgress.findUnique({ where: { streamId } });
   if (!progress?.detoxStartedAt) throw new AppError(409, "DETOX_NOT_STARTED", "Start the Error Detox first.");
   if (!detoxElapsedEnough(progress.detoxStartedAt, now)) {
     const left = DETOX_MIN_SECONDS - Math.floor((now.getTime() - progress.detoxStartedAt.getTime()) / 1000);
@@ -114,15 +114,15 @@ export async function completeDetox(userId: string, now: Date) {
   const targets = TargetsSchema.parse(progress.detoxTargets ?? []);
   const open = targets.filter((t) => !t.cleared);
   if (open.length) throw new AppError(409, "DETOX_TARGETS_OPEN", `Rewrite clean before finishing: ${open.map((t) => t.subtype).join(", ")}.`);
-  await prisma.userProgress.update({ where: { userId }, data: { lastDetoxAt: now, detoxStartedAt: null, detoxTargets: [] } });
-  return accountabilityStatus(userId, now);
+  await prisma.userProgress.update({ where: { streamId }, data: { lastDetoxAt: now, detoxStartedAt: null, detoxTargets: [] } });
+  return accountabilityStatus(streamId, now);
 }
 
 /** Error Graveyard: every recurring pattern with counts, severity mix, half-life and examples. */
-export async function errorGraveyard(userId: string) {
+export async function errorGraveyard(streamId: string) {
   const [errors, sessions] = await Promise.all([
-    prisma.errorLog.findMany({ where: { userId }, orderBy: { createdAt: "desc" } }),
-    loadProductionSessions(userId),
+    prisma.errorLog.findMany({ where: { streamId }, orderBy: { createdAt: "desc" } }),
+    loadProductionSessions(streamId),
   ]);
   const groups = new Map<string, typeof errors>();
   for (const e of errors) groups.set(e.subtype, [...(groups.get(e.subtype) ?? []), e]);

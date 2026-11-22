@@ -15,7 +15,7 @@ import { AudioShadowingBar } from "@/components/lf/audio-bar";
 import { EXPLAIN_TABS, ModeExplainer, type ExplainState, type ExplainTab } from "@/components/lf/mode-explainer";
 import { isTypingTarget } from "@/components/lf/app-shell";
 import { usePrefs } from "@/components/lf/prefs";
-import { useShell } from "@/components/lf/shell-data";
+import { useCrossDeviceSync, useShell } from "@/components/lf/shell-data";
 import { EmptyState } from "@/components/lf/states";
 import { useTts } from "@/components/lesson/speech";
 import { ReadingPane, sentencesOf, type ReadingChunk } from "@/components/lesson/reading-pane";
@@ -127,6 +127,10 @@ export default function LessonPage({ params }: { params: Promise<{ id: string }>
   useEffect(() => {
     void load();
   }, [load]);
+  // Another device may have advanced this lesson; never pull while a production result is on screen.
+  useCrossDeviceSync(() => {
+    if (!holdProduction) void load();
+  });
 
   const stage = (lesson?.stage ?? "INPUT") as StageKey;
   const view: StageKey = holdProduction ? "PRODUCTION" : (viewing ?? stage);
