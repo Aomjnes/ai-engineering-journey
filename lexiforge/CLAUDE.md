@@ -86,7 +86,8 @@ tests/                    vitest (unit) and tests/integration (live network)
 
 ## Deployment (Vercel)
 
-- Project root directory: `lexiforge/` (holds `vercel.json`). Build: `prisma generate && next build`.
+- Project root directory: `lexiforge/` (holds `vercel.json`). Build: `npm run vercel-build` (additive `prisma db push`, seed, `next build`).
+- Functions run in `sin1` (Singapore), co-located with the Neon database, so each query is a few ms instead of a trans-Pacific round trip.
 - Vercel Cron: `GET /api/cron/ingest` daily at `0 22 * * *` (05:00 Hanoi), `Authorization: Bearer $CRON_SECRET`.
   `node-cron` never starts when `VERCEL=1`.
 - `maxDuration`: explain & cron 60 s; evaluate, diagnostic, lessons/synthesize 300 s.
