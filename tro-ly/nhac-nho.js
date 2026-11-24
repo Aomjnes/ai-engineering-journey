@@ -68,6 +68,13 @@ function soLich(td, khoa) {
   return chon(K.CHAM_NHIEU, khoa + 'chamnhieu', { n });
 }
 
+// Dòng trạng thái cho tin "chưa học hôm nay": chỉ số liệu thật, không bao giờ "đúng lịch" khi hôm nay vẫn 0 buổi.
+function trangThaiChuaHoc(td, khoa) {
+  const L = ['Hôm nay: 0 buổi · Đã xong ' + td.soXong + ' buổi.'];
+  if (!chuaBatDau(td) && td.chenh < 0) L.push(soLich(td, khoa));
+  return L.join(' ');
+}
+
 function cauBo(n, khoa) {
   if (n <= 0) return '';
   if (n === 1) return chon(K.BO_1, khoa + 'bo1');
@@ -111,14 +118,14 @@ function gatToi(td) {
     return L.join('\n');
   }
   return [chon(K.TOI_CHUA, 'toi'), cauBo(ngayBo(td), 'toi'),
-    'Vẫn còn kịp 25 phút cho phần đầu của ' + buoi(td.next) + '. Làm ngay, hoặc chấp nhận hôm nay là ngày bỏ.', soLich(td, 'toi')]
+    'Vẫn còn kịp 25 phút cho phần đầu của ' + buoi(td.next) + '. Làm ngay, hoặc chấp nhận hôm nay là ngày bỏ.', trangThaiChuaHoc(td, 'toi')]
     .filter(Boolean).join('\n');
 }
 
 function gatKhuya(td) {
   if (!td.next || chuaBatDau(td)) return null;
   if (daHocHomNay(td)) return td.logHomNay.length ? null : chon(K.CHUA_GHI, 'khuyachuaghi');
-  return [chon(K.KHUYA, 'khuya'), soLich(td, 'khuya')].join('\n');
+  return [chon(K.KHUYA, 'khuya'), trangThaiChuaHoc(td, 'khuya')].join('\n');
 }
 
 function gatTuan(td) {
